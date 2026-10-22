@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Sparkles, Monitor, RectangleHorizontal, Clock,
   Volume2, VolumeX, ChevronRight, ChevronDown, Clapperboard, Image as ImageIcon, Wand2, X,
-  Plus, Minus, Check, CloudUpload, Search, ListFilter, FileImage, Folder, Star, FolderOpen,
+  Plus, Minus, Check, CloudUpload, Search, ListFilter, FileImage, Folder, Star,
 } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Textarea } from '@/components/ui/textarea'
@@ -18,7 +18,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Thumb } from '@/components/shared'
-import { assets, projects, type Asset, type Platform } from '@/data/mock'
+import { assets, type Asset, type Platform } from '@/data/mock'
 import { type RemakeReference } from '@/lib/remake'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -27,7 +27,6 @@ export interface GenerateIntent {
   brief: string
   batch: number
   mode: '视频' | '图文'
-  projectId: string | null
 }
 
 export interface ConsoleDraft {
@@ -281,8 +280,6 @@ export default function CreationConsole({
   const [durationText, setDurationText] = useState(String(DURATION_DEFAULT))
   const [audio, setAudio] = useState(true)
   const [batch, setBatch] = useState(() => Math.min(Math.max(initialBatch ?? 1, 1), BATCH_MAX))
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
-  const [projectOpen, setProjectOpen] = useState(false)
   const [attachOpen, setAttachOpen] = useState(false)
   const [modelOpen, setModelOpen] = useState(false)
   const [generating, setGenerating] = useState(false)
@@ -294,7 +291,7 @@ export default function CreationConsole({
 
   const generate = () => {
     if (generating) return
-    if (onBeforeGenerate?.({ brief, batch, mode, projectId: selectedProjectId })) return
+    if (onBeforeGenerate?.({ brief, batch, mode })) return
     setGenerating(true)
     onStart()
     toast.info('AI 开始生成，预计 30 秒（演示）')
@@ -415,80 +412,6 @@ export default function CreationConsole({
               ))}
             </div>
           )}
-          {/* @产品卡 + 项目选择 */}
-          <div className="mb-2 flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setBrief((v) => v.endsWith('@') ? v : v + '@')}
-              className="flex h-[26px] items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-[12px] text-slate-500 transition-colors hover:border-sky-300 hover:text-sky-600"
-            >
-              <span className="font-medium text-sky-500">@</span>产品卡
-            </button>
-
-            <DropdownMenu open={projectOpen} onOpenChange={setProjectOpen}>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  className={cn(
-                    'flex h-[26px] items-center gap-1.5 rounded-md border px-2 text-[12px] transition-colors',
-                    selectedProjectId
-                      ? 'border-sky-200 bg-sky-50 text-sky-600'
-                      : 'border-slate-200 bg-white text-slate-500 hover:border-sky-300 hover:text-sky-600',
-                  )}
-                >
-                  <FolderOpen className="h-3.5 w-3.5 shrink-0" />
-                  {selectedProjectId
-                    ? projects.find((p) => p.id === selectedProjectId)?.name ?? '选择项目'
-                    : '选择项目'}
-                  <ChevronDown className="h-3 w-3 text-slate-400" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-56 border-slate-200 bg-white p-1 text-slate-800 shadow-lg">
-                <DropdownMenuItem
-                  className="cursor-pointer gap-2 rounded-md px-2 py-1.5 text-[12px] font-medium text-sky-600 hover:bg-sky-50"
-                  onClick={() => {
-                    const name = window.prompt('新建项目名称')
-                    if (!name?.trim()) return
-                    // 简单 mock：复用已有数据结构临时插入
-                    const id = `P-new-${Date.now()}`
-                    projects.push({
-                      id, name: name.trim(),
-                      color: '#11a3fd', desc: '', status: '未开始',
-                      progress: 0, start: '', end: '', owner: '',
-                      platforms: [], exposure: '—', engagement: '—', contentCount: 0,
-                    })
-                    setSelectedProjectId(id)
-                    setProjectOpen(false)
-                  }}
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  新建项目
-                </DropdownMenuItem>
-                <div className="my-1 h-px bg-slate-100" />
-                {projects.map((p) => (
-                  <DropdownMenuItem
-                    key={p.id}
-                    className={cn(
-                      'cursor-pointer gap-2 rounded-md px-2 py-1.5 text-[12px]',
-                      selectedProjectId === p.id ? 'bg-sky-50 font-medium text-sky-600' : 'text-slate-700',
-                    )}
-                    onClick={() => {
-                      setSelectedProjectId(p.id)
-                      setProjectOpen(false)
-                    }}
-                  >
-                    <span
-                      className="h-2.5 w-2.5 shrink-0 rounded-full"
-                      style={{ background: p.color }}
-                    />
-                    <span className="truncate">{p.name}</span>
-                    {selectedProjectId === p.id && <Check className="ml-auto h-3.5 w-3.5 shrink-0 text-sky-500" />}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-
           <Textarea
             value={brief}
             onChange={(e) => setBrief(e.target.value)}
