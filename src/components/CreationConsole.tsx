@@ -277,7 +277,6 @@ export default function CreationConsole({
   const [modelId, setModelId] = useState<string>(MODELS[0].id)
   const [quality, setQuality] = useState<(typeof QUALITIES)[number]>('1080P')
   const [ratio, setRatio] = useState<(typeof RATIOS)[number]>('16:9')
-  const [duration, setDuration] = useState(DURATION_DEFAULT)
   const [durationText, setDurationText] = useState(String(DURATION_DEFAULT))
   const [audio, setAudio] = useState(true)
   const [batch, setBatch] = useState(() => Math.min(Math.max(initialBatch ?? 1, 1), BATCH_MAX))
@@ -329,12 +328,10 @@ export default function CreationConsole({
   const commitDuration = (raw: string) => {
     const digits = raw.replace(/[^\d]/g, '')
     if (!digits) {
-      setDuration(DURATION_DEFAULT)
       setDurationText(String(DURATION_DEFAULT))
       return
     }
     const next = Math.min(DURATION_MAX, Math.max(1, Number(digits)))
-    setDuration(next)
     setDurationText(String(next))
   }
 
