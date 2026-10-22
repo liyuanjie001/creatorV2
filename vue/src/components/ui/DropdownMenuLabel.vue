@@ -1,0 +1,11 @@
+<script setup lang="ts">
+import { DropdownMenuLabel } from 'reka-ui';
+import type { HTMLAttributes } from 'vue';
+import { cn } from '@/lib/utils';
+defineProps<{ class?: HTMLAttributes['class'] }>();
+</script>
+<template>
+  <DropdownMenuLabel :class="cn('px-2 py-1.5 text-sm font-semibold', $props.class)">
+    <slot />
+  </DropdownMenuLabel>
+</template>

@@ -1,0 +1,97 @@
+# --- protect white text on blue gradients ---
+s/brand-gradient\([^"']*\) text-white/brand-gradient\1 TEXTWHITE/g
+# --- chart / tooltip inline styles ---
+s/#141725/#ffffff/g
+s/1px solid rgba(255,255,255,0.1)/1px solid #e2e9ee/g
+s/rgba(255,255,255,0.05)/rgba(100,116,139,0.12)/g
+s/rgba(255,255,255,0.04)/rgba(100,116,139,0.08)/g
+s/'rgba(255,255,255,0.35)'/'#94a3b8'/g
+s/'rgba(255,255,255,0.3)'/'#94a3b8'/g
+s/'rgba(255,255,255,0.5)'/'#64748b'/g
+s/color: 'rgba(255,255,255,0.6)'/color: '#64748b'/g
+s/#8b5cf6, #6366f1, #22d3ee, #f472b6, #94a3b8/#11a3fd, #1769ff, #38bdf8, #7dd3fc, #94a3b8/g
+s/background: '#141725'/background: '#ffffff'/g
+# --- dark surfaces ---
+s/bg-\[#0b0d14\]\/85/bg-white\/85/g
+s/bg-\[#0d0f18\]\/95/bg-white\/95/g
+s/bg-\[#0b0d14\]/bg-[#f5f8fb]/g
+# --- white-alpha text (longest first) ---
+s/text-white\/85/text-slate-700/g
+s/text-white\/80/text-slate-700/g
+s/text-white\/70/text-slate-600/g
+s/text-white\/65/text-slate-600/g
+s/text-white\/60/text-slate-600/g
+s/text-white\/55/text-slate-500/g
+s/text-white\/50/text-slate-500/g
+s/text-white\/45/text-slate-500/g
+s/text-white\/40/text-slate-400/g
+s/text-white\/35/text-slate-400/g
+s/text-white\/30/text-slate-300/g
+s/text-white\/25/text-slate-300/g
+s/text-white\/20/text-slate-300/g
+s/text-white\/15/text-slate-300/g
+# --- white-alpha backgrounds ---
+s/bg-white\/\[0\.08\]/bg-slate-100/g
+s/bg-white\/\[0\.07\]/bg-slate-100/g
+s/bg-white\/\[0\.06\]/bg-slate-100/g
+s/bg-white\/\[0\.05\]/bg-slate-100/g
+s/bg-white\/\[0\.04\]/bg-slate-50/g
+s/bg-white\/\[0\.03\]/bg-slate-50/g
+s/bg-white\/\[0\.02\]/bg-slate-50/g
+s/hover:bg-white\/\[0\.08\]/hover:bg-slate-100/g
+s/hover:bg-white\/\[0\.06\]/hover:bg-slate-100/g
+s/hover:bg-white\/\[0\.05\]/hover:bg-slate-100/g
+s/hover:bg-white\/\[0\.03\]/hover:bg-slate-50/g
+s/hover:bg-white\/10/hover:bg-slate-100/g
+s/hover:bg-white\/15/hover:bg-slate-200/g
+# --- white-alpha borders ---
+s/border-white\/\[0\.15\]/border-slate-300/g
+s/border-white\/\[0\.14\]/border-slate-300/g
+s/border-white\/\[0\.12\]/border-slate-300/g
+s/border-white\/\[0\.07\]/border-slate-200/g
+s/border-white\/\[0\.06\]/border-slate-200/g
+s/border-white\/\[0\.05\]/border-slate-200/g
+s/border-white\/20/border-slate-300/g
+s/border-white\/15/border-slate-300/g
+s/border-white\/10/border-slate-200/g
+s/divide-white\/\[0\.06\]/divide-slate-200/g
+# --- violet / cyan accents -> sky blue ---
+s/text-violet-300/text-sky-600/g
+s/text-violet-200/text-sky-600/g
+s/text-violet-400/text-sky-500/g
+s/text-violet-500/text-sky-500/g
+s/border-violet-400\/50/border-sky-400/g
+s/border-violet-400\/40/border-sky-300/g
+s/border-violet-400\/30/border-sky-300/g
+s/border-violet-400\/20/border-sky-200/g
+s/bg-violet-500\/25/bg-sky-100/g
+s/bg-violet-500\/20/bg-sky-100/g
+s/bg-violet-500\/15/bg-sky-50/g
+s/bg-violet-500\/10/bg-sky-50/g
+s/bg-violet-400\/10/bg-sky-50/g
+s/bg-violet-500\/\[0\.07\]/bg-sky-50/g
+s/from-violet-500\/15/from-sky-100/g
+s/to-cyan-500\/10/to-sky-50/g
+s/from-violet-500\/40 to-cyan-500\/30/from-sky-400 to-sky-600/g
+s/ring-violet-400\/40/ring-sky-300/g
+s|shadow-violet-500\/20|shadow-sky-500/20|g
+s/border-violet-500\/20/border-sky-200/g
+s/border-cyan-400\/20/border-sky-200/g
+s/text-cyan-200/text-sky-600/g
+s/bg-cyan-400\/15/bg-sky-100/g
+s/border-fuchsia-400\/20/border-sky-200/g
+s/text-fuchsia-200/text-sky-600/g
+# --- soft status tones readable on light ---
+s/text-emerald-300/text-emerald-600/g
+s/text-amber-300/text-amber-600/g
+s/text-rose-300/text-rose-600/g
+s/text-rose-200/text-rose-600/g
+s/text-sky-300/text-sky-600/g
+s/text-amber-100\/80/text-amber-700/g
+s/bg-amber-400\/\[0\.06\]/bg-amber-50/g
+# --- active chips ---
+s/bg-white font-medium text-black/bg-sky-500 font-medium text-white/g
+# --- remaining bare white text ---
+s/text-white/text-slate-900/g
+# --- restore protected ---
+s/TEXTWHITE/text-white/g
