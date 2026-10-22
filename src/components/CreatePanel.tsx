@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router'
 import { Play } from 'lucide-react'
 import { PlatformBadge, Thumb } from '@/components/shared'
 import CreationConsole from '@/components/CreationConsole'
-import { addProject, createProjectFromBrief, generations, type Platform } from '@/data/mock'
+import { addProject, createProjectFromBrief, generations, loadProjects, type Platform } from '@/data/mock'
 import { type RemakeReference } from '@/lib/remake'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -111,7 +111,7 @@ export default function CreatePanel() {
       <div className="pt-4">
         <ShowcaseCarousel />
         <h1 className="mt-2 text-center text-3xl font-bold brand-text">让你的品牌故事鲜活起来</h1>
-        <p className="mt-2 text-center text-[13px] text-slate-500">描述场景或产品，点击生成将创建项目并在项目内产出内容</p>
+        <p className="mt-2 text-center text-[13px] text-slate-500">可选择产品卡与目标项目；未选项目时点击生成会自动新建项目</p>
       </div>
 
       {/* 创作控制台：生成 → 新建项目 → 进入项目内生成 */}
@@ -122,14 +122,21 @@ export default function CreatePanel() {
         initialReference={remakeSeed?.reference ?? null}
         onStart={() => {}}
         onDone={() => {}}
-        onBeforeGenerate={({ brief, batch, mode }) => {
-          const project = createProjectFromBrief(brief)
-          addProject(project)
-          toast.success(`已创建项目「${project.name}」，正在进入生成…`)
+        onBeforeGenerate={({ brief, batch, mode, projectId, product }) => {
+          const mention = product ? `@${product.name}` : ''
+          const fullBrief = [mention, brief.replace(mention, '').trim()].filter(Boolean).join(' ').trim()
+          const existing = projectId ? loadProjects().find((p) => p.id === projectId) : undefined
+          const project = existing ?? createProjectFromBrief(fullBrief || product?.name || '未命名项目')
+          if (!existing) {
+            addProject(project)
+            toast.success(`已创建项目「${project.name}」，正在进入生成…`)
+          } else {
+            toast.success(`将在项目「${project.name}」中生成…`)
+          }
           navigate(`/projects/${project.id}`, {
             state: {
               autoGenerate: true,
-              brief,
+              brief: fullBrief,
               batch,
               mode,
               remake: remakeSeed ?? undefined,

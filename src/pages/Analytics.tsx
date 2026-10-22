@@ -1,140 +1,178 @@
-import { useState } from 'react'
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  LineChart, Line, PieChart, Pie, Cell, Legend,
-} from 'recharts'
-import { Download, CalendarRange } from 'lucide-react'
-import { Card } from '@/components/ui/card'
+import { useNavigate } from 'react-router'
 import { Button } from '@/components/ui/button'
-import { PageHeader, PlatformBadge } from '@/components/shared'
-import { engagement7d, audienceAge, topPosts, platformColors } from '@/data/mock'
+import { Card } from '@/components/ui/card'
+import { PageHeader } from '@/components/shared'
+import { AnalyticsWorkspaceProvider, useAnalyticsWorkspace } from '@/hooks/useAnalyticsWorkspace'
+import { platforms, type Platform } from '@/data/mock'
+import { DEMO_TODAY, roxyProjects } from '@/data/windowDemo'
+import type { ReportDays } from '@/types/windows'
+import OverviewPanel from '@/components/analytics/OverviewPanel'
+import AccountsPanel from '@/components/analytics/AccountsPanel'
+import ContentPanel from '@/components/analytics/ContentPanel'
+import ComparisonPanel from '@/components/analytics/ComparisonPanel'
+import AnalyticsDetails from '@/components/analytics/AnalyticsDetails'
 import { cn } from '@/lib/utils'
 
-const ranges = ['近 7 天', '近 30 天', '近 90 天'] as const
+const ranges: ReportDays[] = [7, 30, 90]
+const tabs = [
+  { key: 'overview', label: '总览' },
+  { key: 'accounts', label: '账号监测' },
+  { key: 'content', label: '内容明细' },
+  { key: 'compare', label: '对比分析' },
+] as const
+const selectClass =
+  'h-8 rounded-md border border-slate-200 bg-white px-2 text-[12px] text-slate-600 outline-none focus:border-sky-300 focus:ring-2 focus:ring-sky-100'
 
-export default function Analytics() {
-  const [range, setRange] = useState<(typeof ranges)[number]>('近 7 天')
+function AnalyticsPage() {
+  const navigate = useNavigate()
+  const {
+    manager,
+    tab,
+    setTab,
+    project,
+    windowId,
+    setWindowId,
+    platform,
+    setPlatform,
+    days,
+    setDays,
+    projectWindows,
+    summary,
+    selectProject,
+    clearFilters,
+  } = useAnalyticsWorkspace()
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <PageHeader
         title="数据分析"
-        desc="跨平台内容表现透视：曝光、互动、转化与受众画像，一屏看清"
+        desc="统一查看账号与内容表现，按窗口、账号、视频和平台分析对比"
         extra={
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1">
-              {ranges.map((r) => (
-                <button
-                  key={r}
-                  onClick={() => setRange(r)}
-                  className={cn(
-                    'rounded-md px-2.5 py-1 text-[12px] transition-colors',
-                    range === r ? 'brand-gradient text-white' : 'text-slate-500 hover:text-slate-900'
-                  )}
-                >
-                  {r}
-                </button>
-              ))}
-            </div>
-            <Button variant="outline" size="sm" className="gap-2 border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-900">
-              <Download className="h-3.5 w-3.5" /> 导出报告
-            </Button>
-          </div>
+          <Button size="sm" variant="outline" className="border-slate-200 text-slate-600" onClick={() => navigate('/accounts')}>
+            管理账号
+          </Button>
         }
       />
-
-      {/* 分平台互动 + 受众画像 */}
-      <div className="grid grid-cols-3 gap-4">
-        <Card className="glass-card col-span-2 border-slate-200 p-5">
-          <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-[15px] font-medium text-slate-900">分平台互动量对比</h3>
-            <span className="text-[11px] text-slate-400">单位：千次</span>
-          </div>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={engagement7d} margin={{ top: 4, right: 4, left: -18, bottom: 0 }} barGap={4}>
-                <CartesianGrid stroke="rgba(100,116,139,0.12)" vertical={false} />
-                <XAxis dataKey="day" tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={false} tickLine={false} />
-                <Tooltip cursor={{ fill: 'rgba(100,116,139,0.08)' }} contentStyle={{ background: '#ffffff', border: '1px solid #e2e9ee', borderRadius: 10, fontSize: 12 }} />
-                <Legend wrapperStyle={{ fontSize: 12, color: '#64748b' }} />
-                <Bar dataKey="TikTok" fill={platformColors.TikTok} radius={[4, 4, 0, 0]} fillOpacity={0.85} />
-                <Bar dataKey="Instagram" fill={platformColors.Instagram} radius={[4, 4, 0, 0]} fillOpacity={0.85} />
-                <Bar dataKey="YouTube" fill={platformColors.YouTube} radius={[4, 4, 0, 0]} fillOpacity={0.85} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </Card>
-
-        <Card className="glass-card border-slate-200 p-5">
-          <h3 className="text-[15px] font-medium text-slate-900">受众年龄分布</h3>
-          <p className="mt-0.5 text-[12px] text-slate-400">全矩阵粉丝画像</p>
-          <div className="h-52">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={audienceAge} dataKey="value" nameKey="name" innerRadius={48} outerRadius={72} paddingAngle={3} strokeWidth={0}>
-                  {audienceAge.map((_, i) => (
-                    <Cell key={i} fill={['#8b5cf6', '#6366f1', '#22d3ee', '#f472b6', '#94a3b8'][i]} fillOpacity={0.85} />
-                  ))}
-                </Pie>
-                <Tooltip contentStyle={{ background: '#ffffff', border: '1px solid #e2e9ee', borderRadius: 10, fontSize: 12 }} formatter={(v) => [`${v}%`, '占比']} />
-                <Legend iconSize={8} wrapperStyle={{ fontSize: 12, color: '#64748b' }} />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="mt-1 rounded-lg border border-slate-200 bg-slate-50 p-3 text-[12px] leading-relaxed text-slate-600">
-            25-34 岁为核心受众（41%），与 GlowUp 目标客群高度重合；18-24 岁占比环比 +3pt。
-          </div>
-        </Card>
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
+        <div className="flex items-center gap-2 text-[11px] text-slate-400">
+          <span className="rounded bg-sky-50 px-2 py-1 font-medium text-sky-600">演示数据</span>
+          <span>统计截至 {DEMO_TODAY} · 来源和采集条件见指标提示</span>
+        </div>
+        <div className="flex gap-1">
+          {ranges.map((range) => (
+            <button
+              key={range}
+              aria-pressed={days === range}
+              className={cn(
+                'rounded-md px-3 py-1.5 text-[12px]',
+                days === range ? 'brand-gradient text-white' : 'text-slate-500 hover:bg-slate-50',
+              )}
+              onClick={() => setDays(range)}
+            >
+              近 {range} 天
+            </button>
+          ))}
+        </div>
       </div>
-
-      {/* 曝光趋势 + Top 内容 */}
-      <div className="grid grid-cols-3 gap-4">
-        <Card className="glass-card col-span-2 border-slate-200 p-5">
-          <h3 className="mb-3 text-[15px] font-medium text-slate-900">曝光增长曲线</h3>
-          <div className="h-56">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={engagement7d} margin={{ top: 4, right: 8, left: -18, bottom: 0 }}>
-                <CartesianGrid stroke="rgba(100,116,139,0.12)" vertical={false} />
-                <XAxis dataKey="day" tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={false} tickLine={false} />
-                <Tooltip contentStyle={{ background: '#ffffff', border: '1px solid #e2e9ee', borderRadius: 10, fontSize: 12 }} />
-                <Line type="monotone" dataKey="TikTok" stroke={platformColors.TikTok} strokeWidth={2} dot={false} />
-                <Line type="monotone" dataKey="Instagram" stroke={platformColors.Instagram} strokeWidth={2} dot={false} />
-                <Line type="monotone" dataKey="YouTube" stroke={platformColors.YouTube} strokeWidth={2} dot={false} />
-              </LineChart>
-            </ResponsiveContainer>
+      {manager.bound ? (
+        <>
+          <div className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white p-4 text-[12px] text-slate-500">
+            <label className="flex items-center gap-2">
+              项目
+              <select
+                value={project}
+                aria-label="分析项目"
+                className={selectClass}
+                onChange={(event) => selectProject(event.target.value)}
+              >
+                <option value="all">全部已同步项目</option>
+                {roxyProjects
+                  .filter((p) => manager.selectedProjectIds.includes(p.id))
+                  .map((p) => (
+                    <option key={p.id} value={p.workspaceProjectId}>
+                      {p.name}
+                    </option>
+                  ))}
+              </select>
+            </label>
+            <label className="flex items-center gap-2">
+              窗口
+              <select
+                value={windowId}
+                aria-label="分析窗口"
+                className={`${selectClass} max-w-56`}
+                onChange={(event) => setWindowId(event.target.value)}
+              >
+                <option value="all">全部窗口</option>
+                {projectWindows.map((w) => (
+                  <option key={w.id} value={w.id}>
+                    {w.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex items-center gap-2">
+              平台
+              <select
+                value={platform}
+                aria-label="分析平台"
+                className={selectClass}
+                onChange={(event) => setPlatform(event.target.value as Platform | 'all')}
+              >
+                <option value="all">全部平台</option>
+                {platforms.map((p) => (
+                  <option key={p} value={p}>
+                    {p}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button className="ml-auto text-sky-600" onClick={clearFilters}>
+              清除筛选
+            </button>
           </div>
-        </Card>
-
-        <Card className="glass-card border-slate-200 p-5">
-          <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-[15px] font-medium text-slate-900">Top 5 内容</h3>
-            <CalendarRange className="h-4 w-4 text-slate-400" />
-          </div>
-          <div className="space-y-3">
-            {topPosts.map((p, i) => (
-              <div key={p.id} className="flex items-center gap-3">
-                <span className={cn(
-                  'flex h-5 w-5 shrink-0 items-center justify-center rounded text-[11px] font-bold',
-                  i < 3 ? 'brand-gradient text-white' : 'bg-slate-100 text-slate-400'
-                )}>
-                  {i + 1}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-[12.5px] text-slate-700">{p.title}</div>
-                  <div className="mt-0.5 flex items-center gap-2 text-[11px] text-slate-400">
-                    <PlatformBadge platform={p.platform} />
-                    <span>{p.views} 曝光</span>
-                    <span>互动 {p.engagement}</span>
-                    {p.roas && <span className="text-emerald-600">ROAS {p.roas}</span>}
-                  </div>
-                </div>
-              </div>
+          <div className="flex gap-6 border-b border-slate-200">
+            {tabs.map((item) => (
+              <button
+                key={item.key}
+                className={cn(
+                  'border-b-2 px-1 pb-3 text-[13px] font-medium',
+                  tab === item.key ? 'border-sky-500 text-sky-600' : 'border-transparent text-slate-400 hover:text-slate-700',
+                )}
+                onClick={() => setTab(item.key)}
+              >
+                {item.label}
+              </button>
             ))}
           </div>
+          {!summary.complete && (
+            <p role="status" className="rounded-lg border border-amber-100 bg-amber-50/60 px-4 py-3 text-[12px] leading-6 text-amber-700">
+              当前区间已覆盖 {summary.included}/{summary.total} 条视频。未采集、采集失败或历史不足的内容不计入数值，汇总显示覆盖范围。
+            </p>
+          )}
+          {tab === 'overview' && <OverviewPanel />}
+          {tab === 'accounts' && <AccountsPanel />}
+          {tab === 'content' && <ContentPanel />}
+          {tab === 'compare' && <ComparisonPanel />}
+        </>
+      ) : (
+        <Card className="items-center gap-3 border-dashed border-slate-200 bg-white py-20 text-center shadow-none">
+          <h2 className="text-lg font-medium text-slate-700">先同步窗口，再查看内容表现</h2>
+          <p className="text-[13px] text-slate-400">在账号管理中绑定 RoxyBrowser，并选择要同步的项目。</p>
+          <Button className="brand-gradient mt-2 text-white" onClick={() => navigate('/accounts')}>
+            去同步窗口
+          </Button>
         </Card>
-      </div>
+      )}
+      <AnalyticsDetails />
     </div>
+  )
+}
+
+export default function Analytics() {
+  return (
+    <AnalyticsWorkspaceProvider>
+      <AnalyticsPage />
+    </AnalyticsWorkspaceProvider>
   )
 }

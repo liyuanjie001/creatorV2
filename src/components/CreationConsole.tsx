@@ -3,6 +3,7 @@ import {
   Sparkles, Monitor, RectangleHorizontal, Clock,
   Volume2, VolumeX, ChevronRight, ChevronDown, Clapperboard, Image as ImageIcon, Wand2, X,
   Plus, Minus, Check, CloudUpload, Search, ListFilter, FileImage, Folder, Star,
+  AtSign, FolderPlus,
 } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Textarea } from '@/components/ui/textarea'
@@ -18,7 +19,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Thumb } from '@/components/shared'
-import { assets, type Asset, type Platform } from '@/data/mock'
+import { assets, loadProjects, products, type Asset, type Platform, type Product, type Project } from '@/data/mock'
 import { type RemakeReference } from '@/lib/remake'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -27,6 +28,8 @@ export interface GenerateIntent {
   brief: string
   batch: number
   mode: '视频' | '图文'
+  projectId?: string
+  product?: Product | null
 }
 
 export interface ConsoleDraft {
@@ -253,7 +256,7 @@ function AttachPanel({
 export default function CreationConsole({
   onStart, onDone, placeholder, className,
   initialBrief = '', initialBatch, initialMode, autoStart = false,
-  initialReference, onBeforeGenerate, bare = false,
+  initialReference, onBeforeGenerate, bare = false, showPlacementTools,
 }: {
   onStart: () => void
   onDone: (items: ConsoleDraft[]) => void
@@ -269,7 +272,10 @@ export default function CreationConsole({
   onBeforeGenerate?: (intent: GenerateIntent) => boolean | void
   /** 无外层卡片边框，适合底部固定栏 */
   bare?: boolean
+  /** 输入框上方的产品卡 / 项目选择，自由创作默认开启 */
+  showPlacementTools?: boolean
 }) {
+  const placementTools = showPlacementTools ?? !bare
   const [mode, setMode] = useState<'视频' | '图文'>(initialMode ?? '视频')
   const [brief, setBrief] = useState(initialBrief)
   const [reference, setReference] = useState<RemakeReference | null>(initialReference ?? null)
@@ -284,14 +290,48 @@ export default function CreationConsole({
   const [modelOpen, setModelOpen] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [draftIdx, setDraftIdx] = useState(0)
+  const [projectList, setProjectList] = useState<Project[]>(() => loadProjects())
+  const [targetProjectId, setTargetProjectId] = useState('')
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
+  const [productOpen, setProductOpen] = useState(false)
   const autoStarted = useRef(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const selectedModel = MODELS.find((m) => m.id === modelId) ?? MODELS[0]
+  const targetProject = projectList.find((p) => p.id === targetProjectId)
+  const productChoices = useMemo(() => {
+    if (!targetProjectId) return products
+    const scoped = products.filter((p) => p.projectId === targetProjectId)
+    return scoped.length ? scoped : products
+  }, [targetProjectId])
+
+  useEffect(() => {
+    const refresh = () => setProjectList(loadProjects())
+    refresh()
+    window.addEventListener('chuhai-projects-changed', refresh)
+    return () => window.removeEventListener('chuhai-projects-changed', refresh)
+  }, [])
+
+  const applyProduct = (product: Product | null, toggle = true) => {
+    const next = toggle && product && selectedProduct?.id === product.id ? null : product
+    setBrief((text) => {
+      let nextText = text
+      if (selectedProduct) {
+        nextText = nextText.replace(`@${selectedProduct.name}`, '').replace(/^\s+/, '')
+      }
+      if (next) {
+        const tag = `@${next.name}`
+        if (!nextText.includes(tag)) nextText = `${tag} ${nextText}`.trim()
+      }
+      return nextText
+    })
+    setSelectedProduct(next)
+    setProductOpen(false)
+  }
 
   const generate = () => {
     if (generating) return
-    if (onBeforeGenerate?.({ brief, batch, mode })) return
+    if (onBeforeGenerate?.({ brief, batch, mode, projectId: targetProjectId || undefined, product: selectedProduct })) return
     setGenerating(true)
     onStart()
     toast.info('AI 开始生成，预计 30 秒（演示）')
@@ -371,6 +411,91 @@ export default function CreationConsole({
             e.target.value = ''
           }}
         />
+
+        {placementTools && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Popover open={productOpen} onOpenChange={setProductOpen}>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  className={cn(
+                    'flex h-[30px] max-w-[220px] items-center gap-1.5 rounded-full border bg-white px-2.5 text-[12px] transition-colors',
+                    selectedProduct
+                      ? 'border-sky-300 text-sky-600'
+                      : 'border-slate-200 text-slate-600 hover:border-sky-300 hover:text-sky-600',
+                  )}
+                >
+                  <AtSign className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">{selectedProduct ? selectedProduct.name : '产品卡'}</span>
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="start" className="w-80 p-2">
+                <div className="mb-1.5 px-1.5 text-[11px] font-medium text-slate-400">选择产品卡</div>
+                <div className="max-h-64 space-y-0.5 overflow-y-auto">
+                  {productChoices.map((p) => {
+                    const owner = projectList.find((proj) => proj.id === p.projectId)
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => applyProduct(p)}
+                        className={cn(
+                          'flex w-full flex-col rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-sky-50',
+                          selectedProduct?.id === p.id && 'bg-sky-50',
+                        )}
+                      >
+                        <span className="text-[13px] font-medium text-slate-800">{p.name}</span>
+                        <span className="text-[11px] text-slate-400">
+                          {p.price} · {p.sellingPoint}
+                          {owner ? ` · ${owner.name}` : ''}
+                        </span>
+                      </button>
+                    )
+                  })}
+                  {productChoices.length === 0 && (
+                    <div className="px-2.5 py-6 text-center text-[12px] text-slate-400">暂无产品卡</div>
+                  )}
+                </div>
+              </PopoverContent>
+            </Popover>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className={cn(
+                    'flex h-[30px] max-w-[220px] items-center gap-1.5 rounded-full border bg-white px-2.5 text-[12px] transition-colors',
+                    targetProject
+                      ? 'border-sky-300 text-sky-600'
+                      : 'border-slate-200 text-slate-600 hover:border-sky-300 hover:text-sky-600',
+                  )}
+                >
+                  <FolderPlus className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">{targetProject?.name ?? '新建项目'}</span>
+                  <ChevronDown className="h-3 w-3 shrink-0 text-slate-400" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-56">
+                <DropdownMenuItem onClick={() => setTargetProjectId('')}>
+                  新建项目
+                </DropdownMenuItem>
+                {projectList.map((p) => (
+                  <DropdownMenuItem
+                    key={p.id}
+                    onClick={() => {
+                      setTargetProjectId(p.id)
+                      if (selectedProduct && selectedProduct.projectId !== p.id) {
+                        applyProduct(null, false)
+                      }
+                    }}
+                  >
+                    {p.name}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        )}
 
         {/* 一键翻拍：参考视频 + 脚本 */}
         <div className={cn(

@@ -654,32 +654,10 @@ export default function ProjectDetail() {
 
             {section === 'brief' && <BriefPanel projectId={project.id} />}
 
-            {/* 商品：品牌 + 产品双栏管理 */}
             {section === 'product' && (
               <div className="flex gap-4">
                 {/* 左栏 */}
                 <div className="flex w-60 shrink-0 flex-col gap-5">
-                  <div>
-                    <p className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400">品牌设置</p>
-                    <div className="rounded-xl border border-slate-200 bg-white p-3">
-                      <div className="flex items-center gap-2.5">
-                        <span className="h-8 w-8 shrink-0 rounded-lg" style={{ background: project.color }} />
-                        <div className="min-w-0">
-                          <p className="truncate text-[13px] font-medium text-slate-800">{project.name}</p>
-                          <p className="text-[11px] text-slate-400">品牌主页</p>
-                        </div>
-                      </div>
-                    </div>
-                    <button onClick={() => toast.info('视觉标识设置（演示）')} className="mt-2 flex w-full items-center gap-2.5 rounded-xl border border-slate-200 bg-white p-3 text-left transition-colors hover:border-sky-200 hover:bg-sky-50/50">
-                      <span className="brand-gradient flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[13px] font-bold text-white">
-                        {project.name.slice(0, 1)}
-                      </span>
-                      <span className="min-w-0">
-                        <span className="block truncate text-[13px] font-medium text-slate-800">视觉标识</span>
-                        <span className="block text-[11px] text-slate-400">Logo / 主色 / 字体</span>
-                      </span>
-                    </button>
-                  </div>
                   <div className="min-h-0 flex-1">
                     <p className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400">产品</p>
                     <button
@@ -979,6 +957,7 @@ export default function ProjectDetail() {
           <div className="shrink-0 bg-[#f5f8fb] px-6 pb-4 pt-2">
             <CreationConsole
               key={`${project.id}-${remakeKey}`}
+              showPlacementTools={false}
               className="border border-slate-200 bg-white shadow-sm"
               placeholder={`为「${project.name}」描述场景，使用 @ 添加产品卡信息`}
               initialBrief={remakeBrief || seedBrief}

@@ -12,9 +12,14 @@ import {
   ChevronRight,
   Coins,
   Pin,
+  Plus,
 } from 'lucide-react'
 import ProjectActions from '@/components/ProjectActions'
-import { loadProjects, type Project } from '@/data/mock'
+import Modal from '@/components/Modal'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { addProject, createNamedProject, loadProjects, type Project } from '@/data/mock'
+import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
 const mainNav = [
@@ -30,6 +35,22 @@ export default function Sidebar() {
   const navigate = useNavigate()
   const location = useLocation()
   const [projectList, setProjectList] = useState<Project[]>(() => loadProjects())
+  const [createOpen, setCreateOpen] = useState(false)
+  const [newName, setNewName] = useState('')
+
+  function submitNewProject() {
+    const name = newName.trim()
+    if (!name) {
+      toast.error('请输入项目名称')
+      return
+    }
+    const project = createNamedProject(name)
+    addProject(project)
+    setCreateOpen(false)
+    setNewName('')
+    toast.success(`已创建项目「${project.name}」`)
+    navigate(`/projects/${project.id}`)
+  }
 
   useEffect(() => {
     const refresh = () => setProjectList(loadProjects())
@@ -84,6 +105,19 @@ export default function Sidebar() {
           </button>
         </div>
         <div className="space-y-0.5">
+          <button
+            type="button"
+            onClick={() => {
+              setNewName('')
+              setCreateOpen(true)
+            }}
+            className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-[13px] text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-800"
+          >
+            <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[5px] border border-slate-300 text-slate-400">
+              <Plus className="h-2.5 w-2.5" />
+            </span>
+            新建项目
+          </button>
           {projectList.map((p) => (
             <div
               key={p.id}
@@ -129,6 +163,33 @@ export default function Sidebar() {
           </div>
         </div>
       </div>
+
+      <Modal open={createOpen} onClose={() => setCreateOpen(false)} className="max-w-sm">
+        <h2 className="text-lg font-semibold text-slate-900">新建项目</h2>
+        <p className="mt-1 text-[13px] text-slate-500">输入项目名称后即可在侧栏中使用。</p>
+        <label className="mt-4 block text-[12px] font-medium text-slate-600" htmlFor="new-project-name">
+          项目名称
+        </label>
+        <Input
+          id="new-project-name"
+          autoFocus
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          placeholder="例如 GlowUp 美妆出海"
+          className="mt-1.5 border-slate-200"
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') submitNewProject()
+          }}
+        />
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="outline" onClick={() => setCreateOpen(false)}>
+            取消
+          </Button>
+          <Button className="brand-gradient text-white" onClick={submitNewProject}>
+            创建
+          </Button>
+        </div>
+      </Modal>
     </aside>
   )
 }

@@ -462,6 +462,10 @@ export function deleteProject(id: string) {
   notifyProjectsChanged()
 }
 
+export function createNamedProject(name: string): Project {
+  return createProjectFromBrief(name)
+}
+
 export function createProjectFromBrief(brief: string): Project {
   const trimmed = brief.trim()
   const now = new Date()
