@@ -199,7 +199,10 @@ export interface Asset {
   name: string
   type: '视频' | '图片' | '文案' | '音频'
   size: string
+  /** 分辨率 / 尺寸，如 1080×1920；音频与文档可为 — */
+  dimensions: string
   duration?: string
+  /** 上传时间 */
   updatedAt: string
   project: string
   day: '今天' | '昨天' | '近7天'
@@ -208,24 +211,24 @@ export interface Asset {
 }
 
 export const assets: Asset[] = [
-  { id: 'M-01', name: 'GlowUp_精华实测_before_after.mp4', type: '视频', size: '86 MB', duration: '00:32', updatedAt: '今天 14:20', project: 'GlowUp 美妆出海', day: '今天', favorite: true },
-  { id: 'M-02', name: '便携投影仪_露营场景_v3.mp4', type: '视频', size: '142 MB', duration: '00:45', updatedAt: '今天 11:02', project: 'TechNova 北美', day: '今天', enhanced: true },
-  { id: 'M-09', name: '精华质地特写_微距.mp4', type: '视频', size: '96 MB', duration: '00:18', updatedAt: '今天 16:05', project: 'GlowUp 美妆出海', day: '今天' },
-  { id: 'M-10', name: 'ins风_开箱构图参考.png', type: '图片', size: '3.4 MB', updatedAt: '今天 10:47', project: 'GlowUp 美妆出海', day: '今天', enhanced: true },
-  { id: 'M-11', name: '投影仪_星空顶实投.jpg', type: '图片', size: '6.1 MB', updatedAt: '今天 09:30', project: 'TechNova 北美', day: '今天' },
-  { id: 'M-03', name: '黑五coupon_德法双语文案.docx', type: '文案', size: '24 KB', updatedAt: '昨天 16:40', project: 'BlackFriday 大促', day: '昨天' },
-  { id: 'M-04', name: '品牌KV_主视觉_蓝白版.png', type: '图片', size: '4.8 MB', updatedAt: '昨天 09:15', project: 'GlowUp 美妆出海', day: '昨天' },
-  { id: 'M-12', name: '黑五_倒计时海报文案.txt', type: '文案', size: '8 KB', updatedAt: '昨天 20:12', project: 'BlackFriday 大促', day: '昨天' },
-  { id: 'M-13', name: '露营B-roll_篝火夜景.mp4', type: '视频', size: '204 MB', duration: '01:05', updatedAt: '昨天 15:26', project: 'TechNova 北美', day: '昨天', favorite: true },
-  { id: 'M-14', name: '圣诞_礼盒平铺图.png', type: '图片', size: '4.2 MB', updatedAt: '昨天 11:38', project: 'Noël 欧洲站', day: '昨天' },
-  { id: 'M-15', name: '德语_促销口播_男声B.mp3', type: '音频', size: '2.8 MB', duration: '00:58', updatedAt: '昨天 14:02', project: 'Noël 欧洲站', day: '昨天' },
-  { id: 'M-05', name: 'AI口播_美式英语配音_女声A.mp3', type: '音频', size: '3.2 MB', duration: '01:12', updatedAt: '近7天 20:33', project: 'LinguaVoice 多语言', day: '近7天' },
-  { id: 'M-06', name: '产品白底图_精华30ml.png', type: '图片', size: '2.1 MB', updatedAt: '近7天 15:08', project: 'GlowUp 美妆出海', day: '近7天' },
-  { id: 'M-07', name: '3C配件测评_B-roll素材.mp4', type: '视频', size: '310 MB', duration: '02:18', updatedAt: '近7天 18:26', project: 'TechNova 北美', day: '近7天' },
-  { id: 'M-08', name: '圣诞礼盒_场景图_初稿.png', type: '图片', size: '5.6 MB', updatedAt: '近7天 10:44', project: 'Noël 欧洲站', day: '近7天', favorite: true },
-  { id: 'M-16', name: '红人合作_授权截图.png', type: '图片', size: '1.9 MB', updatedAt: '近7天 17:55', project: 'GlowUp 美妆出海', day: '近7天' },
-  { id: 'M-17', name: '短视频钩子_50条合集.md', type: '文案', size: '36 KB', updatedAt: '近7天 13:20', project: 'BlackFriday 大促', day: '近7天', favorite: true },
-  { id: 'M-18', name: '降噪耳机_佩戴展示.mp4', type: '视频', size: '168 MB', duration: '00:52', updatedAt: '近7天 12:11', project: 'TechNova 北美', day: '近7天', enhanced: true },
+  { id: 'M-01', name: 'GlowUp_精华实测_before_after.mp4', type: '视频', size: '86 MB', dimensions: '1080×1920', duration: '00:32', updatedAt: '今天 14:20', project: 'GlowUp 美妆出海', day: '今天', favorite: true },
+  { id: 'M-02', name: '便携投影仪_露营场景_v3.mp4', type: '视频', size: '142 MB', dimensions: '1920×1080', duration: '00:45', updatedAt: '今天 11:02', project: 'TechNova 北美', day: '今天', enhanced: true },
+  { id: 'M-09', name: '精华质地特写_微距.mp4', type: '视频', size: '96 MB', dimensions: '1080×1920', duration: '00:18', updatedAt: '今天 16:05', project: 'GlowUp 美妆出海', day: '今天' },
+  { id: 'M-10', name: 'ins风_开箱构图参考.png', type: '图片', size: '3.4 MB', dimensions: '1080×1350', updatedAt: '今天 10:47', project: 'GlowUp 美妆出海', day: '今天', enhanced: true },
+  { id: 'M-11', name: '投影仪_星空顶实投.jpg', type: '图片', size: '6.1 MB', dimensions: '4096×2304', updatedAt: '今天 09:30', project: 'TechNova 北美', day: '今天' },
+  { id: 'M-03', name: '黑五coupon_德法双语文案.docx', type: '文案', size: '24 KB', dimensions: '—', updatedAt: '昨天 16:40', project: 'BlackFriday 大促', day: '昨天' },
+  { id: 'M-04', name: '品牌KV_主视觉_蓝白版.png', type: '图片', size: '4.8 MB', dimensions: '2400×2400', updatedAt: '昨天 09:15', project: 'GlowUp 美妆出海', day: '昨天' },
+  { id: 'M-12', name: '黑五_倒计时海报文案.txt', type: '文案', size: '8 KB', dimensions: '—', updatedAt: '昨天 20:12', project: 'BlackFriday 大促', day: '昨天' },
+  { id: 'M-13', name: '露营B-roll_篝火夜景.mp4', type: '视频', size: '204 MB', dimensions: '1920×1080', duration: '01:05', updatedAt: '昨天 15:26', project: 'TechNova 北美', day: '昨天', favorite: true },
+  { id: 'M-14', name: '圣诞_礼盒平铺图.png', type: '图片', size: '4.2 MB', dimensions: '2000×2000', updatedAt: '昨天 11:38', project: 'Noël 欧洲站', day: '昨天' },
+  { id: 'M-15', name: '德语_促销口播_男声B.mp3', type: '音频', size: '2.8 MB', dimensions: '—', duration: '00:58', updatedAt: '昨天 14:02', project: 'Noël 欧洲站', day: '昨天' },
+  { id: 'M-05', name: 'AI口播_美式英语配音_女声A.mp3', type: '音频', size: '3.2 MB', dimensions: '—', duration: '01:12', updatedAt: '近7天 20:33', project: 'LinguaVoice 多语言', day: '近7天' },
+  { id: 'M-06', name: '产品白底图_精华30ml.png', type: '图片', size: '2.1 MB', dimensions: '1600×1600', updatedAt: '近7天 15:08', project: 'GlowUp 美妆出海', day: '近7天' },
+  { id: 'M-07', name: '3C配件测评_B-roll素材.mp4', type: '视频', size: '310 MB', dimensions: '3840×2160', duration: '02:18', updatedAt: '近7天 18:26', project: 'TechNova 北美', day: '近7天' },
+  { id: 'M-08', name: '圣诞礼盒_场景图_初稿.png', type: '图片', size: '5.6 MB', dimensions: '3000×2000', updatedAt: '近7天 10:44', project: 'Noël 欧洲站', day: '近7天', favorite: true },
+  { id: 'M-16', name: '红人合作_授权截图.png', type: '图片', size: '1.9 MB', dimensions: '1280×720', updatedAt: '近7天 17:55', project: 'GlowUp 美妆出海', day: '近7天' },
+  { id: 'M-17', name: '短视频钩子_50条合集.md', type: '文案', size: '36 KB', dimensions: '—', updatedAt: '近7天 13:20', project: 'BlackFriday 大促', day: '近7天', favorite: true },
+  { id: 'M-18', name: '降噪耳机_佩戴展示.mp4', type: '视频', size: '168 MB', dimensions: '1080×1920', duration: '00:52', updatedAt: '近7天 12:11', project: 'TechNova 北美', day: '近7天', enhanced: true },
 ]
 
 export interface AssetElement {
@@ -245,9 +248,9 @@ export const assetElements: AssetElement[] = [
 ]
 
 export const deletedAssets: Asset[] = [
-  { id: 'D-1', name: '旧版KV_绿色调.png', type: '图片', size: '3.3 MB', updatedAt: '10-12 11:20', project: 'GlowUp 美妆出海', day: '近7天' },
-  { id: 'D-2', name: '测试配音_草稿.mp3', type: '音频', size: '1.1 MB', updatedAt: '10-10 09:41', project: 'LinguaVoice 多语言', day: '近7天' },
-  { id: 'D-3', name: '过时_黑五初版文案.docx', type: '文案', size: '18 KB', updatedAt: '10-08 16:02', project: 'BlackFriday 大促', day: '近7天' },
+  { id: 'D-1', name: '旧版KV_绿色调.png', type: '图片', size: '3.3 MB', dimensions: '2400×2400', updatedAt: '10-12 11:20', project: 'GlowUp 美妆出海', day: '近7天' },
+  { id: 'D-2', name: '测试配音_草稿.mp3', type: '音频', size: '1.1 MB', dimensions: '—', updatedAt: '10-10 09:41', project: 'LinguaVoice 多语言', day: '近7天' },
+  { id: 'D-3', name: '过时_黑五初版文案.docx', type: '文案', size: '18 KB', dimensions: '—', updatedAt: '10-08 16:02', project: 'BlackFriday 大促', day: '近7天' },
 ]
 
 /* ---------------- 项目产出（全部生成） ---------------- */
@@ -339,6 +342,7 @@ export interface Project {
   exposure: string
   engagement: string
   contentCount: number
+  pinned?: boolean
 }
 
 export const projects: Project[] = [
@@ -348,6 +352,144 @@ export const projects: Project[] = [
   { id: 'P4', name: 'Noël 欧洲站', color: '#10b981', desc: '圣诞礼盒场景图文与短视频，德法双语本地化', status: '进行中', progress: 25, start: '10-15', end: '12-20', owner: '苏航', platforms: ['Instagram', 'Facebook'], exposure: '210K', engagement: '5.9%', contentCount: 15 },
   { id: 'P5', name: 'LinguaVoice 多语言', color: '#8b5cf6', desc: 'AI 数字人口播东南亚六国本地化测试', status: '已结束', progress: 100, start: '09-01', end: '10-10', owner: '苏航', platforms: ['TikTok'], exposure: '640K', engagement: '6.2%', contentCount: 32 },
 ]
+
+const PROJECTS_KEY = 'chuhai-extra-projects'
+const PROJECT_META_KEY = 'chuhai-project-meta'
+const PROJECT_COLORS = ['#11a3fd', '#f472b6', '#f59e0b', '#10b981', '#8b5cf6', '#1769ff', '#06b6d4']
+
+interface ProjectMeta {
+  deletedIds: string[]
+  pinnedIds: string[]
+  nameOverrides: Record<string, string>
+}
+
+const emptyMeta = (): ProjectMeta => ({ deletedIds: [], pinnedIds: [], nameOverrides: {} })
+
+function loadExtraProjects(): Project[] {
+  try {
+    const raw = localStorage.getItem(PROJECTS_KEY)
+    if (raw) return JSON.parse(raw) as Project[]
+  } catch { /* 忽略解析失败 */ }
+  return []
+}
+
+function saveExtraProjects(extras: Project[]) {
+  try { localStorage.setItem(PROJECTS_KEY, JSON.stringify(extras)) } catch { /* 忽略 */ }
+}
+
+function loadMeta(): ProjectMeta {
+  try {
+    const raw = localStorage.getItem(PROJECT_META_KEY)
+    if (raw) return { ...emptyMeta(), ...(JSON.parse(raw) as ProjectMeta) }
+  } catch { /* 忽略 */ }
+  return emptyMeta()
+}
+
+function saveMeta(meta: ProjectMeta) {
+  try { localStorage.setItem(PROJECT_META_KEY, JSON.stringify(meta)) } catch { /* 忽略 */ }
+}
+
+function notifyProjectsChanged() {
+  try { window.dispatchEvent(new Event('chuhai-projects-changed')) } catch { /* SSR */ }
+}
+
+/** 置顶在前，其余：用户新建在前、种子项目在后 */
+export function loadProjects(): Project[] {
+  const meta = loadMeta()
+  const deleted = new Set(meta.deletedIds)
+  const extras = loadExtraProjects().filter((p) => !deleted.has(p.id))
+  const seed = projects.filter((p) => !deleted.has(p.id))
+  const seen = new Set<string>()
+  const merged: Project[] = []
+  for (const p of [...extras, ...seed]) {
+    if (seen.has(p.id)) continue
+    seen.add(p.id)
+    merged.push({
+      ...p,
+      name: meta.nameOverrides[p.id] ?? p.name,
+      pinned: meta.pinnedIds.includes(p.id),
+    })
+  }
+  merged.sort((a, b) => {
+    const ai = meta.pinnedIds.indexOf(a.id)
+    const bi = meta.pinnedIds.indexOf(b.id)
+    if (ai === -1 && bi === -1) return 0
+    if (ai === -1) return 1
+    if (bi === -1) return -1
+    return ai - bi
+  })
+  return merged
+}
+
+export function addProject(project: Project) {
+  const extras = loadExtraProjects().filter((p) => p.id !== project.id)
+  extras.unshift(project)
+  saveExtraProjects(extras)
+  notifyProjectsChanged()
+}
+
+export function renameProject(id: string, name: string) {
+  const next = name.trim()
+  if (!next) return
+  const extras = loadExtraProjects()
+  const idx = extras.findIndex((p) => p.id === id)
+  if (idx >= 0) {
+    extras[idx] = { ...extras[idx], name: next }
+    saveExtraProjects(extras)
+  }
+  const meta = loadMeta()
+  meta.nameOverrides[id] = next
+  saveMeta(meta)
+  notifyProjectsChanged()
+}
+
+export function togglePinProject(id: string) {
+  const meta = loadMeta()
+  const i = meta.pinnedIds.indexOf(id)
+  if (i >= 0) meta.pinnedIds.splice(i, 1)
+  else meta.pinnedIds.unshift(id)
+  saveMeta(meta)
+  notifyProjectsChanged()
+}
+
+export function deleteProject(id: string) {
+  saveExtraProjects(loadExtraProjects().filter((p) => p.id !== id))
+  const meta = loadMeta()
+  if (!meta.deletedIds.includes(id)) meta.deletedIds.push(id)
+  meta.pinnedIds = meta.pinnedIds.filter((x) => x !== id)
+  delete meta.nameOverrides[id]
+  saveMeta(meta)
+  notifyProjectsChanged()
+}
+
+export function createNamedProject(name: string): Project {
+  return createProjectFromBrief(name)
+}
+
+export function createProjectFromBrief(brief: string): Project {
+  const trimmed = brief.trim()
+  const now = new Date()
+  const stamp = `${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+  const name = trimmed
+    ? (trimmed.length > 18 ? `${trimmed.slice(0, 18)}…` : trimmed)
+    : '未命名'
+  const extras = loadExtraProjects()
+  return {
+    id: `P-${Date.now()}`,
+    name,
+    color: PROJECT_COLORS[extras.length % PROJECT_COLORS.length],
+    desc: trimmed || '从自由创作发起的视频生成项目',
+    status: '进行中',
+    progress: 5,
+    start: stamp.slice(0, 5),
+    end: '—',
+    owner: '林悦',
+    platforms: ['TikTok', 'Instagram', 'YouTube'],
+    exposure: '—',
+    engagement: '—',
+    contentCount: 0,
+  }
+}
 
 /* ---------------- 妙记（AI 灵感对话自动保存） ---------------- */
 

@@ -1,32 +1,61 @@
+import { useEffect, useState } from 'react'
 import { NavLink, useNavigate, useLocation } from 'react-router'
 import {
-  LayoutDashboard,
   Lightbulb,
   Sparkles,
+  FolderOpen,
   Users,
   BarChart3,
-  ListChecks,
-  Plus,
   Search,
   Orbit,
   ChevronRight,
   Coins,
+  Pin,
+  Plus,
 } from 'lucide-react'
-import { projects } from '@/data/mock'
+import ProjectActions from '@/components/ProjectActions'
+import Modal from '@/components/Modal'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { addProject, createNamedProject, loadProjects, type Project } from '@/data/mock'
+import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
 const mainNav = [
-  { to: '/', label: '工作台', icon: LayoutDashboard, end: true },
-  { to: '/inspiration', label: '创意中心', icon: Lightbulb },
   { to: '/create', label: '自由创作', icon: Sparkles },
+  { to: '/assets', label: '素材库', icon: FolderOpen },
+  { to: '/inspiration', label: '创意中心', icon: Lightbulb },
   { to: '/accounts', label: '账号管理', icon: Users },
   { to: '/analytics', label: '数据分析', icon: BarChart3 },
-  { to: '/tasks', label: '任务管理', icon: ListChecks },
 ]
 
 export default function Sidebar() {
   const navigate = useNavigate()
   const location = useLocation()
+  const [projectList, setProjectList] = useState<Project[]>(() => loadProjects())
+  const [createOpen, setCreateOpen] = useState(false)
+  const [newName, setNewName] = useState('')
+
+  function submitNewProject() {
+    const name = newName.trim()
+    if (!name) {
+      toast.error('请输入项目名称')
+      return
+    }
+    const project = createNamedProject(name)
+    addProject(project)
+    setCreateOpen(false)
+    setNewName('')
+    toast.success(`已创建项目「${project.name}」`)
+    navigate(`/projects/${project.id}`)
+  }
+
+  useEffect(() => {
+    const refresh = () => setProjectList(loadProjects())
+    refresh()
+    window.addEventListener('chuhai-projects-changed', refresh)
+    return () => window.removeEventListener('chuhai-projects-changed', refresh)
+  }, [location.pathname])
 
   return (
     <aside className="fixed inset-y-0 left-0 z-40 flex w-60 flex-col border-r border-slate-200/80 bg-white">
@@ -46,11 +75,10 @@ export default function Sidebar() {
 
       {/* 主导航 */}
       <nav className="mt-1 space-y-0.5 px-2.5">
-        {mainNav.map(({ to, label, icon: Icon, end }) => (
+        {mainNav.map(({ to, label, icon: Icon }) => (
           <NavLink
             key={to}
             to={to}
-            end={end}
             className={({ isActive }) =>
               cn(
                 'flex items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-[13px] transition-colors',
@@ -74,36 +102,43 @@ export default function Sidebar() {
             <Search className="h-3.5 w-3.5" />
           </button>
         </div>
-        <button
-          onClick={() => navigate('/projects')}
-          className="mb-1 flex w-full items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-[13px] text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-800"
-        >
-          <span className="flex h-4 w-4 items-center justify-center rounded border border-slate-300">
-            <Plus className="h-3 w-3" />
-          </span>
-          新建项目
-        </button>
         <div className="space-y-0.5">
-          {projects.map((p) => (
-            <button
+          <button
+            type="button"
+            onClick={() => {
+              setNewName('')
+              setCreateOpen(true)
+            }}
+            className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-[13px] text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-800"
+          >
+            <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[5px] border border-slate-300 text-slate-400">
+              <Plus className="h-2.5 w-2.5" />
+            </span>
+            新建项目
+          </button>
+          {projectList.map((p) => (
+            <div
               key={p.id}
-              onClick={() => navigate(`/projects/${p.id}`)}
               className={cn(
-                'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-left text-[13px] transition-colors',
-                location.pathname === `/projects/${p.id}` ? 'bg-slate-50 font-medium text-slate-800' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'
+                'group flex w-full items-center gap-1 rounded-lg px-1.5 py-0.5 transition-colors',
+                location.pathname === `/projects/${p.id}` ? 'bg-slate-50' : 'hover:bg-slate-50',
               )}
             >
-              <span className="h-3.5 w-3.5 shrink-0 rounded-[5px]" style={{ backgroundColor: p.color }} />
-              <span className="truncate">{p.name}</span>
-            </button>
+              <button
+                type="button"
+                onClick={() => navigate(`/projects/${p.id}`)}
+                className={cn(
+                  'flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-1 py-[6px] text-left text-[13px] transition-colors',
+                  location.pathname === `/projects/${p.id}` ? 'font-medium text-slate-800' : 'text-slate-500 hover:text-slate-800',
+                )}
+              >
+                <span className="h-3.5 w-3.5 shrink-0 rounded-[5px]" style={{ backgroundColor: p.color }} />
+                <span className="truncate">{p.name}</span>
+                {p.pinned && <Pin className="h-3 w-3 shrink-0 fill-sky-500 text-sky-500" />}
+              </button>
+              <ProjectActions project={p} />
+            </div>
           ))}
-          <button
-            onClick={() => navigate('/projects')}
-            className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-left text-[12px] text-slate-400 transition-colors hover:bg-slate-50 hover:text-slate-600"
-          >
-            <span className="w-3.5" />
-            全部项目 →
-          </button>
         </div>
       </div>
 
@@ -126,6 +161,33 @@ export default function Sidebar() {
           </div>
         </div>
       </div>
+
+      <Modal open={createOpen} onClose={() => setCreateOpen(false)} className="max-w-sm">
+        <h2 className="text-lg font-semibold text-slate-900">新建项目</h2>
+        <p className="mt-1 text-[13px] text-slate-500">输入项目名称后即可在侧栏中使用。</p>
+        <label className="mt-4 block text-[12px] font-medium text-slate-600" htmlFor="new-project-name">
+          项目名称
+        </label>
+        <Input
+          id="new-project-name"
+          autoFocus
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          placeholder="例如 GlowUp 美妆出海"
+          className="mt-1.5 border-slate-200"
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') submitNewProject()
+          }}
+        />
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="outline" onClick={() => setCreateOpen(false)}>
+            取消
+          </Button>
+          <Button className="brand-gradient text-white" onClick={submitNewProject}>
+            创建
+          </Button>
+        </div>
+      </Modal>
     </aside>
   )
 }

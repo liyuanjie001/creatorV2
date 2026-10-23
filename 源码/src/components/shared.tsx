@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils'
 
 export function PageHeader({ title, desc, extra }: { title: ReactNode; desc?: string; extra?: ReactNode }) {
   return (
-    <div className="mb-6 flex items-end justify-between">
+    <div className="mb-6 flex items-start justify-between gap-4">
       <div>
         <h1 className="text-xl font-semibold text-slate-900">{title}</h1>
         {desc && <p className="mt-1 text-[13px] text-slate-500">{desc}</p>}

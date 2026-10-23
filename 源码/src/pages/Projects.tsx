@@ -1,10 +1,12 @@
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
-import { Plus, ArrowRight } from 'lucide-react'
+import { Plus, ArrowRight, Pin } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { PageHeader, PlatformBadge } from '@/components/shared'
-import { projects } from '@/data/mock'
+import ProjectActions from '@/components/ProjectActions'
+import { loadProjects, type Project } from '@/data/mock'
 import { cn } from '@/lib/utils'
 
 const statusStyle: Record<string, string> = {
@@ -14,6 +16,14 @@ const statusStyle: Record<string, string> = {
 }
 
 export default function Projects() {
+  const [list, setList] = useState<Project[]>(() => loadProjects())
+  useEffect(() => {
+    const refresh = () => setList(loadProjects())
+    refresh()
+    window.addEventListener('chuhai-projects-changed', refresh)
+    return () => window.removeEventListener('chuhai-projects-changed', refresh)
+  }, [])
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -29,21 +39,27 @@ export default function Projects() {
       />
 
       <div className="grid grid-cols-3 gap-4">
-        {projects.map((p) => (
-          <Card key={p.id} className="glass-card group border-white/[0.07] p-5">
-            <div className="flex items-start justify-between">
-              <div className="flex items-center gap-2.5">
-                <span className="h-9 w-9 rounded-xl" style={{ backgroundColor: `${p.color}1a` }}>
+        {list.map((p) => (
+          <Card key={p.id} className="glass-card group relative border-white/[0.07] p-5">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex min-w-0 items-center gap-2.5">
+                <span className="h-9 w-9 shrink-0 rounded-xl" style={{ backgroundColor: `${p.color}1a` }}>
                   <span className="flex h-full w-full items-center justify-center">
                     <span className="h-3.5 w-3.5 rounded-[5px]" style={{ backgroundColor: p.color }} />
                   </span>
                 </span>
-                <div>
-                  <div className="text-[14.5px] font-semibold text-slate-800">{p.name}</div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <div className="truncate text-[14.5px] font-semibold text-slate-800">{p.name}</div>
+                    {p.pinned && <Pin className="h-3.5 w-3.5 shrink-0 fill-sky-500 text-sky-500" />}
+                  </div>
                   <div className="text-[11.5px] text-slate-400">负责人 {p.owner} · {p.start} ~ {p.end}</div>
                 </div>
               </div>
-              <Badge className={cn('border-0 text-[11px]', statusStyle[p.status])}>{p.status}</Badge>
+              <div className="flex shrink-0 items-center gap-1">
+                <Badge className={cn('border-0 text-[11px]', statusStyle[p.status])}>{p.status}</Badge>
+                <ProjectActions project={p} className="opacity-100" />
+              </div>
             </div>
 
             <p className="mt-3 line-clamp-2 text-[12.5px] leading-relaxed text-slate-500">{p.desc}</p>

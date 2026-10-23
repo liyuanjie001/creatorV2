@@ -1,6 +1,5 @@
 import { Routes, Route, Navigate } from 'react-router'
 import AppShell from './layout/AppShell'
-import Dashboard from './pages/Dashboard'
 import Inspiration from './pages/Inspiration'
 import Notes from './pages/Notes'
 import Create from './pages/Create'
@@ -20,7 +19,7 @@ export default function App() {
   return (
     <Routes>
       <Route element={<AppShell />}>
-        <Route path="/" element={<Dashboard />} />
+        <Route path="/" element={<Navigate to="/create" replace />} />
         <Route path="/inspiration" element={<Inspiration />} />
         <Route path="/notes" element={<Notes />} />
         <Route path="/create" element={<Create />} />
@@ -36,7 +35,7 @@ export default function App() {
         <Route path="/settings" element={<Settings />} />
         <Route path="/trash" element={<Trash />} />
         <Route path="/me" element={<Profile />} />
-        <Route path="*" element={<Dashboard />} />
+        <Route path="*" element={<Navigate to="/create" replace />} />
       </Route>
     </Routes>
   )

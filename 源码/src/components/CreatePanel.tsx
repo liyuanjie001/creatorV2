@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
-import { FolderPlus, Play, MoreHorizontal, FolderOpen } from 'lucide-react'
+import { useLocation, useNavigate } from 'react-router'
+import { Play } from 'lucide-react'
 import { PlatformBadge, Thumb } from '@/components/shared'
-import CreationConsole, { type ConsoleDraft } from '@/components/CreationConsole'
-import { type Platform } from '@/data/mock'
+import CreationConsole from '@/components/CreationConsole'
+import { addProject, createProjectFromBrief, generations, loadProjects, type Platform } from '@/data/mock'
+import { type RemakeReference } from '@/lib/remake'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
@@ -54,34 +56,54 @@ function ShowcaseCarousel() {
   )
 }
 
-/* ---------------- 我的创作 ---------------- */
+/* ---------------- 创作记录（关联项目生成内容） ---------------- */
 
 interface Creation {
-  id: number
+  generationId: string
+  projectId: string
   platform: Platform
   title: string
   tag: string
   time: string
 }
 
-const initialCreations: Creation[] = [
-  { id: 1, platform: 'TikTok', title: '精华实测 · 悬念开头版', tag: '视频', time: '昨天 16:20' },
-  { id: 2, platform: 'Instagram', title: '品牌 KV · 蓝白主视觉', tag: '图文', time: '昨天 10:05' },
-  { id: 3, platform: 'YouTube', title: '投影仪露营测评 · 篝火段', tag: '视频', time: '10-19 14:32' },
+const CREATION_LINKS: { generationId: string; title: string; tag: string; time: string }[] = [
+  { generationId: 'G-01', title: '精华实测 · 悬念开头版', tag: '视频', time: '昨天 16:20' },
+  { generationId: 'G-03', title: '品牌 KV · 蓝白主视觉', tag: '图文', time: '昨天 10:05' },
+  { generationId: 'G-06', title: '投影仪露营测评 · 篝火段', tag: '视频', time: '10-19 14:32' },
 ]
 
-export default function CreatePanel() {
-  const [generating, setGenerating] = useState(false)
-  const [creations, setCreations] = useState<Creation[]>(initialCreations)
-
-  const handleDone = (items: ConsoleDraft[]) => {
-    setCreations((prev) => [
-      ...items.map((d, i) => ({ id: Date.now() + i, platform: d.platform, title: d.title, tag: d.tag, time: '刚刚' })),
-      ...prev,
-    ])
-    setGenerating(false)
-    toast.success(`已生成 ${items.length} 条内容，已加入「我的创作」`)
+const initialCreations: Creation[] = CREATION_LINKS.map((c) => {
+  const g = generations.find((x) => x.id === c.generationId)!
+  return {
+    generationId: c.generationId,
+    projectId: g.projectId,
+    platform: g.platform,
+    title: c.title,
+    tag: c.tag,
+    time: c.time,
   }
+})
+
+type RemakeNavState = {
+  remake?: {
+    reference: RemakeReference
+    brief: string
+  }
+}
+
+export default function CreatePanel() {
+  const navigate = useNavigate()
+  const location = useLocation()
+  const [creations] = useState<Creation[]>(initialCreations)
+  const [remakeSeed] = useState(() => (location.state as RemakeNavState | null)?.remake ?? null)
+  const [consoleKey] = useState(() => (remakeSeed ? `remake-${Date.now()}` : 'default'))
+
+  useEffect(() => {
+    if (remakeSeed) {
+      navigate('.', { replace: true, state: null })
+    }
+  }, [remakeSeed, navigate])
 
   return (
     <div className="space-y-8">
@@ -89,62 +111,74 @@ export default function CreatePanel() {
       <div className="pt-4">
         <ShowcaseCarousel />
         <h1 className="mt-2 text-center text-3xl font-bold brand-text">让你的品牌故事鲜活起来</h1>
-        <p className="mt-2 text-center text-[13px] text-slate-500">描述场景或产品，AI 自动生成面向海外社媒的短视频与图文内容</p>
+        <p className="mt-2 text-center text-[13px] text-slate-500">可选择产品卡与目标项目；未选项目时点击生成会自动新建项目</p>
       </div>
 
-      {/* 创作控制台 */}
+      {/* 创作控制台：生成 → 新建项目 → 进入项目内生成 */}
       <CreationConsole
+        key={consoleKey}
         className="mx-auto max-w-4xl"
-        onStart={() => setGenerating(true)}
-        onDone={handleDone}
+        initialBrief={remakeSeed?.brief ?? ''}
+        initialReference={remakeSeed?.reference ?? null}
+        onStart={() => {}}
+        onDone={() => {}}
+        onBeforeGenerate={({ brief, batch, mode, projectId, product }) => {
+          const mention = product ? `@${product.name}` : ''
+          const fullBrief = [mention, brief.replace(mention, '').trim()].filter(Boolean).join(' ').trim()
+          const existing = projectId ? loadProjects().find((p) => p.id === projectId) : undefined
+          const project = existing ?? createProjectFromBrief(fullBrief || product?.name || '未命名项目')
+          if (!existing) {
+            addProject(project)
+            toast.success(`已创建项目「${project.name}」，正在进入生成…`)
+          } else {
+            toast.success(`将在项目「${project.name}」中生成…`)
+          }
+          navigate(`/projects/${project.id}`, {
+            state: {
+              autoGenerate: true,
+              brief: fullBrief,
+              batch,
+              mode,
+              remake: remakeSeed ?? undefined,
+            },
+          })
+          return true
+        }}
       />
 
-      {/* 我的创作 */}
+      {/* 创作记录 */}
       <div className="mx-auto max-w-4xl">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-[15px] font-semibold text-slate-800">我的创作</h2>
-          <button onClick={() => toast.info('打开素材库（演示）')} className="text-[12px] text-slate-400 transition-colors hover:text-sky-600">查看全部 →</button>
+        <div className="mb-3">
+          <h2 className="text-[15px] font-semibold text-slate-800">创作记录</h2>
         </div>
-        <div className="grid grid-cols-4 gap-3">
-          {/* 新建卡片 */}
-          <button
-            onClick={() => toast.success('新建创作（演示）')}
-            className="flex aspect-video flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-200 bg-white/60 text-slate-400 transition-colors hover:border-sky-300 hover:text-sky-500"
-          >
-            <FolderPlus className="h-6 w-6" />
-            <span className="text-[12px]">新建创作</span>
-          </button>
-
-          {generating && (
-            <div className="aspect-video animate-pulse rounded-xl border border-slate-200 bg-slate-50">
-              <div className="thumb-gradient h-full w-full rounded-xl opacity-40" />
-            </div>
-          )}
-
+        <div className="grid grid-cols-3 gap-3">
           {creations.map((c) => (
-            <div key={c.id} className="group relative aspect-video overflow-hidden rounded-xl border border-slate-200">
+            <button
+              key={c.generationId}
+              type="button"
+              onClick={() =>
+                navigate(`/projects/${c.projectId}`, {
+                  state: { openGenerationId: c.generationId },
+                })
+              }
+              className="group relative aspect-video overflow-hidden rounded-xl border border-slate-200 text-left transition-all hover:border-sky-300 hover:shadow-md"
+            >
               <Thumb className="h-full w-full">
                 <span className="absolute left-2 top-2"><PlatformBadge platform={c.platform} /></span>
                 <span className="absolute bottom-2 right-2 flex items-center gap-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-white/85">
                   <Play className="h-2.5 w-2.5" fill="currentColor" /> {c.tag}
                 </span>
               </Thumb>
-              <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
-                <button onClick={() => toast.info('预览（演示）')} className="flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-slate-700 hover:text-sky-600">
-                  <Play className="h-3.5 w-3.5" fill="currentColor" />
-                </button>
-                <button onClick={() => toast.success('已加入项目素材（演示）')} className="flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-slate-700 hover:text-sky-600">
-                  <FolderOpen className="h-3.5 w-3.5" />
-                </button>
-                <button onClick={() => toast.info('更多（演示）')} className="flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-slate-700 hover:text-sky-600">
-                  <MoreHorizontal className="h-3.5 w-3.5" />
-                </button>
+              <div className="absolute inset-0 flex items-center justify-center bg-black/45 opacity-0 transition-opacity group-hover:opacity-100">
+                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white/95 text-sky-600 shadow-sm">
+                  <Play className="h-4 w-4" fill="currentColor" />
+                </span>
               </div>
               <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-2.5 pb-1.5 pt-5">
                 <div className="truncate text-[11px] font-medium text-white">{c.title}</div>
                 <div className="text-[10px] text-white/65">{c.time}</div>
               </div>
-            </div>
+            </button>
           ))}
         </div>
       </div>
