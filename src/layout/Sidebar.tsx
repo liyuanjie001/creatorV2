@@ -6,7 +6,6 @@ import {
   FolderOpen,
   Users,
   BarChart3,
-  ListChecks,
   Search,
   Orbit,
   ChevronRight,
@@ -28,7 +27,6 @@ const mainNav = [
   { to: '/inspiration', label: '创意中心', icon: Lightbulb },
   { to: '/accounts', label: '账号管理', icon: Users },
   { to: '/analytics', label: '数据分析', icon: BarChart3 },
-  { to: '/tasks', label: '任务管理', icon: ListChecks },
 ]
 
 export default function Sidebar() {

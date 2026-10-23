@@ -1,12 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router'
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-} from 'recharts'
-import {
-  ArrowLeft, FileText, Clapperboard, FolderOpen,
-  Plus, Trash2,
-  Play, RotateCcw, Wand2, User, Clock,
+  ArrowLeft, FolderOpen,
+  Plus, Trash2, Upload,
+  Play, RotateCcw, Wand2,
   ShoppingBag, Lightbulb, Sparkles,
   Users, Rocket, MousePointerClick, CalendarClock, Check, Link2, X, Orbit,
 } from 'lucide-react'
@@ -19,14 +16,16 @@ import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 import { PlatformBadge, Thumb } from '@/components/shared'
+import Modal from '@/components/Modal'
 import CreationConsole, { consoleDraftPool, type ConsoleDraft } from '@/components/CreationConsole'
 import InspirationHitCard from '@/components/InspirationHitCard'
 import Topbar from '@/layout/Topbar'
 import {
-  loadProjects, generations, engagement7d, platformColors, deletedAssets,
+  loadProjects, generations, platformColors, deletedAssets,
   accounts, tasks, products, inspirations,
   type Generation, type Platform, type Product,
 } from '@/data/mock'
+import { demoAccounts, demoBindings, demoWindows } from '@/data/windowDemo'
 import { REMAKE_PROMPT, toRemakeReference, type RemakeReference } from '@/lib/remake'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -36,7 +35,7 @@ import { cn } from '@/lib/utils'
 type SectionKey = 'gen' | 'brief' | 'product' | 'inspire' | 'account' | 'publish' | 'attribution' | 'schedule' | 'trash'
 
 const sectionTitles: Record<SectionKey, string> = {
-  gen: '全部生成', brief: '项目简报', product: '产品卡', inspire: '灵感库',
+  gen: '自由创作', brief: '项目简报', product: '产品卡', inspire: '灵感库',
   account: '账号管理', publish: '发布管理', attribution: '数据归因', schedule: '任务调度',
   trash: '回收站',
 }
@@ -266,11 +265,16 @@ function GenCard({
   g,
   highlighted,
   onOpen,
+  onQueue,
+  onView,
 }: {
   g: Generation
   highlighted?: boolean
   onOpen?: (g: Generation) => void
+  onQueue?: (g: Generation) => void
+  onView?: (g: Generation) => void
 }) {
+  const actionLabel = g.status === '草稿' ? '加入待发布列表' : '去查看'
   return (
     <div
       id={`gen-${g.id}`}
@@ -292,8 +296,12 @@ function GenCard({
         >
           <Play className="h-3.5 w-3.5" fill="currentColor" />
         </button>
-        <button type="button" onClick={() => toast.success('已加入发布任务（演示）')} className="rounded-full bg-white/90 px-3 py-1.5 text-[11.5px] font-medium text-slate-700 hover:text-sky-600">
-          去发布
+        <button
+          type="button"
+          onClick={() => (g.status === '草稿' ? onQueue?.(g) : onView?.(g))}
+          className="rounded-full bg-white/90 px-3 py-1.5 text-[11.5px] font-medium text-slate-700 hover:text-sky-600"
+        >
+          {actionLabel}
         </button>
       </div>
       <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-2.5 pb-1.5 pt-6">
@@ -303,66 +311,23 @@ function GenCard({
   )
 }
 
-/* ---------------- 项目简报 ---------------- */
-
-function BriefPanel({ projectId }: { projectId: string }) {
-  const project = loadProjects().find((p) => p.id === projectId)!
-  const mainPlatform = project.platforms[0] as Platform | undefined
-  return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-4 gap-4">
-        {[
-          { label: '累计曝光', value: project.exposure },
-          { label: '平均互动率', value: project.engagement },
-          { label: '已发布内容', value: `${project.contentCount} 条` },
-          { label: '整体进度', value: `${project.progress}%` },
-        ].map((k) => (
-          <Card key={k.label} className="glass-card border-slate-200 p-4">
-            <div className="text-[12px] text-slate-400">{k.label}</div>
-            <div className="mt-1 text-2xl font-semibold text-slate-800">{k.value}</div>
-          </Card>
-        ))}
-      </div>
-      <div className="grid grid-cols-3 gap-4">
-        <Card className="glass-card col-span-2 border-slate-200 p-5">
-          <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-[15px] font-medium text-slate-800">分日互动表现</h3>
-            <div className="flex items-center gap-2 text-[11.5px] text-slate-400">
-              <Clock className="h-3.5 w-3.5" /> {project.start} ~ {project.end}
-            </div>
-          </div>
-          <div className="h-60">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={engagement7d} margin={{ top: 4, right: 4, left: -18, bottom: 0 }}>
-                <CartesianGrid stroke="rgba(100,116,139,0.12)" vertical={false} />
-                <XAxis dataKey="day" tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={false} tickLine={false} />
-                <Tooltip cursor={{ fill: 'rgba(100,116,139,0.08)' }} contentStyle={{ background: '#ffffff', border: '1px solid #e2e9ee', borderRadius: 10, fontSize: 12 }} />
-                <Bar dataKey="TikTok" fill={mainPlatform ? platformColors[mainPlatform] : '#11a3fd'} radius={[4, 4, 0, 0]} fillOpacity={0.85} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </Card>
-        <Card className="glass-card border-slate-200 p-5">
-          <h3 className="mb-4 text-[15px] font-medium text-slate-800">项目信息</h3>
-          <div className="space-y-3.5 text-[12.5px]">
-            <div className="flex justify-between"><span className="text-slate-400">负责人</span><span className="flex items-center gap-1.5 text-slate-700"><User className="h-3.5 w-3.5 text-slate-400" />{project.owner}</span></div>
-            <div className="flex justify-between"><span className="text-slate-400">周期</span><span className="text-slate-700">{project.start} ~ {project.end}</span></div>
-            <div className="flex justify-between"><span className="text-slate-400">平台</span><span className="flex gap-1">{project.platforms.map((p) => <PlatformBadge key={p} platform={p} />)}</span></div>
-          </div>
-          <div className="mt-5">
-            <div className="mb-1 flex justify-between text-[11.5px] text-slate-400">
-              <span>整体进度</span>
-              <span className="font-medium text-slate-600">{project.progress}%</span>
-            </div>
-            <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
-              <div className="brand-gradient h-full rounded-full" style={{ width: `${project.progress}%` }} />
-            </div>
-          </div>
-        </Card>
-      </div>
-    </div>
+function publishAccountMeta(g: Generation, projectId: string, index: number) {
+  const windows = demoWindows.filter((w) => w.roxyProjectId === `roxy-${projectId}`)
+  const boundIds = new Set(
+    demoBindings.filter((b) => windows.some((w) => w.id === b.windowId)).map((b) => b.accountId),
   )
+  const matched = demoAccounts.filter((a) => a.platform === g.platform && boundIds.has(a.id))
+  const fallback = demoAccounts.filter((a) => boundIds.has(a.id))
+  const pool = matched.length ? matched : fallback
+  const account = pool[index % Math.max(pool.length, 1)]
+  const bind = account ? demoBindings.find((b) => b.accountId === account.id) : undefined
+  const window = bind ? demoWindows.find((w) => w.id === bind.windowId) : windows[0]
+  return {
+    windowName: window?.name ?? '未绑定窗口',
+    platform: account?.platform ?? g.platform,
+    region: window?.region ?? '—',
+    handle: account?.handle ?? '—',
+  }
 }
 
 /* ---------------- 主页面 ---------------- */
@@ -405,6 +370,12 @@ export default function ProjectDetail() {
   const [remakeKey, setRemakeKey] = useState(0)
   const [previewGen, setPreviewGen] = useState<Generation | null>(null)
   const [highlightGenId, setHighlightGenId] = useState('')
+  const [statusMap, setStatusMap] = useState<Record<string, Generation['status']>>({})
+  const [scheduleMap, setScheduleMap] = useState<Record<string, string>>({})
+  const [publishTab, setPublishTab] = useState<'all' | 'pending' | 'scheduled' | 'published'>('all')
+  const [scheduleTarget, setScheduleTarget] = useState<Generation | null>(null)
+  const [scheduleTime, setScheduleTime] = useState('明天 20:00')
+  const uploadRef = useRef<HTMLInputElement>(null)
 
   /* 从自由创作跳入：直接在本项目开始生成，无需再点「生成」 */
   useEffect(() => {
@@ -475,7 +446,57 @@ export default function ProjectDetail() {
   const [batchPlatforms, setBatchPlatforms] = useState<Platform[]>(project.platforms)
   const [batchThemes, setBatchThemes] = useState<string[]>(['商品种草'])
 
-  const related = [...extraGens, ...generations.filter((g) => g.projectId === project.id)]
+  const related = [...extraGens, ...generations.filter((g) => g.projectId === project.id)].map((g) =>
+    statusMap[g.id] ? { ...g, status: statusMap[g.id] } : g,
+  )
+
+  const queuePublish = (g: Generation) => {
+    setStatusMap((prev) => ({ ...prev, [g.id]: '待发布' }))
+    toast.success(`「${g.title}」已加入待发布列表`)
+  }
+
+  const viewInPublish = (g: Generation) => {
+    setSection('publish')
+    setPublishTab(g.status === '已发布' ? 'published' : scheduleMap[g.id] ? 'scheduled' : 'pending')
+    toast.info(`已定位到发布管理 · ${g.title}`)
+  }
+
+  const confirmPublish = (g: Generation) => {
+    toast.info(`正在发布「${g.title}」…`)
+    window.setTimeout(() => {
+      setStatusMap((prev) => ({ ...prev, [g.id]: '已发布' }))
+      setScheduleMap((prev) => {
+        const next = { ...prev }
+        delete next[g.id]
+        return next
+      })
+      toast.success(`「${g.title}」已发布`)
+    }, 800)
+  }
+
+  const confirmSchedule = () => {
+    if (!scheduleTarget) return
+    const time = scheduleTime.trim() || '明天 20:00'
+    setScheduleMap((prev) => ({ ...prev, [scheduleTarget.id]: time }))
+    setStatusMap((prev) => ({ ...prev, [scheduleTarget.id]: '待发布' }))
+    toast.success(`「${scheduleTarget.title}」已设为定时发布：${time}`)
+    setScheduleTarget(null)
+    setPublishTab('scheduled')
+  }
+
+  const publishRows = related
+    .filter((g) => g.status !== '草稿')
+    .map((g, i) => ({
+      g,
+      meta: publishAccountMeta(g, project.id, i),
+      schedule: scheduleMap[g.id],
+    }))
+  const publishFiltered = publishRows.filter(({ g, schedule }) => {
+    if (publishTab === 'all') return true
+    if (publishTab === 'published') return g.status === '已发布'
+    if (publishTab === 'scheduled') return !!schedule && g.status !== '已发布'
+    return g.status === '待发布' && !schedule
+  })
 
   /** 按时间依次排列，不再按「今天 / 昨天 / 近7天」分组 */
   const sortedGens = dayOrder.flatMap((d) => related.filter((g) => g.day === d))
@@ -587,8 +608,7 @@ export default function ProjectDetail() {
           </div>
 
           <nav className="space-y-0.5">
-            {navItem('gen', '全部生成', Clapperboard)}
-            {navItem('brief', '项目简报', FileText)}
+            {navItem('gen', '自由创作', Sparkles)}
             {navItem('product', '产品卡', ShoppingBag)}
             {navItem('inspire', '灵感库', Lightbulb)}
           </nav>
@@ -643,6 +663,8 @@ export default function ProjectDetail() {
                         setPreviewGen(item)
                         setHighlightGenId(item.id)
                       }}
+                      onQueue={queuePublish}
+                      onView={viewInPublish}
                     />
                   ))}
                 </div>
@@ -651,8 +673,6 @@ export default function ProjectDetail() {
                 )}
               </div>
             )}
-
-            {section === 'brief' && <BriefPanel projectId={project.id} />}
 
             {section === 'product' && (
               <div className="flex gap-4">
@@ -812,33 +832,122 @@ export default function ProjectDetail() {
 
             {/* 发布管理 */}
             {section === 'publish' && (
-              <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-                <table className="w-full text-left text-[12.5px]">
-                  <thead>
-                    <tr className="border-b border-slate-100 text-[11.5px] text-slate-400">
-                      <th className="px-4 py-2.5 font-normal">内容</th>
-                      <th className="w-28 px-2 py-2.5 font-normal">平台</th>
-                      <th className="w-28 px-2 py-2.5 font-normal">排期时间</th>
-                      <th className="w-20 px-2 py-2.5 font-normal">状态</th>
-                      <th className="w-36 px-4 py-2.5 text-right font-normal">操作</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {related.map((g, i) => (
-                      <tr key={g.id} className="border-b border-slate-50 last:border-0 hover:bg-sky-50/40">
-                        <td className="max-w-72 truncate px-4 py-2.5 font-medium text-slate-700">{g.title}</td>
-                        <td className="px-2 py-2.5"><PlatformBadge platform={g.platform} /></td>
-                        <td className="px-2 py-2.5 text-slate-500">{['今天 20:00', '明天 09:30', '明天 18:00', '10-23 12:00', '10-24 20:00'][i % 5]}</td>
-                        <td className="px-2 py-2.5"><Badge className={cn('border-0 text-[10.5px]', statusStyle[g.status])}>{g.status}</Badge></td>
-                        <td className="px-4 py-2.5 text-right">
-                          <Button size="sm" variant="outline" className="mr-1.5 h-7 border-slate-200 px-3 text-[11.5px] text-slate-500 hover:text-slate-900" onClick={() => toast.info('调整排期（演示）')}>改期</Button>
-                          <Button size="sm" className="h-7 brand-gradient px-3 text-[11.5px] text-white hover:opacity-90" onClick={() => toast.success('已加入发布队列（演示）')}>发布</Button>
-                        </td>
-                      </tr>
+              <div>
+                <input
+                  ref={uploadRef}
+                  type="file"
+                  accept="video/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    if (!file) return
+                    const created: Generation = {
+                      id: `U-${Date.now()}`,
+                      projectId: project.id,
+                      title: file.name.replace(/\.[^.]+$/, ''),
+                      type: '视频',
+                      duration: '00:15',
+                      platform: project.platforms[0] ?? 'TikTok',
+                      day: '今天',
+                      status: '待发布',
+                    }
+                    setExtraGens((prev) => [created, ...prev])
+                    toast.success(`「${created.title}」已上传并加入待发布列表`)
+                    setPublishTab('pending')
+                    e.target.value = ''
+                  }}
+                />
+                <div className="mb-4 flex items-center gap-3">
+                  <div className="flex w-fit items-center gap-1 rounded-lg bg-slate-100 p-1">
+                    {([
+                      ['all', '全部'],
+                      ['pending', '待发布'],
+                      ['scheduled', '定时任务'],
+                      ['published', '已发布'],
+                    ] as const).map(([id, label]) => (
+                      <button
+                        key={id}
+                        type="button"
+                        onClick={() => setPublishTab(id)}
+                        className={cn(
+                          'rounded-md px-3 py-1.5 text-[12.5px] transition-colors',
+                          publishTab === id ? 'bg-white font-medium text-sky-600 shadow-sm' : 'text-slate-500 hover:text-slate-700',
+                        )}
+                      >
+                        {label}
+                      </button>
                     ))}
-                  </tbody>
-                </table>
-                {related.length === 0 && <p className="py-16 text-center text-[13px] text-slate-400">暂无待发布内容</p>}
+                  </div>
+                  <Button
+                    size="sm"
+                    className="ml-auto gap-1.5 brand-gradient text-[12px] text-white hover:opacity-90"
+                    onClick={() => uploadRef.current?.click()}
+                  >
+                    <Upload className="h-3.5 w-3.5" /> 上传视频
+                  </Button>
+                </div>
+                <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                  <table className="w-full text-left text-[12.5px]">
+                    <thead>
+                      <tr className="border-b border-slate-100 text-[11.5px] text-slate-400">
+                        <th className="px-4 py-2.5 font-normal">视频名</th>
+                        <th className="w-40 px-2 py-2.5 font-normal">帐号窗口</th>
+                        <th className="w-28 px-2 py-2.5 font-normal">帐号平台</th>
+                        <th className="w-20 px-2 py-2.5 font-normal">帐号地区</th>
+                        <th className="w-24 px-2 py-2.5 font-normal">状态</th>
+                        <th className="w-48 px-4 py-2.5 text-right font-normal">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {publishFiltered.map(({ g, meta, schedule }) => {
+                        const displayStatus = g.status === '已发布' ? '已发布' : schedule ? '定时发布' : '待发布'
+                        return (
+                          <tr key={g.id} className="border-b border-slate-50 last:border-0 hover:bg-sky-50/40">
+                            <td className="max-w-72 truncate px-4 py-2.5 font-medium text-slate-700">{g.title}</td>
+                            <td className="px-2 py-2.5 text-slate-600">
+                              <div>{meta.windowName}</div>
+                              <div className="text-[11px] text-slate-400">{meta.handle}</div>
+                            </td>
+                            <td className="px-2 py-2.5"><PlatformBadge platform={meta.platform} /></td>
+                            <td className="px-2 py-2.5 text-slate-500">{meta.region}</td>
+                            <td className="px-2 py-2.5">
+                              <Badge className={cn('border-0 text-[10.5px]', displayStatus === '已发布' ? statusStyle.已发布 : statusStyle.待发布)}>
+                                {displayStatus}
+                              </Badge>
+                            </td>
+                            <td className="px-4 py-2.5 text-right">
+                              {g.status === '已发布' ? (
+                                <Button size="sm" variant="outline" className="h-7 border-slate-200 px-3 text-[11.5px] text-slate-500 hover:text-slate-900" onClick={() => setPreviewGen(g)}>查看</Button>
+                              ) : (
+                                <>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="mr-1.5 h-7 border-slate-200 px-3 text-[11.5px] text-slate-500 hover:text-slate-900"
+                                    onClick={() => {
+                                      setScheduleTime(schedule ?? '明天 20:00')
+                                      setScheduleTarget(g)
+                                    }}
+                                  >
+                                    定时发布
+                                  </Button>
+                                  <Button size="sm" className="h-7 brand-gradient px-3 text-[11.5px] text-white hover:opacity-90" onClick={() => confirmPublish(g)}>
+                                    发布
+                                  </Button>
+                                </>
+                              )}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                  {publishFiltered.length === 0 && (
+                    <p className="py-16 text-center text-[13px] text-slate-400">
+                      {publishTab === 'pending' ? '暂无待发布内容' : publishTab === 'scheduled' ? '暂无定时任务' : publishTab === 'published' ? '暂无已发布内容' : '暂无发布内容'}
+                    </p>
+                  )}
+                </div>
               </div>
             )}
 
@@ -957,7 +1066,10 @@ export default function ProjectDetail() {
           <div className="shrink-0 bg-[#f5f8fb] px-6 pb-4 pt-2">
             <CreationConsole
               key={`${project.id}-${remakeKey}`}
-              showPlacementTools={false}
+              showPlacementTools
+              showProjectPicker={false}
+              lockProjectId={project.id}
+              libraryLabel="素材库"
               className="border border-slate-200 bg-white shadow-sm"
               placeholder={`为「${project.name}」描述场景，使用 @ 添加产品卡信息`}
               initialBrief={remakeBrief || seedBrief}
@@ -1008,21 +1120,54 @@ export default function ProjectDetail() {
                     >
                       关闭
                     </Button>
-                    <Button
-                      className="brand-gradient text-white hover:opacity-90"
-                      onClick={() => {
-                        toast.success('已加入发布任务（演示）')
-                        setPreviewGen(null)
-                      }}
-                    >
-                      去发布
-                    </Button>
+                    {previewGen.status === '草稿' ? (
+                      <Button
+                        className="brand-gradient text-white hover:opacity-90"
+                        onClick={() => {
+                          queuePublish(previewGen)
+                          setPreviewGen(null)
+                        }}
+                      >
+                        加入待发布列表
+                      </Button>
+                    ) : (
+                      <Button
+                        className="brand-gradient text-white hover:opacity-90"
+                        onClick={() => {
+                          viewInPublish(previewGen)
+                          setPreviewGen(null)
+                        }}
+                      >
+                        去查看
+                      </Button>
+                    )}
                   </div>
                 </div>
               </>
             )}
           </DialogContent>
         </Dialog>
+
+        <Modal open={!!scheduleTarget} onClose={() => setScheduleTarget(null)} className="max-w-sm">
+          <h2 className="text-lg font-semibold text-slate-900">定时发布</h2>
+          <p className="mt-1 text-[13px] text-slate-500">
+            为「{scheduleTarget?.title}」选择发布时间，到期后将自动发布到对应帐号窗口。
+          </p>
+          <label className="mt-4 block text-[12px] font-medium text-slate-600" htmlFor="schedule-time">
+            发布时间
+          </label>
+          <Input
+            id="schedule-time"
+            value={scheduleTime}
+            onChange={(e) => setScheduleTime(e.target.value)}
+            placeholder="例如 明天 20:00"
+            className="mt-1.5 border-slate-200"
+          />
+          <div className="mt-5 flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setScheduleTarget(null)}>取消</Button>
+            <Button className="brand-gradient text-white" onClick={confirmSchedule}>确认定时</Button>
+          </div>
+        </Modal>
 
         {/* 批量生成弹窗 */}
         <Dialog open={batchOpen} onOpenChange={(o) => { if (!batchRunning) setBatchOpen(o) }}>

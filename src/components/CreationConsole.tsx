@@ -257,6 +257,7 @@ export default function CreationConsole({
   onStart, onDone, placeholder, className,
   initialBrief = '', initialBatch, initialMode, autoStart = false,
   initialReference, onBeforeGenerate, bare = false, showPlacementTools,
+  showProjectPicker, lockProjectId, libraryLabel = '参考图',
 }: {
   onStart: () => void
   onDone: (items: ConsoleDraft[]) => void
@@ -272,10 +273,17 @@ export default function CreationConsole({
   onBeforeGenerate?: (intent: GenerateIntent) => boolean | void
   /** 无外层卡片边框，适合底部固定栏 */
   bare?: boolean
-  /** 输入框上方的产品卡 / 项目选择，自由创作默认开启 */
+  /** 输入框上方的素材 / 产品卡，自由创作默认开启 */
   showPlacementTools?: boolean
+  /** 是否显示「新建项目」下拉，项目内创作关闭 */
+  showProjectPicker?: boolean
+  /** 锁定到某个项目时，产品卡只列出该项目下的卡片 */
+  lockProjectId?: string
+  /** 素材入口文案：自由创作为「参考图」，项目内为「素材库」 */
+  libraryLabel?: string
 }) {
   const placementTools = showPlacementTools ?? !bare
+  const projectPicker = showProjectPicker ?? (placementTools && !lockProjectId)
   const [mode, setMode] = useState<'视频' | '图文'>(initialMode ?? '视频')
   const [brief, setBrief] = useState(initialBrief)
   const [reference, setReference] = useState<RemakeReference | null>(initialReference ?? null)
@@ -291,7 +299,7 @@ export default function CreationConsole({
   const [generating, setGenerating] = useState(false)
   const [draftIdx, setDraftIdx] = useState(0)
   const [projectList, setProjectList] = useState<Project[]>(() => loadProjects())
-  const [targetProjectId, setTargetProjectId] = useState('')
+  const [targetProjectId, setTargetProjectId] = useState(lockProjectId ?? '')
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
   const [productOpen, setProductOpen] = useState(false)
   const autoStarted = useRef(false)
@@ -300,10 +308,11 @@ export default function CreationConsole({
   const selectedModel = MODELS.find((m) => m.id === modelId) ?? MODELS[0]
   const targetProject = projectList.find((p) => p.id === targetProjectId)
   const productChoices = useMemo(() => {
-    if (!targetProjectId) return products
-    const scoped = products.filter((p) => p.projectId === targetProjectId)
-    return scoped.length ? scoped : products
-  }, [targetProjectId])
+    const scopeId = lockProjectId || targetProjectId
+    if (!scopeId) return products
+    const scoped = products.filter((p) => p.projectId === scopeId)
+    return lockProjectId ? scoped : (scoped.length ? scoped : products)
+  }, [lockProjectId, targetProjectId])
 
   useEffect(() => {
     const refresh = () => setProjectList(loadProjects())
@@ -414,6 +423,34 @@ export default function CreationConsole({
 
         {placementTools && (
           <div className="flex flex-wrap items-center gap-1.5">
+            <Popover open={attachOpen} onOpenChange={setAttachOpen}>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  className={cn(
+                    'flex h-[30px] items-center gap-1.5 rounded-full border bg-white px-2.5 text-[12px] transition-colors',
+                    attached.length || attachOpen
+                      ? 'border-sky-300 text-sky-600'
+                      : 'border-slate-200 text-slate-600 hover:border-sky-300 hover:text-sky-600',
+                  )}
+                >
+                  <Plus className="h-3.5 w-3.5 shrink-0" />
+                  <span>{libraryLabel}{attached.length ? ` ${attached.length}/3` : ''}</span>
+                </button>
+              </PopoverTrigger>
+              <PopoverContent
+                side="bottom"
+                align="start"
+                sideOffset={8}
+                className="w-auto border-0 bg-transparent p-0 shadow-none"
+              >
+                <AttachPanel
+                  onLocalPick={() => fileInputRef.current?.click()}
+                  onSelectAsset={onSelectAsset}
+                />
+              </PopoverContent>
+            </Popover>
+
             <Popover open={productOpen} onOpenChange={setProductOpen}>
               <PopoverTrigger asChild>
                 <button
@@ -459,41 +496,43 @@ export default function CreationConsole({
               </PopoverContent>
             </Popover>
 
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  className={cn(
-                    'flex h-[30px] max-w-[220px] items-center gap-1.5 rounded-full border bg-white px-2.5 text-[12px] transition-colors',
-                    targetProject
-                      ? 'border-sky-300 text-sky-600'
-                      : 'border-slate-200 text-slate-600 hover:border-sky-300 hover:text-sky-600',
-                  )}
-                >
-                  <FolderPlus className="h-3.5 w-3.5 shrink-0" />
-                  <span className="truncate">{targetProject?.name ?? '新建项目'}</span>
-                  <ChevronDown className="h-3 w-3 shrink-0 text-slate-400" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-56">
-                <DropdownMenuItem onClick={() => setTargetProjectId('')}>
-                  新建项目
-                </DropdownMenuItem>
-                {projectList.map((p) => (
-                  <DropdownMenuItem
-                    key={p.id}
-                    onClick={() => {
-                      setTargetProjectId(p.id)
-                      if (selectedProduct && selectedProduct.projectId !== p.id) {
-                        applyProduct(null, false)
-                      }
-                    }}
+            {projectPicker && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className={cn(
+                      'flex h-[30px] max-w-[220px] items-center gap-1.5 rounded-full border bg-white px-2.5 text-[12px] transition-colors',
+                      targetProject
+                        ? 'border-sky-300 text-sky-600'
+                        : 'border-slate-200 text-slate-600 hover:border-sky-300 hover:text-sky-600',
+                    )}
                   >
-                    {p.name}
+                    <FolderPlus className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate">{targetProject?.name ?? '新建项目'}</span>
+                    <ChevronDown className="h-3 w-3 shrink-0 text-slate-400" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-56">
+                  <DropdownMenuItem onClick={() => setTargetProjectId('')}>
+                    新建项目
                   </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
+                  {projectList.map((p) => (
+                    <DropdownMenuItem
+                      key={p.id}
+                      onClick={() => {
+                        setTargetProjectId(p.id)
+                        if (selectedProduct && selectedProduct.projectId !== p.id) {
+                          applyProduct(null, false)
+                        }
+                      }}
+                    >
+                      {p.name}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </div>
         )}
 
@@ -550,32 +589,33 @@ export default function CreationConsole({
 
         <div className="flex items-center gap-3">
           <div className="flex flex-wrap items-center gap-1.5">
-            {/* + 添加：本地上传 + 素材库内容 */}
-            <Popover open={attachOpen} onOpenChange={setAttachOpen}>
-              <PopoverTrigger asChild>
-                <button
-                  type="button"
-                  title="添加素材"
-                  className={cn(
-                    'flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition-colors hover:border-sky-300 hover:text-sky-600',
-                    attachOpen && 'border-sky-300 text-sky-600',
-                  )}
+            {!placementTools && (
+              <Popover open={attachOpen} onOpenChange={setAttachOpen}>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    title="添加素材"
+                    className={cn(
+                      'flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition-colors hover:border-sky-300 hover:text-sky-600',
+                      attachOpen && 'border-sky-300 text-sky-600',
+                    )}
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent
+                  side="top"
+                  align="start"
+                  sideOffset={8}
+                  className="w-auto border-0 bg-transparent p-0 shadow-none"
                 >
-                  <Plus className="h-4 w-4" />
-                </button>
-              </PopoverTrigger>
-              <PopoverContent
-                side="top"
-                align="start"
-                sideOffset={8}
-                className="w-auto border-0 bg-transparent p-0 shadow-none"
-              >
-                <AttachPanel
-                  onLocalPick={() => fileInputRef.current?.click()}
-                  onSelectAsset={onSelectAsset}
-                />
-              </PopoverContent>
-            </Popover>
+                  <AttachPanel
+                    onLocalPick={() => fileInputRef.current?.click()}
+                    onSelectAsset={onSelectAsset}
+                  />
+                </PopoverContent>
+              </Popover>
+            )}
 
             {/* 模型选择 */}
             <Popover open={modelOpen} onOpenChange={setModelOpen}>
