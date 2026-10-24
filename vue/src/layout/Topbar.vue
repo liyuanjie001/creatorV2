@@ -29,7 +29,7 @@ const { inspireOpen } = useInspirationDialog();
 
 <template>
   <header
-    class="sticky top-0 z-30 flex h-16 items-center gap-4 border-b border-slate-200 bg-white/85 px-6 backdrop-blur"
+    class="sticky top-0 z-30 flex h-16 items-center gap-4 border-b border-slate-100 bg-white px-6"
   >
     <div class="relative w-72">
       <Search

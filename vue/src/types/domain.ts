@@ -19,6 +19,8 @@ export interface Inspiration {
   platform: Platform;
   views: string;
   likes: string;
+  comments?: string;
+  shares?: string;
   duration: string;
   tags: string[];
   author: string;
@@ -56,7 +58,7 @@ export interface TrashItem {
 export interface Asset {
   id: string;
   name: string;
-  type: '视频' | '图片' | '文案' | '音频';
+  type: '视频' | '图片' | '文案' | '音频' | '文件夹';
   size: string;
   duration?: string;
   updatedAt: string;
@@ -64,6 +66,10 @@ export interface Asset {
   day: '今天' | '昨天' | '近7天';
   favorite?: boolean;
   enhanced?: boolean;
+  /** 所属文件夹 id；根目录素材为空 */
+  folderId?: string;
+  /** 文件夹内素材数量（演示） */
+  itemCount?: number;
 }
 
 export interface AssetElement {

@@ -16,6 +16,7 @@ import {
   Mic,
   Plus,
   Layers,
+  ChevronRight,
 } from 'lucide-vue-next';
 import { Button } from '@/components/ui';
 import { assetElements, deletedAssets, type AssetElement } from '@/data/mock';
@@ -24,6 +25,8 @@ import { cn } from '@/lib/utils';
 import AssetCard from '@/components/assets/AssetCard.vue';
 import ElementCard from '@/components/assets/ElementCard.vue';
 import AssetTable from '@/components/assets/AssetTable.vue';
+import { useAssetLibraryContext } from '@/composables/useAssetLibrary';
+
 const elementKinds: {
   key: '全部' | AssetElement['kind'];
   label: string;
@@ -53,9 +56,20 @@ const elementKinds: {
     label: '配音',
   },
 ];
-import { useAssetLibraryContext } from '@/composables/useAssetLibrary';
-const { nav, elemKind, view, selected, list, sections, toggleSelect, toggleSection, showSections } =
-  useAssetLibraryContext();
+const {
+  nav,
+  elemKind,
+  view,
+  selected,
+  list,
+  sections,
+  toggleSelect,
+  toggleSection,
+  showSections,
+  pathLabel,
+  currentFolder,
+  clearFolder,
+} = useAssetLibraryContext();
 const filteredElements = computed(() =>
   elemKind.value === '全部' ? assetElements : assetElements.filter((e) => e.kind === elemKind.value),
 );
@@ -66,9 +80,30 @@ const groupedSections = computed(() =>
     allSelected: s.items.length > 0 && s.items.every((i) => selected.value.has(i.id)),
   })),
 );
+const showPath = computed(() => nav.value !== 'trash' && nav.value !== 'element');
+const pathRoot = computed(() => pathLabel.value.split(' / ')[0] ?? '全部素材');
 </script>
 
 <template>
+  <div>
+  <nav
+    v-if="showPath"
+    class="mt-3 mb-1 flex min-h-[28px] items-center gap-1 text-[13px] text-slate-500"
+    aria-label="当前路径"
+  >
+    <button
+      type="button"
+      class="rounded-md px-1.5 py-0.5 transition-colors hover:bg-slate-100 hover:text-slate-800"
+      :class="!currentFolder ? 'font-medium text-slate-800' : ''"
+      @click="clearFolder"
+    >
+      {{ pathRoot }}
+    </button>
+    <template v-if="currentFolder">
+      <ChevronRight class="h-3.5 w-3.5 shrink-0 text-slate-300" />
+      <span class="truncate px-1.5 py-0.5 font-medium text-slate-800">{{ currentFolder.name }}</span>
+    </template>
+  </nav>
   <template v-if="nav === 'trash'">
     <div class="mt-6 space-y-2">
       <p class="mb-3 text-[12.5px] text-slate-400">回收站中的素材将在 30 天后自动彻底清除</p>
@@ -111,7 +146,7 @@ const groupedSections = computed(() =>
       </template>
     </div>
   </template>
-  <template v-if="nav === 'element'">
+  <template v-else-if="nav === 'element'">
     <div class="mt-4 flex items-center gap-1.5">
       <template :key="key" v-for="{ key, label } in elementKinds">
         <button
@@ -209,24 +244,7 @@ const groupedSections = computed(() =>
       </div>
     </template>
   </template>
-  <template v-if="nav === 'favorite'">
-    <div class="mt-5">
-      <template v-if="view === 'grid'">
-        <div class="grid grid-cols-6 gap-2">
-          <template :key="a.id" v-for="a in list">
-            <AssetCard :a="a" :selected="selected.has(a.id)" @select="toggleSelect(a.id)"></AssetCard>
-          </template>
-        </div>
-      </template>
-      <template v-else>
-        <AssetTable :list="list" :selected="selected" @select="toggleSelect"></AssetTable>
-      </template>
-      <template v-if="list.length === 0">
-        <p class="py-16 text-center text-[13px] text-slate-400">没有收藏的素材</p>
-      </template>
-    </div>
-  </template>
-  <template v-if="showSections">
+  <template v-else-if="showSections">
     <div class="mt-5 space-y-7">
       <template :key="s.key" v-for="s in groupedSections">
         <section>
@@ -258,7 +276,7 @@ const groupedSections = computed(() =>
             <span class="text-[11.5px] font-normal text-slate-400">{{ s.items.length }} 项</span>
           </button>
           <template v-if="view === 'grid'">
-            <div class="grid grid-cols-6 gap-2">
+            <div class="grid grid-cols-4 gap-4">
               <template :key="a.id" v-for="a in s.items">
                 <AssetCard :a="a" :selected="selected.has(a.id)" @select="toggleSelect(a.id)"></AssetCard>
               </template>
@@ -274,4 +292,22 @@ const groupedSections = computed(() =>
       </template>
     </div>
   </template>
+  <template v-else>
+    <div class="mt-2">
+      <template v-if="view === 'grid'">
+        <div class="grid grid-cols-4 gap-5">
+          <AssetCard
+            v-for="a in list"
+            :key="a.id"
+            :a="a"
+            :selected="selected.has(a.id)"
+            @select="toggleSelect(a.id)"
+          />
+        </div>
+      </template>
+      <AssetTable v-else :list="list" :selected="selected" @select="toggleSelect" />
+      <p v-if="list.length === 0" class="py-16 text-center text-[13px] text-slate-400">没有符合条件的素材</p>
+    </div>
+  </template>
+  </div>
 </template>

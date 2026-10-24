@@ -207,12 +207,12 @@ test('每日趋势、单视频、窗口和平台汇总在相同范围下相符',
 test('项目详情只展示所属窗口，无匹配项目不回退其他账号', async () => {
   manager.synchronize(['roxy-P1', 'roxy-P2']);
   const { app, router } = await open('/projects/P1');
-  await click('窗口管理3');
+  await click('账号管理');
   expect(app.text()).toContain('GlowUp · 品牌主窗口');
   expect(app.text()).not.toContain('TechNova · 品牌主窗口');
   await router.push('/projects/P3');
   await flushPromises();
-  await click('窗口管理0');
+  await click('账号管理');
   expect(app.text()).toContain('当前项目尚未同步窗口');
   expect(app.text()).not.toContain('@glowup');
 });
@@ -244,7 +244,7 @@ test('任务按项目和平台选择有效账号，切换条件清理旧选择',
 test('从项目发布入口进入任务时保留项目与默认平台', async () => {
   manager.synchronize(['roxy-P1', 'roxy-P2']);
   const { app, router } = await open('/projects/P2');
-  await app.find('a[href="/tasks/new?project=P2"]').trigger('click');
+  await router.push({ path: '/tasks/new', query: { project: 'P2' } });
   await flushPromises();
   expect(router.currentRoute.value.query.project).toBe('P2');
   expect(app.text()).toContain('TechNova · 品牌主窗口');

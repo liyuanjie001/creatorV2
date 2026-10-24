@@ -9,10 +9,11 @@ import {
   inspirations,
   type Generation,
   type Platform,
+  type Product,
 } from '@/data/mock';
 import { toast } from 'vue-sonner';
 import { useRouter, useRoute } from 'vue-router';
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { provide, inject, type InjectionKey } from 'vue';
 type SectionKey =
   | 'gen'
@@ -36,7 +37,11 @@ function createProjectWorkspace() {
   const router = useRouter();
   const project = computed(() => projects.find((p) => p.id === id.value) ?? projects[0]);
   const section = ref<SectionKey>('gen');
-  const projectProducts = computed(() => products.filter((p) => p.projectId === project.value.id));
+  const extraProducts = ref<Product[]>([]);
+  const projectProducts = computed(() => [
+    ...extraProducts.value.filter((p) => p.projectId === project.value.id),
+    ...products.filter((p) => p.projectId === project.value.id),
+  ]);
   const selProductId = ref(projectProducts.value[0]?.id ?? '');
   const view = ref<'grid' | 'list'>('grid');
   const generating = ref(false);
@@ -163,7 +168,19 @@ function createProjectWorkspace() {
       }
     }, 160);
   };
+  watch(id, () => {
+    extraGens.value = [];
+    generating.value = false;
+    selProductId.value = projectProducts.value[0]?.id ?? '';
+    batchOpen.value = false;
+    batchDone.value = null;
+    batchProgress.value = 0;
+  });
   const selectedProduct = computed(() => projectProducts.value.find((p) => p.id === selProductId.value));
+  const addProduct = (item: Product) => {
+    extraProducts.value = [item, ...extraProducts.value];
+    selProductId.value = item.id;
+  };
   return {
     route,
     id,
@@ -192,6 +209,8 @@ function createProjectWorkspace() {
     batchStages,
     runBatch,
     selectedProduct,
+    extraProducts,
+    addProduct,
   };
 }
 type ProjectWorkspace = ReturnType<typeof createProjectWorkspace>;
@@ -205,4 +224,7 @@ export function useProjectWorkspaceContext() {
   const workspace = inject(workspaceKey);
   if (!workspace) throw new Error('Project panels require a project workspace');
   return workspace;
+}
+export function useOptionalProjectWorkspace() {
+  return inject(workspaceKey, null);
 }

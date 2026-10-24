@@ -13,6 +13,7 @@ import {
 } from 'lucide-vue-next';
 import { Button, Card, Dialog, DialogContent, DialogTitle, DialogDescription, Input } from '@/components/ui';
 import { PageHeader, PlatformBadge } from '@/components/shared';
+import ComingSoonMask from '@/components/ComingSoonMask.vue';
 import { useWindowManager } from '@/composables/useWindowManager';
 import { roxyProjects } from '@/data/windowDemo';
 import { platforms } from '@/data/mock';
@@ -32,6 +33,7 @@ const projectFilter = ref('all');
 const platformFilter = ref('all');
 const statusFilter = ref('all');
 const detailWindowId = ref('');
+const showComingSoon = ref(false);
 const page = ref(1);
 const pageSize = 8;
 const platformCount = computed(() => new Set(accounts.value.map((a) => a.platform)).size);
@@ -130,8 +132,13 @@ watch(
 </script>
 
 <template>
-  <div class="space-y-6">
+  <!-- 撑满主内容白底区域，遮罩只盖当前子页面 -->
+  <div class="relative -mx-8 -my-6 min-h-[calc(100vh-24px)]">
+  <div class="space-y-6 px-8 py-6" :class="showComingSoon && 'pointer-events-none select-none'">
     <PageHeader title="窗口管理" desc="连接与同步浏览器窗口，管理账号身份、登录状态和采集入口">
+      <template #title-extra>
+        <ComingSoonMask @open="showComingSoon = true" />
+      </template>
       <template #extra>
         <div class="flex gap-2">
           <Button
@@ -433,6 +440,15 @@ watch(
         </div>
       </DialogContent>
     </Dialog>
+  </div>
+  <ComingSoonMask
+    v-if="showComingSoon"
+    mode="page"
+    title="帐号管理 · 敬请期待"
+    desc="多窗口与平台账号统一管理，矩阵投放更轻松。批量开号、同步登录态，让出海获客像流水线一样运转。"
+    :highlights="['多平台管号', '窗口同步', '身份隔离']"
+    @back="showComingSoon = false"
+  />
   </div>
 </template>
 

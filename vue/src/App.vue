@@ -2,23 +2,38 @@
 import { RouterView, useRoute } from 'vue-router';
 import { Toaster } from 'vue-sonner';
 import Sidebar from '@/layout/Sidebar.vue';
-import Topbar from '@/layout/Topbar.vue';
+import InspirationDialog from '@/layout/InspirationDialog.vue';
+import VideoPlayerDialog from '@/components/VideoPlayerDialog.vue';
 const route = useRoute();
 </script>
 
 <template>
-  <div class="min-h-screen bg-[#f5f8fb] text-slate-900">
+  <div class="min-h-screen bg-[#eef0f3] text-slate-900">
     <RouterView v-if="route.name === 'unlock'" />
-    <RouterView v-else-if="route.meta.immersive" :key="route.path" />
     <template v-else-if="route.matched.length">
       <Sidebar />
-      <div class="pl-60">
-        <Topbar />
-        <main class="mx-auto max-w-[1400px] px-6 py-6">
-          <RouterView :key="route.path" />
-        </main>
+      <div class="min-h-screen py-3 pl-[104px] pr-3">
+        <div
+          :class="
+            route.meta.immersive
+              ? 'flex h-[calc(100vh-24px)] flex-col overflow-hidden rounded-[20px] bg-white shadow-[0_8px_30px_rgba(15,23,42,0.04)]'
+              : 'min-h-[calc(100vh-24px)] overflow-hidden rounded-[20px] bg-white shadow-[0_8px_30px_rgba(15,23,42,0.04)]'
+          "
+        >
+          <main
+            v-if="!route.meta.immersive"
+            :class="route.meta.wide ? 'flex-1 px-8 py-6' : 'mx-auto w-full max-w-[1400px] flex-1 px-6 py-6'"
+          >
+            <RouterView :key="route.path" />
+          </main>
+          <div v-else class="min-h-0 flex-1">
+            <RouterView :key="route.path" />
+          </div>
+        </div>
       </div>
     </template>
+    <InspirationDialog />
+    <VideoPlayerDialog />
     <Toaster
       theme="light"
       position="top-center"

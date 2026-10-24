@@ -1,13 +1,39 @@
 <script setup lang="ts">
-import { Download, Check } from 'lucide-vue-next';
+import { Download, Check, Eye, Folder } from 'lucide-vue-next';
 import { type Asset } from '@/data/mock';
 import { toast } from 'vue-sonner';
 import { cn } from '@/lib/utils';
+import { useVideoPlayer } from '@/composables/useVideoPlayer';
+import { useAssetLibraryContext } from '@/composables/useAssetLibrary';
+
 const { list, selected } = defineProps<{
   list: Asset[];
   selected: Set<string>;
 }>();
 const emit = defineEmits<{ select: [id: string] }>();
+const { openAsset } = useVideoPlayer();
+const { openFolder } = useAssetLibraryContext();
+
+function openPreview(a: Asset) {
+  if (a.type === '文件夹') {
+    openFolder(a.id);
+    return;
+  }
+  if (a.type !== '视频' && a.type !== '图片') {
+    toast.info('该类型暂不支持预览（演示）');
+    return;
+  }
+  openAsset(a, {
+    primaryAction: {
+      label: '用于创作',
+      run: () => toast.success(`已准备引用「${a.name}」（演示）`),
+    },
+    secondaryAction: {
+      label: '下载',
+      run: () => toast.success('已开始下载（演示）'),
+    },
+  });
+}
 </script>
 
 <template>
@@ -43,19 +69,38 @@ const emit = defineEmits<{ select: [id: string] }>();
               </button>
             </td>
             <td class="max-w-72 truncate px-2 py-2.5 font-medium text-slate-700">
-              {{ a.name }}
+              <button
+                type="button"
+                class="inline-flex max-w-full items-center gap-1.5 truncate text-left hover:text-sky-600"
+                :title="a.name"
+                @click="openPreview(a)"
+              >
+                <Folder v-if="a.type === '文件夹'" class="h-3.5 w-3.5 shrink-0 text-amber-500" />
+                <span class="truncate">{{ a.name }}</span>
+              </button>
             </td>
             <td class="px-2 py-2.5 text-slate-500">{{ a.type }}</td>
             <td class="truncate px-2 py-2.5 text-slate-500">{{ a.project }}</td>
-            <td class="px-2 py-2.5 text-slate-500">{{ a.size }}</td>
+            <td class="px-2 py-2.5 text-slate-500">
+              {{ a.type === '文件夹' ? `${a.itemCount ?? 0} 项` : a.size }}
+            </td>
             <td class="px-2 py-2.5 text-slate-400">{{ a.updatedAt }}</td>
             <td class="px-4 py-2.5 text-right">
               <button
-                @click="toast.success('已开始下载（演示）')"
+                type="button"
+                class="rounded-md p-1.5 text-slate-400 hover:bg-slate-50 hover:text-sky-600"
+                title="预览"
+                @click="openPreview(a)"
+              >
+                <Eye class="h-4 w-4" />
+              </button>
+              <button
+                type="button"
                 class="rounded-md p-1.5 text-slate-400 hover:bg-slate-50 hover:text-sky-600"
                 title="下载"
+                @click="toast.success('已开始下载（演示）')"
               >
-                <Download class="h-4 w-4"></Download>
+                <Download class="h-4 w-4" />
               </button>
             </td>
           </tr>
