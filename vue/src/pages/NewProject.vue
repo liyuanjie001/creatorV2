@@ -26,6 +26,7 @@ import Field from '@/components/BrandField.vue';
 import { eventValue } from '@/lib/events';
 import { useRouter } from 'vue-router';
 import { ref } from 'vue';
+import { useHomeProjects } from '@/composables/useHomeProjects';
 interface BrandKit {
   name: string;
   website: string;
@@ -175,15 +176,22 @@ const completePlan = () => {
 };
 const togglePlatform = (p: Platform) =>
   (picked.value = picked.value.includes(p) ? picked.value.filter((x) => x !== p) : [...picked.value, p]);
+const { addHomeProject } = useHomeProjects();
 const create = () => {
   if (!kit.value.name.trim()) {
     toast.error('请填写品牌名称');
     return;
   }
-  toast.success('项目创建成功（演示）', {
-    description: `${kit.value.name} · 已加入分发队列`,
+  const item = addHomeProject({
+    name: kit.value.name.trim(),
+    desc: kit.value.description,
+    platforms: picked.value.length > 0 ? picked.value : ['TikTok', 'Instagram'],
+    color: kit.value.colors[0] ?? '#11a3fd',
   });
-  router.push('/');
+  toast.success('项目创建成功', {
+    description: `${item.name} · 已进入工作区`,
+  });
+  void router.replace(`/projects/${item.id}`);
 };
 </script>
 

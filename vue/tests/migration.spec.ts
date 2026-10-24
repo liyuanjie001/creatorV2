@@ -25,7 +25,7 @@ test.afterEach(async ({ page }) => {
 });
 
 const routes = [
-  ['/', '工作台'],
+  ['/', '还没有项目'],
   ['/inspiration', '创意中心'],
   ['/notes', '妙记'],
   ['/create', '让你的品牌故事鲜活起来'],
@@ -39,7 +39,7 @@ const routes = [
   ['/assets', '素材'],
   ['/settings', '设置中心'],
   ['/trash', '回收站'],
-  ['/me', '我的'],
+  ['/me', '个人中心'],
 ] as const;
 
 for (const [route, text] of routes)
@@ -55,11 +55,10 @@ for (const [route, text] of routes)
 
 test('创意中心和设置查询参数、历史导航与重定向', async ({ page }) => {
   await page.goto('/#/trends');
-  await expect(page).toHaveURL(/inspiration\?tab=trends/);
+  await expect(page).toHaveURL(/\/trends/);
   await expect(page.getByText('全球 · 实时热搜榜')).toBeVisible();
-  await page.getByRole('button', { name: '妙记', exact: true }).click();
-  await expect(page).toHaveURL(/tab=notes/);
-  await page.reload();
+  await page.goto('/#/notes');
+  await expect(page).toHaveURL(/\/notes/);
   await expect(page.getByText('便携咖啡机 · 露营场景宣发')).toBeVisible();
   await page.goto('/#/settings?tab=security');
   await expect(page.getByRole('heading', { name: '账号安全' })).toBeVisible();
@@ -67,21 +66,15 @@ test('创意中心和设置查询参数、历史导航与重定向', async ({ pa
 
 test('项目详情全部栏目可以切换', async ({ page }) => {
   await page.goto('/#/projects/P1');
-  const navigation = page.locator('aside').first();
+  const navigation = page.locator('aside[aria-label="项目栏目"]');
   for (const name of [
-    '项目简报',
-    '商品',
+    '自由创作',
+    '产品卡',
     '灵感库',
-    '元素',
-    'Canvas',
-    'AI 聊天',
-    'AI 导演',
-    '窗口管理',
+    '账号管理',
     '发布管理',
     '数据归因',
     '任务调度',
-    '回收站',
-    '全部生成',
   ]) {
     await navigation.getByRole('button', { name: new RegExp(name) }).click();
     await expect(page.locator('#app')).toContainText(name);

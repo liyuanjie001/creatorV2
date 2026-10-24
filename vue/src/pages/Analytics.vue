@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { Button, Card } from '@/components/ui';
 import { PageHeader } from '@/components/shared';
+import ComingSoonMask from '@/components/ComingSoonMask.vue';
 import { useAnalyticsWorkspace } from '@/composables/useAnalyticsWorkspace';
 import { platforms } from '@/data/mock';
 import { DEMO_TODAY, roxyProjects } from '@/data/windowDemo';
@@ -12,6 +14,7 @@ import ContentPanel from '@/components/analytics/ContentPanel.vue';
 import ComparisonPanel from '@/components/analytics/ComparisonPanel.vue';
 import AnalyticsDetails from '@/components/analytics/AnalyticsDetails.vue';
 const router = useRouter();
+const showComingSoon = ref(false);
 const {
   manager,
   tab,
@@ -36,8 +39,12 @@ function changeProject(event: Event) {
 }
 </script>
 <template>
-  <div class="space-y-5">
+  <div class="relative -mx-8 -my-6 min-h-[calc(100vh-24px)]">
+  <div class="space-y-5 px-8 py-6" :class="showComingSoon && 'pointer-events-none select-none'">
     <PageHeader title="数据分析" desc="统一查看账号与内容表现，按窗口、账号、视频和平台分析对比">
+      <template #title-extra>
+        <ComingSoonMask @open="showComingSoon = true" />
+      </template>
       <template #extra>
         <Button
           size="sm"
@@ -141,6 +148,15 @@ function changeProject(event: Event) {
       <Button class="brand-gradient mt-2 text-white" @click="router.push('/accounts')">去同步窗口</Button>
     </Card>
     <AnalyticsDetails />
+  </div>
+  <ComingSoonMask
+    v-if="showComingSoon"
+    mode="page"
+    title="数据分析 · 敬请期待"
+    desc="跨窗口、账号与平台看清表现，投放决策更有据。锁定高价值内容与账号，把预算押在真正拉新的素材上。"
+    :highlights="['多维对比', '爆款洞察', '统一口径']"
+    @back="showComingSoon = false"
+  />
   </div>
 </template>
 <style scoped>

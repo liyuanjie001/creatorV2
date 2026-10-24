@@ -1,98 +1,127 @@
 <script setup lang="ts">
-import { Heart, Download, Copy, Maximize2, MoreHorizontal, Check } from 'lucide-vue-next';
+import { Eye, Download, Pencil, Check } from 'lucide-vue-next';
 import { type Asset } from '@/data/mock';
 import { toast } from 'vue-sonner';
 import { cn } from '@/lib/utils';
 import AssetThumb from '@/components/assets/AssetThumb.vue';
-import { computed, ref } from 'vue';
+import { useVideoPlayer } from '@/composables/useVideoPlayer';
+import { useAssetLibraryContext } from '@/composables/useAssetLibrary';
+
 const { a, selected } = defineProps<{
   a: Asset;
   selected: boolean;
 }>();
 const emit = defineEmits<{ select: [] }>();
-const fav = ref(!!a.favorite);
-const actions = computed(() => [
-  {
-    icon: Heart,
-    label: '收藏',
-    onClick: () => {
-      fav.value = !fav.value;
-      toast.success(fav.value ? '已收藏' : '已取消收藏');
+const { openAsset } = useVideoPlayer();
+const { openFolder } = useAssetLibraryContext();
+
+function openPreview() {
+  if (a.type === '文件夹') {
+    openFolder(a.id);
+    return;
+  }
+  if (a.type !== '视频' && a.type !== '图片') {
+    toast.info('该类型暂不支持预览（演示）');
+    return;
+  }
+  openAsset(a, {
+    primaryAction: {
+      label: '用于创作',
+      run: () => toast.success(`已准备引用「${a.name}」（演示）`),
     },
-  },
-  {
-    icon: Download,
-    label: '下载',
-    onClick: () => toast.success('已开始下载（演示）'),
-  },
-  {
-    icon: Copy,
-    label: '创建副本',
-    onClick: () => toast.success('已创建副本（演示）'),
-  },
-  {
-    icon: Maximize2,
-    label: '预览',
-    onClick: () => toast.info('打开预览（演示）'),
-  },
-]);
+    secondaryAction: {
+      label: '下载',
+      run: () => toast.success('已开始下载（演示）'),
+    },
+  });
+}
+
+function onCardClick() {
+  if (a.type === '文件夹') {
+    openFolder(a.id);
+    return;
+  }
+  if (a.type === '视频' || a.type === '图片') {
+    openPreview();
+    return;
+  }
+  emit('select');
+}
+
+const imageDims: Record<string, string> = {
+  'M-10': '1000x1250',
+  'M-04': '2400x2400',
+  'M-14': '2400x1600',
+};
+function spec(asset: Asset) {
+  if (asset.type === '文件夹') return `${asset.itemCount ?? 0} 项素材`;
+  if (asset.duration) return `${asset.size} · ${asset.duration}`;
+  if (asset.type === '图片') return `${asset.size} · ${imageDims[asset.id] ?? '4096x2400'}`;
+  return `${asset.size} · —`;
+}
 </script>
 
 <template>
-  <div
-    :class="
-      cn(
-        'group relative aspect-square cursor-pointer overflow-hidden rounded-lg border transition-all',
-        selected ? 'border-sky-400 ring-2 ring-sky-200' : 'border-transparent hover:border-sky-200',
-      )
-    "
-    @click="emit('select')"
-  >
-    <AssetThumb :a="a"></AssetThumb>
-    <div class="absolute inset-0 bg-black/45 opacity-0 transition-opacity group-hover:opacity-100">
-      <div class="absolute right-1.5 top-1.5 flex flex-col gap-1">
-        <template :key="label" v-for="{ icon: Icon, label, onClick } in actions">
-          <button
-            :title="label"
-            @click="
-              $event.stopPropagation();
-              onClick();
-            "
-            class="flex h-7 w-7 items-center justify-center rounded-md bg-white/90 text-slate-600 shadow-sm transition-colors hover:bg-white hover:text-sky-600"
-          >
-            <component
-              :is="Icon"
-              :class="cn('h-3.5 w-3.5', label === '收藏' && fav && 'fill-rose-500 text-rose-500')"
-            ></component>
-          </button>
-        </template>
-      </div>
-      <button
-        title="更多"
-        @click="
-          $event.stopPropagation();
-          toast.info('更多操作（演示）');
-        "
-        class="absolute bottom-1.5 right-1.5 flex h-7 w-7 items-center justify-center rounded-md bg-white/90 text-slate-600 shadow-sm transition-colors hover:bg-white hover:text-sky-600"
-      >
-        <MoreHorizontal class="h-3.5 w-3.5"></MoreHorizontal>
-      </button>
-      <div class="absolute bottom-1.5 left-1.5 right-9 truncate text-[10.5px] text-white/90">
-        {{ a.name }}
-      </div>
-    </div>
-    <span
+  <div class="group cursor-pointer" @click="onCardClick">
+    <div
       :class="
         cn(
-          'absolute left-1.5 flex h-4 w-4 items-center justify-center rounded-full border transition-all',
-          a.enhanced ? 'top-7' : 'top-1.5',
-          selected
-            ? 'border-sky-500 bg-sky-500 text-white opacity-100'
-            : 'border-white/80 bg-black/25 text-transparent opacity-0 group-hover:opacity-100',
+          'relative aspect-[4/3] overflow-hidden rounded-xl border transition-all',
+          selected ? 'border-sky-400 ring-2 ring-sky-200' : 'border-slate-200 hover:border-sky-200',
         )
       "
     >
-      <Check class="h-3 w-3" :strokeWidth="3"></Check>
-    </span>
+      <AssetThumb :a="a" />
+      <div
+        v-if="a.type !== '文件夹'"
+        class="absolute inset-0 bg-black/20 opacity-0 transition-opacity group-hover:opacity-100"
+      >
+        <div class="absolute right-2 top-2 flex flex-col gap-1">
+          <button
+            title="预览"
+            class="flex h-7 w-7 items-center justify-center rounded-md bg-white/90 text-slate-600 shadow-sm hover:text-sky-600"
+            @click.stop="openPreview"
+          >
+            <Eye class="h-3.5 w-3.5" />
+          </button>
+          <button
+            title="下载"
+            class="flex h-7 w-7 items-center justify-center rounded-md bg-white/90 text-slate-600 shadow-sm hover:text-sky-600"
+            @click.stop="toast.success('已开始下载（演示）')"
+          >
+            <Download class="h-3.5 w-3.5" />
+          </button>
+          <button
+            title="重命名"
+            class="flex h-7 w-7 items-center justify-center rounded-md bg-white/90 text-slate-600 shadow-sm hover:text-sky-600"
+            @click.stop="toast.info('重命名（演示）')"
+          >
+            <Pencil class="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+      <button
+        v-if="a.type !== '文件夹'"
+        type="button"
+        title="选择"
+        :class="
+          cn(
+            'absolute left-2 flex h-4 w-4 items-center justify-center rounded-full border transition-all',
+            a.enhanced ? 'top-8' : 'top-2',
+            selected
+              ? 'border-sky-500 bg-sky-500 text-white opacity-100'
+              : 'border-white/80 bg-black/25 text-transparent opacity-0 group-hover:opacity-100',
+          )
+        "
+        @click.stop="emit('select')"
+      >
+        <Check class="h-3 w-3" :strokeWidth="3" />
+      </button>
+    </div>
+    <div class="mt-2 truncate text-[13px] font-medium text-slate-800" :title="a.name">{{ a.name }}</div>
+    <div class="text-[11px] text-slate-400">{{ spec(a) }}</div>
+    <div class="text-[11px] text-slate-400">
+      {{ a.type === '文件夹' ? `更新 ${a.updatedAt}` : `上传 ${a.updatedAt}` }}
+    </div>
   </div>
 </template>

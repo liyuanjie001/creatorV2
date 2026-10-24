@@ -30,13 +30,21 @@ const remove = (id: string) => {
         >
           <NotebookPen class="h-5 w-5 text-white"></NotebookPen>
         </span>
-        <div>
+        <div class="min-w-0 flex-1">
           <h1 class="text-lg font-semibold text-slate-800">妙记</h1>
           <p class="text-[12px] text-slate-400">AI 灵感生成的对话自动保存在这里，随时回看你的想法</p>
         </div>
+        <Button
+          size="sm"
+          class="gap-2 brand-gradient px-4 text-white hover:opacity-90"
+          @click="openInspiration()"
+        >
+          <Sparkles class="h-3.5 w-3.5"></Sparkles>
+          去聊一条
+        </Button>
       </div>
     </template>
-    <div :class="embedded ? 'flex justify-end' : 'hidden'">
+    <div v-else class="flex justify-end">
       <Button
         size="sm"
         class="gap-2 brand-gradient px-4 text-white hover:opacity-90"
@@ -52,7 +60,7 @@ const remove = (id: string) => {
           <NotebookPen class="h-6 w-6 text-slate-400"></NotebookPen>
         </span>
         <p class="mt-4 text-[14px] font-medium text-slate-700">还没有妙记</p>
-        <p class="mt-1 text-[12.5px] text-slate-400">点击顶栏「AI 灵感生成」，聊完的方案会自动存到这里</p>
+        <p class="mt-1 text-[12.5px] text-slate-400">点击「去聊一条」，聊完的方案会自动存到这里</p>
       </div>
     </template>
     <template v-else>

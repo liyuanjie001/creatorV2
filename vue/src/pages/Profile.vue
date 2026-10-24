@@ -1,222 +1,217 @@
 <script setup lang="ts">
-import { Crown, Users, Bell, ShieldCheck, Palette, KeyRound, ChevronRight } from 'lucide-vue-next';
-import { Card } from '@/components/ui';
-import { Button } from '@/components/ui';
-import { Badge } from '@/components/ui';
-import { Avatar, AvatarFallback } from '@/components/ui';
+import { Crown, Zap, Check, Coins } from 'lucide-vue-next';
+import { Card, Button, Badge } from '@/components/ui';
 import { PageHeader } from '@/components/shared';
-import { useRouter } from 'vue-router';
-const members = [
+import { cn } from '@/lib/utils';
+import { toast } from 'vue-sonner';
+import { computed } from 'vue';
+
+/** 唯一收费点：AI 积分 */
+const creditsUsed = 2240;
+const creditsTotal = 3520;
+const creditsPct = computed(() => Math.min(100, Math.round((creditsUsed / creditsTotal) * 100)));
+
+type PlanKey = 'free' | 'pro' | 'business';
+const currentPlan: PlanKey = 'pro';
+
+const plans: {
+  key: PlanKey;
+  name: string;
+  blurb: string;
+  price: string;
+  priceHint: string;
+  credits: string;
+  features: string[];
+  accent: string;
+}[] = [
   {
-    name: '林悦',
-    role: '运营负责人',
-    initials: 'LY',
-    you: true,
+    key: 'free',
+    name: '免费版',
+    blurb: '适合个人试用与轻量创作',
+    price: '¥0',
+    priceHint: '永久',
+    credits: '每月 500 AI 积分',
+    features: ['基础模型可用', '单项目协作', '社区素材库', '标准队列生成'],
+    accent: 'text-slate-500',
   },
   {
-    name: '陈默',
-    role: '内容策划',
-    initials: 'CM',
-    you: false,
+    key: 'pro',
+    name: 'Pro 版',
+    blurb: '适合个人创作者持续产出',
+    price: '¥199',
+    priceHint: '/ 月',
+    credits: '每月 3,520 AI 积分',
+    features: ['全部模型可用', '优先生成队列', '积分加油包', '多项目并行创作'],
+    accent: 'text-sky-600',
   },
   {
-    name: '苏航',
-    role: '数据分析师',
-    initials: 'SH',
-    you: false,
-  },
-  {
-    name: '王一帆',
-    role: '视觉设计',
-    initials: 'WY',
-    you: false,
+    key: 'business',
+    name: 'Business 版',
+    blurb: '适合高频创作与多项目管理',
+    price: '¥599',
+    priceHint: '/ 月',
+    credits: '每月 12,000 AI 积分',
+    features: ['批量生成加速', '团队积分池', '专属客服', '用量与账单导出'],
+    accent: 'text-violet-600',
   },
 ];
-const settings = [
-  {
-    icon: Bell,
-    title: '通知偏好',
-    desc: '任务完成、风控预警、额度提醒',
-    tab: 'notifications',
-  },
-  {
-    icon: ShieldCheck,
-    title: '账号安全',
-    desc: '两步验证、登录设备管理',
-    tab: 'security',
-  },
-  {
-    icon: Palette,
-    title: '界面偏好',
-    desc: '主题、语言、时区设置',
-    tab: 'appearance',
-  },
-  {
-    icon: KeyRound,
-    title: 'API 接入',
-    desc: '开放接口 Key 与调用配额',
-    tab: 'api',
-  },
-];
-const router = useRouter();
+
+function choosePlan(key: PlanKey) {
+  if (key === currentPlan) return;
+  const plan = plans.find((p) => p.key === key);
+  toast.success(`已选择「${plan?.name}」（演示）`);
+}
+
+function changePlan() {
+  document.getElementById('all-plans')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
 </script>
 
 <template>
-  <div class="mx-auto max-w-4xl space-y-6">
-    <PageHeader title="我的" desc="个人资料、团队与账号设置"></PageHeader>
-    <div class="grid grid-cols-3 gap-4">
-      <Card class="glass-card col-span-2 border-slate-200 p-6">
-        <div class="flex items-center gap-5">
-          <Avatar class="h-16 w-16 border-2 border-sky-300">
-            <AvatarFallback class="brand-gradient text-xl font-semibold text-white">LY</AvatarFallback>
-          </Avatar>
-          <div class="flex-1">
-            <div class="flex items-center gap-2.5">
-              <span class="text-lg font-semibold text-slate-900">林悦</span>
-              <Badge
-                class="gap-1 border-0 bg-gradient-to-r from-amber-400/20 to-amber-500/10 text-[11px] text-amber-600"
-              >
-                <Crown class="h-3 w-3"></Crown>
-                Pro 版
-              </Badge>
-            </div>
-            <div class="mt-1 text-[13px] text-slate-500">运营负责人 · linyue@matrixhub.demo</div>
-            <div class="mt-1 text-[12px] text-slate-400">加入于 2026-03-18 · 所属团队：出海增长组</div>
+  <div class="space-y-6">
+    <PageHeader title="个人中心" desc="查看我的套餐与全部套餐计划" />
+
+    <div class="mx-auto max-w-5xl space-y-8">
+    <!-- 我的套餐：仅展示 AI 积分用量 -->
+    <Card class="overflow-hidden border-slate-200 bg-white p-6 shadow-sm shadow-slate-200/40">
+      <div class="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <div class="flex items-center gap-2 text-[13px] font-medium text-slate-500">
+            <Crown class="h-4 w-4 text-amber-500" />
+            我的套餐
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            class="border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-          >
-            编辑资料
-          </Button>
+          <div class="mt-3 flex flex-wrap items-center gap-2.5">
+            <h2 class="text-2xl font-semibold text-slate-900">Pro 版</h2>
+            <Badge class="border-0 bg-sky-50 text-[11px] font-medium text-sky-600">当前使用中</Badge>
+          </div>
+          <p class="mt-2 text-[14px] text-slate-500">¥199 / 月 · 下次续费 2026-11-22</p>
         </div>
-        <div class="mt-6 grid grid-cols-3 gap-3">
-          <template
-            :key="s.label"
-            v-for="s in [
-              {
-                label: '累计发布内容',
-                value: '1,284',
-              },
-              {
-                label: '负责项目',
-                value: '6',
-              },
-              {
-                label: '本月贡献曝光',
-                value: '2.4M',
-              },
-            ]"
-          >
-            <div class="rounded-xl border border-slate-200 bg-slate-50 p-4 text-center">
-              <div class="text-xl font-semibold text-slate-900">
-                {{ s.value }}
-              </div>
-              <div class="mt-1 text-[11.5px] text-slate-400">{{ s.label }}</div>
-            </div>
-          </template>
-        </div>
-      </Card>
-      <Card class="glass-card relative overflow-hidden border-sky-200 p-6">
-        <div class="absolute -right-8 -top-8 h-28 w-28 rounded-full bg-sky-50 blur-3xl"></div>
-        <div class="flex items-center gap-2">
-          <Crown class="h-4 w-4 text-amber-600"></Crown>
-          <h3 class="text-[15px] font-medium text-slate-900">套餐与额度</h3>
-        </div>
-        <div class="mt-4 space-y-4 text-[12.5px]">
-          <template
-            :key="q.label"
-            v-for="q in [
-              {
-                label: '发布额度',
-                used: 640,
-                total: 1000,
-              },
-              {
-                label: 'AI 生成次数',
-                used: 212,
-                total: 500,
-              },
-              {
-                label: '存储空间',
-                used: 36,
-                total: 100,
-              },
-            ]"
-          >
-            <div>
-              <div class="mb-1.5 flex justify-between text-slate-600">
-                <span>{{ q.label }}</span>
-                <span class="text-slate-700">{{ q.used }} / {{ q.total }}</span>
-              </div>
-              <div class="h-1.5 overflow-hidden rounded-full bg-slate-100">
-                <div
-                  class="brand-gradient h-full rounded-full"
-                  :style="{
-                    width: `${(q.used / q.total) * 100}%`,
-                  }"
-                ></div>
-              </div>
-            </div>
-          </template>
-        </div>
-        <Button size="sm" class="mt-5 w-full brand-gradient text-white hover:opacity-90">
-          升级至 Team 版
-        </Button>
-      </Card>
-    </div>
-    <Card class="glass-card border-slate-200 p-6">
-      <div class="mb-4 flex items-center justify-between">
-        <h3 class="flex items-center gap-2 text-[15px] font-medium text-slate-900">
-          <Users class="h-4 w-4 text-slate-500"></Users>
-          团队成员（4）
-        </h3>
         <Button
-          variant="outline"
           size="sm"
-          class="border-slate-200 bg-slate-50 text-[12px] text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+          class="brand-gradient gap-1.5 px-4 text-white hover:opacity-90"
+          @click="changePlan"
         >
-          邀请成员
+          更换套餐
         </Button>
       </div>
-      <div class="grid grid-cols-2 gap-3">
-        <template :key="m.name" v-for="m in members">
-          <div class="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
-            <Avatar class="h-10 w-10 border border-slate-200">
-              <AvatarFallback class="bg-gradient-to-br from-sky-400 to-sky-600 text-[12px] text-white">
-                {{ m.initials }}
-              </AvatarFallback>
-            </Avatar>
-            <div class="flex-1">
-              <div class="text-[13.5px] font-medium text-slate-900">
-                {{ m.name }}
-                <template v-if="m.you">
-                  <span class="ml-2 rounded bg-sky-100 px-1.5 py-0.5 text-[10px] text-sky-600">我</span>
-                </template>
-              </div>
-              <div class="text-[12px] text-slate-400">{{ m.role }}</div>
+
+      <div class="mt-6 rounded-2xl border border-slate-100 bg-slate-50/80 p-5">
+        <div class="flex flex-wrap items-end justify-between gap-3">
+          <div class="flex items-center gap-2">
+            <span
+              class="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-sm shadow-amber-200/60"
+            >
+              <Coins class="h-4 w-4" />
+            </span>
+            <div>
+              <div class="text-[13px] font-medium text-slate-700">AI 积分</div>
+              <div class="text-[12px] text-slate-400">唯一计费与消耗单位 · 生成、翻拍、批量任务均扣积分</div>
             </div>
           </div>
-        </template>
+          <div class="text-right">
+            <div class="text-[22px] font-semibold tabular-nums text-slate-900">
+              {{ creditsUsed.toLocaleString() }}
+              <span class="text-[15px] font-normal text-slate-400"> / {{ creditsTotal.toLocaleString() }}</span>
+            </div>
+            <div class="text-[12px] text-slate-400">本月已用 {{ creditsPct }}%</div>
+          </div>
+        </div>
+        <div class="mt-4 h-2.5 overflow-hidden rounded-full bg-slate-200/80">
+          <div
+            class="brand-gradient h-full rounded-full transition-all"
+            :style="{ width: `${creditsPct}%` }"
+          />
+        </div>
+        <div class="mt-3 flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            class="border-slate-200 bg-white text-[12.5px] text-slate-600 hover:text-sky-600"
+            @click="toast.success('已打开积分加油包（演示）')"
+          >
+            购买加油包
+          </Button>
+          <span class="self-center text-[12px] text-slate-400">加油包积分即时到账，不占用套餐额度周期</span>
+        </div>
       </div>
     </Card>
-    <Card class="glass-card divide-y divide-slate-200 border-slate-200">
-      <template :key="title" v-for="{ icon: Icon, title, desc, tab } in settings">
-        <button
-          @click="router.push(`/settings?tab=${tab}`)"
-          class="flex w-full items-center gap-4 px-6 py-4 text-left transition-colors hover:bg-slate-50"
+
+    <!-- 所有套餐计划 -->
+    <section id="all-plans" class="space-y-4">
+      <h3 class="text-[15px] font-medium text-slate-800">所有套餐计划</h3>
+      <div class="grid gap-4 md:grid-cols-3">
+        <Card
+          v-for="plan in plans"
+          :key="plan.key"
+          :class="
+            cn(
+              'relative flex flex-col border-slate-200 bg-white p-6 shadow-sm shadow-slate-200/30',
+              plan.key === currentPlan && 'border-sky-300 ring-1 ring-sky-200',
+            )
+          "
         >
-          <component :is="Icon" class="h-5 w-5 text-slate-500"></component>
-          <div class="flex-1">
-            <div class="text-[13.5px] font-medium text-slate-900">
-              {{ title }}
-            </div>
-            <div class="text-[12px] text-slate-400">{{ desc }}</div>
+          <Badge
+            v-if="plan.key === currentPlan"
+            class="absolute right-4 top-4 border-0 bg-sky-50 text-[10.5px] font-medium text-sky-600"
+          >
+            当前套餐
+          </Badge>
+          <div class="flex items-center gap-2">
+            <Zap :class="cn('h-5 w-5', plan.accent)" />
+            <span class="text-[17px] font-semibold text-slate-900">{{ plan.name }}</span>
           </div>
-          <ChevronRight class="h-4 w-4 text-slate-300"></ChevronRight>
-        </button>
-      </template>
-    </Card>
+          <p class="mt-2 text-[13px] leading-5 text-slate-400">{{ plan.blurb }}</p>
+          <div class="mt-5 flex items-baseline gap-1">
+            <span class="text-[28px] font-semibold tracking-tight text-slate-900">{{ plan.price }}</span>
+            <span class="text-[13px] text-slate-400">{{ plan.priceHint }}</span>
+          </div>
+
+          <div
+            class="mt-5 rounded-xl border border-amber-100 bg-amber-50/70 px-3.5 py-2.5 text-[13px] font-medium text-amber-800"
+          >
+            {{ plan.credits }}
+          </div>
+
+          <ul class="mt-5 flex-1 space-y-2.5">
+            <li
+              v-for="feature in plan.features"
+              :key="feature"
+              class="flex items-start gap-2 text-[13px] text-slate-600"
+            >
+              <Check class="mt-0.5 h-3.5 w-3.5 shrink-0 text-sky-500" />
+              {{ feature }}
+            </li>
+          </ul>
+
+          <Button
+            v-if="plan.key === currentPlan"
+            variant="outline"
+            class="mt-6 w-full border-slate-200 bg-slate-50 text-slate-400"
+            disabled
+          >
+            使用中
+          </Button>
+          <Button
+            v-else-if="plan.key === 'business'"
+            class="mt-6 w-full brand-gradient text-white hover:opacity-90"
+            @click="choosePlan(plan.key)"
+          >
+            选择此套餐
+          </Button>
+          <Button
+            v-else
+            variant="outline"
+            class="mt-6 w-full border-slate-200 text-slate-600 hover:border-sky-200 hover:text-sky-600"
+            @click="choosePlan(plan.key)"
+          >
+            选择此套餐
+          </Button>
+        </Card>
+      </div>
+      <p class="text-center text-[12.5px] text-slate-400">
+        收费点仅 AI 积分：套餐内每月发放额度，用尽可购买加油包；发布、存储等能力随套餐附赠，不再单独计费。
+      </p>
+    </section>
+    </div>
   </div>
 </template>
