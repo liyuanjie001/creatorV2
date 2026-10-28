@@ -1,217 +1,291 @@
 <script setup lang="ts">
-import { Crown, Zap, Check, Coins } from 'lucide-vue-next';
-import { Card, Button, Badge } from '@/components/ui';
-import { PageHeader } from '@/components/shared';
+import { MessageCircle, Check } from 'lucide-vue-next';
+import {
+  Card,
+  Button,
+  Badge,
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui';
+import { PageHeader, CreditsIcon } from '@/components/shared';
 import { cn } from '@/lib/utils';
-import { toast } from 'vue-sonner';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 
-/** 唯一收费点：AI 积分 */
-const creditsUsed = 2240;
-const creditsTotal = 3520;
-const creditsPct = computed(() => Math.min(100, Math.round((creditsUsed / creditsTotal) * 100)));
+/** 演示：免费用户赠送额度 */
+const creditsBalance = 100;
+const creditsGifted = 100;
+/** 当前额度上限（演示按赠送额度计） */
+const creditsTotal = creditsGifted;
+const creditsPct = computed(() =>
+  creditsTotal <= 0 ? 0 : Math.min(100, Math.round((creditsBalance / creditsTotal) * 100)),
+);
 
-type PlanKey = 'free' | 'pro' | 'business';
-const currentPlan: PlanKey = 'pro';
+type PackKey = 'p50' | 'p100' | 'p500' | 'p1000' | 'custom';
 
-const plans: {
-  key: PlanKey;
-  name: string;
-  blurb: string;
+type RechargePack = {
+  key: PackKey;
   price: string;
-  priceHint: string;
-  credits: string;
-  features: string[];
-  accent: string;
-}[] = [
+  priceLabel: string;
+  bonus: string | null;
+  /** 总积分；定制化为 null */
+  totalCredits: number | null;
+  /** 最多生成视频总数；定制化为 null */
+  videoCount: number | null;
+  tag?: string;
+  custom?: boolean;
+};
+
+/** 付费档位 */
+const paidPacks: RechargePack[] = [
   {
-    key: 'free',
-    name: '免费版',
-    blurb: '适合个人试用与轻量创作',
-    price: '¥0',
-    priceHint: '永久',
-    credits: '每月 500 AI 积分',
-    features: ['基础模型可用', '单项目协作', '社区素材库', '标准队列生成'],
-    accent: 'text-slate-500',
+    key: 'p50',
+    price: '¥50',
+    priceLabel: '入门充值',
+    bonus: null,
+    totalCredits: 250,
+    videoCount: 20,
   },
   {
-    key: 'pro',
-    name: 'Pro 版',
-    blurb: '适合个人创作者持续产出',
-    price: '¥199',
-    priceHint: '/ 月',
-    credits: '每月 3,520 AI 积分',
-    features: ['全部模型可用', '优先生成队列', '积分加油包', '多项目并行创作'],
-    accent: 'text-sky-600',
+    key: 'p100',
+    price: '¥100',
+    priceLabel: '常用档位',
+    bonus: '送 25 积分',
+    totalCredits: 525,
+    videoCount: 42,
   },
   {
-    key: 'business',
-    name: 'Business 版',
-    blurb: '适合高频创作与多项目管理',
-    price: '¥599',
-    priceHint: '/ 月',
-    credits: '每月 12,000 AI 积分',
-    features: ['批量生成加速', '团队积分池', '专属客服', '用量与账单导出'],
-    accent: 'text-violet-600',
+    key: 'p500',
+    price: '¥500',
+    priceLabel: '高产创作',
+    bonus: '送 199 积分',
+    totalCredits: 1199,
+    videoCount: 99,
+    tag: '热门推荐',
+  },
+  {
+    key: 'p1000',
+    price: '¥1000',
+    priceLabel: '重度使用',
+    bonus: '送 500 积分',
+    totalCredits: 5500,
+    videoCount: 457,
+    tag: '高性价比',
   },
 ];
 
-function choosePlan(key: PlanKey) {
-  if (key === currentPlan) return;
-  const plan = plans.find((p) => p.key === key);
-  toast.success(`已选择「${plan?.name}」（演示）`);
-}
+const customPack: RechargePack = {
+  key: 'custom',
+  price: '定制化',
+  priceLabel: '企业大批量',
+  bonus: null,
+  totalCredits: null,
+  videoCount: null,
+  custom: true,
+};
 
-function changePlan() {
-  document.getElementById('all-plans')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+const popularPack = paidPacks.find((p) => p.key === 'p500')!;
+
+/** 各充值档位底部权益列表 */
+const benefits = ['爆款复刻', '批量生成', '输出无水印', '项目管理', '产品卡创建', '素材库'];
+
+const contactOpen = ref(false);
+const selectedPack = ref<RechargePack | null>(null);
+
+function openRecharge(pack: RechargePack) {
+  selectedPack.value = pack;
+  contactOpen.value = true;
 }
 </script>
 
 <template>
   <div class="space-y-6">
-    <PageHeader title="个人中心" desc="查看我的套餐与全部套餐计划" />
+    <PageHeader title="个人中心" desc="查看积分余额并充值，按档位获取更多 AI 积分" />
 
-    <div class="mx-auto max-w-5xl space-y-8">
-    <!-- 我的套餐：仅展示 AI 积分用量 -->
-    <Card class="overflow-hidden border-slate-200 bg-white p-6 shadow-sm shadow-slate-200/40">
-      <div class="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <div class="flex items-center gap-2 text-[13px] font-medium text-slate-500">
-            <Crown class="h-4 w-4 text-amber-500" />
-            我的套餐
-          </div>
-          <div class="mt-3 flex flex-wrap items-center gap-2.5">
-            <h2 class="text-2xl font-semibold text-slate-900">Pro 版</h2>
-            <Badge class="border-0 bg-sky-50 text-[11px] font-medium text-sky-600">当前使用中</Badge>
-          </div>
-          <p class="mt-2 text-[14px] text-slate-500">¥199 / 月 · 下次续费 2026-11-22</p>
-        </div>
-        <Button
-          size="sm"
-          class="brand-gradient gap-1.5 px-4 text-white hover:opacity-90"
-          @click="changePlan"
-        >
-          更换套餐
-        </Button>
-      </div>
-
-      <div class="mt-6 rounded-2xl border border-slate-100 bg-slate-50/80 p-5">
-        <div class="flex flex-wrap items-end justify-between gap-3">
-          <div class="flex items-center gap-2">
-            <span
-              class="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-sm shadow-amber-200/60"
-            >
-              <Coins class="h-4 w-4" />
-            </span>
-            <div>
-              <div class="text-[13px] font-medium text-slate-700">AI 积分</div>
-              <div class="text-[12px] text-slate-400">唯一计费与消耗单位 · 生成、翻拍、批量任务均扣积分</div>
+    <div class="mx-auto max-w-[1180px] space-y-8">
+      <!-- 我的积分 -->
+      <Card class="overflow-hidden border-slate-200 bg-white p-6 shadow-sm shadow-slate-200/40">
+        <div class="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <div class="text-[13px] font-medium text-slate-500">我的积分</div>
+            <div class="mt-3 flex flex-wrap items-center gap-2.5">
+              <CreditsIcon class="h-6 w-6" />
+              <h2 class="text-2xl font-semibold tabular-nums text-slate-900">
+                {{ creditsBalance.toLocaleString() }}
+              </h2>
             </div>
           </div>
-          <div class="text-right">
-            <div class="text-[22px] font-semibold tabular-nums text-slate-900">
-              {{ creditsUsed.toLocaleString() }}
-              <span class="text-[15px] font-normal text-slate-400"> / {{ creditsTotal.toLocaleString() }}</span>
-            </div>
-            <div class="text-[12px] text-slate-400">本月已用 {{ creditsPct }}%</div>
-          </div>
-        </div>
-        <div class="mt-4 h-2.5 overflow-hidden rounded-full bg-slate-200/80">
-          <div
-            class="brand-gradient h-full rounded-full transition-all"
-            :style="{ width: `${creditsPct}%` }"
-          />
-        </div>
-        <div class="mt-3 flex flex-wrap gap-2">
           <Button
             size="sm"
-            variant="outline"
-            class="border-slate-200 bg-white text-[12.5px] text-slate-600 hover:text-sky-600"
-            @click="toast.success('已打开积分加油包（演示）')"
+            class="brand-gradient gap-1.5 px-4 text-white hover:opacity-90"
+            @click="openRecharge(popularPack)"
           >
-            购买加油包
+            立即充值
           </Button>
-          <span class="self-center text-[12px] text-slate-400">加油包积分即时到账，不占用套餐额度周期</span>
         </div>
-      </div>
-    </Card>
+        <div class="mt-5">
+          <div class="mb-2 flex items-center justify-between text-[12px] text-slate-400">
+            <span>剩余积分</span>
+            <span class="tabular-nums">
+              {{ creditsBalance.toLocaleString() }} / {{ creditsTotal.toLocaleString() }}
+            </span>
+          </div>
+          <div class="h-2.5 overflow-hidden rounded-full bg-slate-100">
+            <div
+              class="brand-gradient h-full rounded-full transition-all"
+              :style="{ width: `${creditsPct}%` }"
+            />
+          </div>
+        </div>
+      </Card>
 
-    <!-- 所有套餐计划 -->
-    <section id="all-plans" class="space-y-4">
-      <h3 class="text-[15px] font-medium text-slate-800">所有套餐计划</h3>
-      <div class="grid gap-4 md:grid-cols-3">
-        <Card
-          v-for="plan in plans"
-          :key="plan.key"
-          :class="
-            cn(
-              'relative flex flex-col border-slate-200 bg-white p-6 shadow-sm shadow-slate-200/30',
-              plan.key === currentPlan && 'border-sky-300 ring-1 ring-sky-200',
-            )
-          "
-        >
-          <Badge
-            v-if="plan.key === currentPlan"
-            class="absolute right-4 top-4 border-0 bg-sky-50 text-[10.5px] font-medium text-sky-600"
+      <!-- 积分充值：五个方案一排 -->
+      <section class="space-y-4">
+        <h3 class="text-[15px] font-medium text-slate-800">积分充值</h3>
+        <div class="grid grid-cols-5 items-stretch gap-3 pt-3">
+          <Card
+            v-for="pack in paidPacks"
+            :key="pack.key"
+            :class="
+              cn(
+                'relative flex h-full min-w-0 flex-col gap-0 overflow-visible border-slate-200 bg-white p-4 pb-[calc(1rem+100px)] pt-4 shadow-sm shadow-slate-200/30',
+                pack.tag === '热门推荐' && 'border-sky-300 ring-1 ring-sky-200',
+                pack.tag === '高性价比' && 'border-amber-300 ring-1 ring-amber-200',
+              )
+            "
           >
-            当前套餐
-          </Badge>
-          <div class="flex items-center gap-2">
-            <Zap :class="cn('h-5 w-5', plan.accent)" />
-            <span class="text-[17px] font-semibold text-slate-900">{{ plan.name }}</span>
-          </div>
-          <p class="mt-2 text-[13px] leading-5 text-slate-400">{{ plan.blurb }}</p>
-          <div class="mt-5 flex items-baseline gap-1">
-            <span class="text-[28px] font-semibold tracking-tight text-slate-900">{{ plan.price }}</span>
-            <span class="text-[13px] text-slate-400">{{ plan.priceHint }}</span>
-          </div>
-
-          <div
-            class="mt-5 rounded-xl border border-amber-100 bg-amber-50/70 px-3.5 py-2.5 text-[13px] font-medium text-amber-800"
-          >
-            {{ plan.credits }}
-          </div>
-
-          <ul class="mt-5 flex-1 space-y-2.5">
-            <li
-              v-for="feature in plan.features"
-              :key="feature"
-              class="flex items-start gap-2 text-[13px] text-slate-600"
+            <!-- 推荐标签：卡片顶边居中 -->
+            <Badge
+              v-if="pack.tag === '热门推荐'"
+              class="absolute left-1/2 top-0 z-10 -translate-x-1/2 -translate-y-1/2 border-0 bg-sky-500 px-2.5 py-0.5 text-[10px] font-medium text-white shadow-sm shadow-sky-200"
             >
-              <Check class="mt-0.5 h-3.5 w-3.5 shrink-0 text-sky-500" />
-              {{ feature }}
-            </li>
-          </ul>
+              热门推荐
+            </Badge>
+            <Badge
+              v-else-if="pack.tag === '高性价比'"
+              class="absolute left-1/2 top-0 z-10 -translate-x-1/2 -translate-y-1/2 border-0 bg-amber-500 px-2.5 py-0.5 text-[10px] font-medium text-white shadow-sm shadow-amber-200"
+            >
+              高性价比
+            </Badge>
 
-          <Button
-            v-if="plan.key === currentPlan"
-            variant="outline"
-            class="mt-6 w-full border-slate-200 bg-slate-50 text-slate-400"
-            disabled
+            <!-- 套餐说明：右上角 -->
+            <span class="absolute right-3 top-3 text-[11px] leading-none text-slate-400">
+              {{ pack.priceLabel }}
+            </span>
+
+            <!-- 固定高度，保证下方总积分/按钮对齐 -->
+            <div class="flex min-h-[3.25rem] items-end pt-4">
+              <div class="text-[30px] font-semibold leading-none tracking-tight text-slate-900">
+                {{ pack.price }}
+                <span
+                  v-if="pack.bonus"
+                  class="ml-1.5 align-middle text-[11px] font-medium leading-none text-amber-600"
+                >{{ pack.bonus }}</span>
+              </div>
+            </div>
+
+            <div
+              class="mt-3 flex h-[7rem] flex-col items-center justify-center rounded-xl border border-slate-100 bg-slate-50/80 px-2.5 text-center"
+            >
+              <div class="text-[11px] text-slate-400">总积分</div>
+              <div
+                class="mt-1 text-[20px] font-semibold leading-none tracking-tight tabular-nums text-slate-900"
+              >
+                {{ pack.totalCredits!.toLocaleString() }}
+              </div>
+              <p class="mt-2 text-[11px] leading-4 text-slate-500">
+                最多生成视频个数：{{ pack.videoCount }}
+              </p>
+              <p class="mt-0.5 text-[10.5px] text-slate-400">10s 480p</p>
+            </div>
+
+            <Button
+              size="sm"
+              :class="
+                cn(
+                  'mt-4 w-full shrink-0',
+                  pack.tag === '热门推荐' && 'brand-gradient text-white hover:opacity-90',
+                  pack.tag === '高性价比' &&
+                    'border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100',
+                  !pack.tag && 'border-slate-200 text-slate-700 hover:border-sky-200 hover:text-sky-600',
+                )
+              "
+              :variant="pack.tag === '热门推荐' ? 'default' : 'outline'"
+              @click="openRecharge(pack)"
+            >
+              充值
+            </Button>
+
+            <ul class="mt-4 space-y-2">
+              <li
+                v-for="item in benefits"
+                :key="item"
+                class="flex items-start gap-1.5 text-[12px] leading-4 text-slate-600"
+              >
+                <Check class="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-500" stroke-width="2.5" />
+                <span>{{ item }}</span>
+              </li>
+            </ul>
+          </Card>
+
+          <!-- 定制化：独立内容，不套用标准档位模板 -->
+          <Card
+            class="relative flex h-full min-w-0 flex-col justify-between gap-4 overflow-visible border-slate-200 bg-white p-4 pb-[calc(1rem+100px)] pt-4 shadow-sm shadow-slate-200/30"
           >
-            使用中
-          </Button>
-          <Button
-            v-else-if="plan.key === 'business'"
-            class="mt-6 w-full brand-gradient text-white hover:opacity-90"
-            @click="choosePlan(plan.key)"
-          >
-            选择此套餐
-          </Button>
-          <Button
-            v-else
-            variant="outline"
-            class="mt-6 w-full border-slate-200 text-slate-600 hover:border-sky-200 hover:text-sky-600"
-            @click="choosePlan(plan.key)"
-          >
-            选择此套餐
-          </Button>
-        </Card>
-      </div>
-      <p class="text-center text-[12.5px] text-slate-400">
-        收费点仅 AI 积分：套餐内每月发放额度，用尽可购买加油包；发布、存储等能力随套餐附赠，不再单独计费。
-      </p>
-    </section>
+            <span class="absolute right-3 top-3 text-[11px] leading-none text-slate-400">
+              {{ customPack.priceLabel }}
+            </span>
+            <div class="pt-4">
+              <div class="text-[30px] font-semibold tracking-tight text-slate-900">
+                {{ customPack.price }}
+              </div>
+              <p class="mt-3 text-[13px] leading-6 text-slate-500">
+                面向企业与大批量采购，积分额度、视频用量与协作方式均可按需定制。添加企业微信，由商务经理一对一报价与开通。
+              </p>
+            </div>
+            <Button
+              size="sm"
+              class="brand-gradient mt-auto w-full text-white hover:opacity-90"
+              @click="openRecharge(customPack)"
+            >
+              联系商务
+            </Button>
+          </Card>
+        </div>
+      </section>
     </div>
+
+    <Dialog v-model:open="contactOpen">
+      <DialogContent class="max-w-sm rounded-2xl border-slate-200 bg-white p-7 text-center">
+        <div
+          class="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-50 text-sky-600"
+        >
+          <MessageCircle class="h-6 w-6" />
+        </div>
+        <DialogTitle class="mt-3 text-[18px] text-slate-900">添加企业微信联系商务经理</DialogTitle>
+        <DialogDescription class="mt-1.5 text-[13px] leading-5 text-slate-500">
+          <template v-if="selectedPack?.custom">定制化方案请扫码添加商务经理沟通需求。</template>
+          <template v-else-if="selectedPack">
+            已选「{{ selectedPack.price }}」充值档位，扫码添加后由商务经理协助完成充值。
+          </template>
+          <template v-else>扫码添加企业微信，由商务经理协助完成积分充值。</template>
+        </DialogDescription>
+
+        <div
+          class="mx-auto mt-5 flex h-52 w-52 items-center justify-center overflow-hidden rounded-2xl border border-slate-100 bg-white p-2 shadow-sm"
+        >
+          <img
+            src="/wecom-qr.png"
+            alt="企业微信二维码"
+            class="h-full w-full object-contain"
+          />
+        </div>
+
+        <p class="mt-4 text-[12.5px] leading-5 text-slate-400">
+          使用微信扫一扫添加企业微信，备注充值档位即可。
+        </p>
+      </DialogContent>
+    </Dialog>
   </div>
 </template>

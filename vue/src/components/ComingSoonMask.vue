@@ -61,13 +61,7 @@ const chipIcons = [Rocket, Layers, Zap];
     </button>
 
     <div
-      class="relative z-10 w-full max-w-xl max-h-[calc(100%-2.5rem)] overflow-y-auto rounded-[28px] border border-sky-100/80 px-8 pb-9 pt-8 text-center shadow-[0_24px_56px_-20px_rgba(14,165,233,0.28)] scroll-slim"
-      style="
-        background:
-          radial-gradient(ellipse 90% 70% at 50% 0%, rgba(186, 230, 253, 0.65) 0%, transparent 55%),
-          radial-gradient(ellipse 70% 60% at 100% 100%, rgba(224, 242, 254, 0.8) 0%, transparent 50%),
-          linear-gradient(180deg, #e8f6ff 0%, #f5fbff 45%, #ffffff 100%);
-      "
+      class="coming-soon-card relative z-10 w-full max-w-xl max-h-[calc(100%-2.5rem)] overflow-y-auto rounded-[28px] border border-white/90 px-8 pb-9 pt-8 text-center shadow-[0_20px_50px_-16px_rgba(14,165,233,0.18)] scroll-slim"
     >
       <!-- 插图：即将上线 -->
       <div class="mx-auto mb-5 flex h-36 w-full max-w-[260px] items-center justify-center" aria-hidden="true">
@@ -115,3 +109,15 @@ const chipIcons = [Rocket, Layers, Zap];
     </div>
   </div>
 </template>
+
+<style scoped>
+/* 参考 ChatGPT Plus 到期弹窗：顶部青蓝/薄荷 aurora，下半纯白 */
+.coming-soon-card {
+  background-color: #ffffff;
+  background-image:
+    radial-gradient(ellipse 48% 38% at 12% -4%, rgba(153, 246, 228, 0.55) 0%, transparent 70%),
+    radial-gradient(ellipse 62% 44% at 88% -2%, rgba(125, 211, 252, 0.65) 0%, transparent 68%),
+    radial-gradient(ellipse 110% 58% at 50% -18%, rgba(186, 230, 253, 0.9) 0%, rgba(224, 242, 254, 0.35) 42%, transparent 72%),
+    linear-gradient(180deg, #dbeefe 0%, #f3faff 28%, #ffffff 48%);
+}
+</style>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { FolderKanban, FolderOpen, Lightbulb, Users, BarChart3, Orbit, Coins } from 'lucide-vue-next';
+import { FolderKanban, FolderOpen, Lightbulb, Users, BarChart3, Orbit } from 'lucide-vue-next';
 import { Avatar, AvatarFallback } from '@/components/ui';
+import { CreditsIcon } from '@/components/shared';
 import { cn } from '@/lib/utils';
 import { RouterLink, useRouter, useRoute } from 'vue-router';
 
@@ -80,8 +81,8 @@ const location = useRoute();
         title="积分"
         @click="router.push('/me')"
       >
-        <Coins class="h-4 w-4 shrink-0 text-amber-500" />
-        <span class="text-[13px] font-semibold tabular-nums text-slate-800">1,280</span>
+        <CreditsIcon class="h-4 w-4" />
+        <span class="text-[13px] font-semibold tabular-nums text-slate-800">100</span>
       </button>
       <button
         type="button"
