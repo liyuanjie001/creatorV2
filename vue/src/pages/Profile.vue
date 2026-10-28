@@ -104,46 +104,67 @@ function openRecharge(pack: RechargePack) {
     <PageHeader title="个人中心" desc="查看积分余额并充值，按档位获取更多 AI 积分" />
 
     <div class="mx-auto max-w-[1180px] space-y-8">
-      <!-- 我的积分 -->
-      <Card class="overflow-hidden border-slate-200 bg-white p-6 shadow-sm shadow-slate-200/40">
-        <div class="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <div class="text-[13px] font-medium text-slate-500">我的积分</div>
-            <div class="mt-3 flex flex-wrap items-center gap-2.5">
-              <CreditsIcon class="h-6 w-6" />
-              <h2 class="text-2xl font-semibold tabular-nums text-slate-900">
-                {{ creditsBalance.toLocaleString() }}
-              </h2>
+      <!-- 顶部：我的积分 + 低调定制化 -->
+      <div class="grid grid-cols-1 items-stretch gap-3 md:grid-cols-[minmax(0,1.65fr)_minmax(0,1fr)]">
+        <Card class="overflow-hidden border-slate-200 bg-white p-5 shadow-sm shadow-slate-200/40">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <div class="text-[13px] font-medium text-slate-500">我的积分</div>
+              <div class="mt-2.5 flex items-center gap-2">
+                <CreditsIcon class="h-6 w-6" />
+                <h2 class="text-2xl font-semibold tabular-nums text-slate-900">
+                  {{ creditsBalance.toLocaleString() }}
+                </h2>
+              </div>
             </div>
+            <Button
+              size="sm"
+              class="brand-gradient shrink-0 px-3.5 text-white hover:opacity-90"
+              @click="openRecharge(popularPack)"
+            >
+              立即充值
+            </Button>
+          </div>
+          <div class="mt-4">
+            <div class="mb-1.5 flex items-center justify-between text-[12px] text-slate-400">
+              <span>剩余积分</span>
+              <span class="tabular-nums">
+                {{ creditsBalance.toLocaleString() }} / {{ creditsTotal.toLocaleString() }}
+              </span>
+            </div>
+            <div class="h-2.5 overflow-hidden rounded-full bg-slate-100">
+              <div
+                class="brand-gradient h-full rounded-full transition-all"
+                :style="{ width: `${creditsPct}%` }"
+              />
+            </div>
+          </div>
+        </Card>
+
+        <Card
+          class="flex flex-col justify-between border-dashed border-slate-200 bg-slate-50/70 p-4 shadow-none"
+        >
+          <div>
+            <div class="text-[13px] font-medium text-slate-500">定制化</div>
+            <p class="mt-2 text-[12.5px] leading-5 text-slate-400">
+              企业大批量采购可按需定制积分与用量，联系商务经理单独报价。
+            </p>
           </div>
           <Button
             size="sm"
-            class="brand-gradient gap-1.5 px-4 text-white hover:opacity-90"
-            @click="openRecharge(popularPack)"
+            variant="outline"
+            class="mt-3 h-8 w-fit border-slate-200 bg-white text-[12.5px] text-slate-600 hover:border-slate-300 hover:bg-white hover:text-slate-800"
+            @click="openRecharge(customPack)"
           >
-            立即充值
+            联系商务
           </Button>
-        </div>
-        <div class="mt-5">
-          <div class="mb-2 flex items-center justify-between text-[12px] text-slate-400">
-            <span>剩余积分</span>
-            <span class="tabular-nums">
-              {{ creditsBalance.toLocaleString() }} / {{ creditsTotal.toLocaleString() }}
-            </span>
-          </div>
-          <div class="h-2.5 overflow-hidden rounded-full bg-slate-100">
-            <div
-              class="brand-gradient h-full rounded-full transition-all"
-              :style="{ width: `${creditsPct}%` }"
-            />
-          </div>
-        </div>
-      </Card>
+        </Card>
+      </div>
 
-      <!-- 积分充值：五个方案一排 -->
+      <!-- 积分充值：四个档位 -->
       <section class="space-y-4">
         <h3 class="text-[15px] font-medium text-slate-800">积分充值</h3>
-        <div class="grid grid-cols-5 items-stretch gap-3 pt-3">
+        <div class="grid grid-cols-2 items-stretch gap-3 pt-3 md:grid-cols-4">
           <Card
             v-for="pack in paidPacks"
             :key="pack.key"
@@ -227,30 +248,6 @@ function openRecharge(pack: RechargePack) {
                 <span>{{ item }}</span>
               </li>
             </ul>
-          </Card>
-
-          <!-- 定制化：独立内容，不套用标准档位模板 -->
-          <Card
-            class="relative flex h-full min-w-0 flex-col justify-between gap-4 overflow-visible border-slate-200 bg-white p-4 pb-[calc(1rem+100px)] pt-4 shadow-sm shadow-slate-200/30"
-          >
-            <span class="absolute right-3 top-3 text-[11px] leading-none text-slate-400">
-              {{ customPack.priceLabel }}
-            </span>
-            <div class="pt-4">
-              <div class="text-[30px] font-semibold tracking-tight text-slate-900">
-                {{ customPack.price }}
-              </div>
-              <p class="mt-3 text-[13px] leading-6 text-slate-500">
-                面向企业与大批量采购，积分额度、视频用量与协作方式均可按需定制。添加企业微信，由商务经理一对一报价与开通。
-              </p>
-            </div>
-            <Button
-              size="sm"
-              class="brand-gradient mt-auto w-full text-white hover:opacity-90"
-              @click="openRecharge(customPack)"
-            >
-              联系商务
-            </Button>
           </Card>
         </div>
       </section>
