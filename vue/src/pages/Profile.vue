@@ -22,13 +22,17 @@ const creditsPct = computed(() =>
   creditsTotal <= 0 ? 0 : Math.min(100, Math.round((creditsBalance / creditsTotal) * 100)),
 );
 
-type PackKey = 'p50' | 'p100' | 'p500' | 'p1000' | 'custom';
+type PackKey = 'p50' | 'p100' | 'p490' | 'p1000' | 'custom';
 
 type RechargePack = {
   key: PackKey;
+  /** 折后展示价 */
   price: string;
   priceLabel: string;
-  bonus: string | null;
+  /** 原价，无折扣时为 null */
+  originalPrice: string | null;
+  /** 折扣数字，如 8；无折扣时为 null */
+  discountRate: string | null;
   /** 总积分；定制化为 null */
   totalCredits: number | null;
   /** 最多生成视频总数；定制化为 null */
@@ -37,40 +41,44 @@ type RechargePack = {
   custom?: boolean;
 };
 
-/** 付费档位 */
+/** 付费档位（原价 / 折扣 / 折后价 / 积分 / 视频个数） */
 const paidPacks: RechargePack[] = [
   {
     key: 'p50',
     price: '¥50',
     priceLabel: '入门充值',
-    bonus: null,
-    totalCredits: 250,
-    videoCount: 20,
+    originalPrice: null,
+    discountRate: null,
+    totalCredits: 100,
+    videoCount: 8,
   },
   {
     key: 'p100',
     price: '¥100',
     priceLabel: '常用档位',
-    bonus: '送 25 积分',
-    totalCredits: 525,
-    videoCount: 42,
+    originalPrice: '¥125',
+    discountRate: '8',
+    totalCredits: 500,
+    videoCount: 38,
   },
   {
-    key: 'p500',
-    price: '¥500',
+    key: 'p490',
+    price: '¥490',
     priceLabel: '高产创作',
-    bonus: '送 199 积分',
-    totalCredits: 1199,
-    videoCount: 99,
+    originalPrice: '¥700',
+    discountRate: '7',
+    totalCredits: 2500,
+    videoCount: 208,
     tag: '热门推荐',
   },
   {
     key: 'p1000',
     price: '¥1000',
     priceLabel: '重度使用',
-    bonus: '送 500 积分',
+    originalPrice: '¥2000',
+    discountRate: '5',
     totalCredits: 5500,
-    videoCount: 457,
+    videoCount: 458,
     tag: '高性价比',
   },
 ];
@@ -79,13 +87,14 @@ const customPack: RechargePack = {
   key: 'custom',
   price: '定制化',
   priceLabel: '企业大批量',
-  bonus: null,
+  originalPrice: null,
+  discountRate: null,
   totalCredits: null,
   videoCount: null,
   custom: true,
 };
 
-const popularPack = paidPacks.find((p) => p.key === 'p500')!;
+const popularPack = paidPacks.find((p) => p.key === 'p490')!;
 
 /** 各充值档位底部权益列表 */
 const benefits = ['爆款复刻', '批量生成', '输出无水印', '项目管理', '产品卡创建', '素材库'];
@@ -196,14 +205,26 @@ function openRecharge(pack: RechargePack) {
             </span>
 
             <!-- 固定高度，保证下方总积分/按钮对齐 -->
-            <div class="flex min-h-[3.25rem] items-end pt-4">
-              <div class="text-[30px] font-semibold leading-none tracking-tight text-slate-900">
-                {{ pack.price }}
+            <div class="flex min-h-[3.75rem] flex-col justify-end gap-1.5 pt-4">
+              <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span class="text-[30px] font-semibold leading-none tracking-tight text-slate-900">
+                  {{ pack.price }}
+                </span>
                 <span
-                  v-if="pack.bonus"
-                  class="ml-1.5 align-middle text-[11px] font-medium leading-none text-amber-600"
-                >{{ pack.bonus }}</span>
+                  v-if="pack.discountRate"
+                  class="inline-flex shrink-0 items-baseline rounded-full bg-[#ff2d78] px-3 py-1.5 font-semibold leading-none text-white"
+                >
+                  <span class="text-[16px] tabular-nums">{{ pack.discountRate }}</span>
+                  <span class="text-[12px]">折·限时优惠</span>
+                </span>
               </div>
+              <div
+                v-if="pack.originalPrice"
+                class="text-[16px] tabular-nums text-slate-400 line-through"
+              >
+                {{ pack.originalPrice }}
+              </div>
+              <div v-else class="h-[24px]" aria-hidden="true" />
             </div>
 
             <div
