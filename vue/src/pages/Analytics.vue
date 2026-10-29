@@ -153,7 +153,7 @@ function changeProject(event: Event) {
     v-if="showComingSoon"
     mode="page"
     title="数据分析 · 敬请期待"
-    desc="跨窗口、账号与平台看清表现，投放决策更有据。锁定高价值内容与账号，把预算押在真正拉新的素材上。"
+    desc="跨窗口、账号与平台看清表现，投放决策更有据。多维对比、爆款洞察与统一口径即将开放，帮助你把预算押在真正拉新的素材上；当前可先预览演示看板，正式上线后指标将自动接入。"
     :highlights="['多维对比', '爆款洞察', '统一口径']"
     @back="showComingSoon = false"
   />
