@@ -1,29 +1,30 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, nextTick, ref } from 'vue';
+import RemakeProjectPicker from '@/components/studio/RemakeProjectPicker.vue';
 import { useRouter } from 'vue-router';
 import { Play, Star, Heart, MessageCircle, Share2 } from 'lucide-vue-next';
 import { Thumb } from '@/components/shared';
 import type { Inspiration } from '@/data/mock';
-import { projects } from '@/data/mock';
 import { toast } from 'vue-sonner';
 import { useRemakeDraft } from '@/composables/useRemakeDraft';
 import { useOptionalProjectWorkspace } from '@/composables/useProjectWorkspace';
-import { useHomeProjects } from '@/composables/useHomeProjects';
 import { useAssetFavorites } from '@/composables/useAssetFavorites';
 import { useVideoPlayer } from '@/composables/useVideoPlayer';
 
-const { item } = defineProps<{
+const { item, coverAspect } = defineProps<{
   item: Inspiration;
+  coverAspect?: string;
 }>();
 
 const router = useRouter();
 const workspace = useOptionalProjectWorkspace();
-const { homeProjects } = useHomeProjects();
+const pickerOpen = ref(false);
 const { seedRemake } = useRemakeDraft();
 const { addInspirationFavorite, removeInspirationFavorite } = useAssetFavorites();
-const { openInspiration } = useVideoPlayer();
+const { openInspiration, closeVideo } = useVideoPlayer();
 
-const favorited = ref(false);
+import { studio } from '@/services/studio';
+const favorited = computed(() => studio.value.favorites.includes(item.id));
 const comments = computed(() => item.comments ?? `${Math.max(1, Math.round(item.heat / 10))}K`);
 const shares = computed(() => item.shares ?? `${Math.max(1, Math.round(item.heat / 8))}K`);
 const durationLabel = computed(() => {
@@ -32,25 +33,17 @@ const durationLabel = computed(() => {
   return `时长 ${raw}`;
 });
 
-function remake() {
+function remake() { pickerOpen.value = true; }
+function chooseProject(projectId: string) {
   seedRemake(item);
-  if (workspace) {
-    workspace.section.value = 'gen';
-    toast.success('已跳转自由创作并填入翻拍脚本');
-    return;
+  if (!studio.value.references.some(reference => reference.id === item.id)) {
+    studio.value.references.unshift({ id: item.id, title: item.title, author: item.author, duration: item.duration, source: item.platform, url: '' });
   }
-  const target = homeProjects.value[0] ?? projects[0];
-  if (!target) {
-    toast.error('暂无可用项目');
-    return;
-  }
-  router.push(`/projects/${target.id}`);
-  toast.success('已跳转自由创作并填入翻拍脚本');
+  void router.push({ path: `/projects/${projectId}`, query: { section: 'gen', mode: 'normal', reference: item.id } });
 }
 
 function favorite() {
   if (favorited.value) return;
-  favorited.value = true;
   addInspirationFavorite(item, workspace?.project.value.name);
   toast.success('已收藏至素材库，点击查看', {
     action: {
@@ -64,7 +57,6 @@ function favorite() {
 
 function toggleFavorite() {
   if (favorited.value) {
-    favorited.value = false;
     removeInspirationFavorite(item.id);
     toast.success('已取消收藏');
     return;
@@ -74,7 +66,7 @@ function toggleFavorite() {
 
 function openPlayer() {
   openInspiration(item, {
-    primaryAction: { label: '一键翻拍', run: remake },
+    primaryAction: { label: '一键翻拍', run: () => { closeVideo(); void nextTick(remake); } },
     secondaryAction: {
       label: favorited.value ? '已收藏' : '收藏',
       run: () => {
@@ -87,7 +79,7 @@ function openPlayer() {
 
 <template>
   <div class="group relative flex flex-col overflow-hidden rounded-2xl bg-slate-950 shadow-sm">
-    <div class="relative aspect-[3/4] cursor-pointer overflow-hidden" @click="openPlayer">
+    <div class="relative aspect-[3/4] cursor-pointer overflow-hidden" :style="coverAspect ? { aspectRatio: coverAspect } : undefined" @click="openPlayer">
       <Thumb class="h-full w-full">
         <span
           class="flex h-9 w-9 items-center justify-center rounded-full bg-black/45 text-white/70 ring-1 ring-white/25 backdrop-blur-sm"
@@ -132,6 +124,7 @@ function openPlayer() {
             <span class="font-semibold tabular-nums">{{ shares }}</span>
           </span>
         </div>
+        <RemakeProjectPicker v-model:open="pickerOpen" @select="chooseProject">
         <button
           type="button"
           class="mt-3 w-full rounded-xl border border-white/25 bg-white/20 py-2.5 text-[13px] font-medium text-white backdrop-blur-sm transition hover:bg-white/30"
@@ -139,6 +132,7 @@ function openPlayer() {
         >
           一键翻拍
         </button>
+        </RemakeProjectPicker>
       </div>
     </div>
   </div>

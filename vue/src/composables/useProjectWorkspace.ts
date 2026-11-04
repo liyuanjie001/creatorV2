@@ -1,11 +1,11 @@
+import { studio } from '@/services/studio';
 import { useWindowManager } from '@/composables/useWindowManager';
 import { useDemoTimers } from '@/composables/useDemoTimers';
 import type { ConsoleDraft } from '@/types/domain';
 import {
-  projects,
+  projects as originalProjects,
   generations,
   tasks,
-  products,
   inspirations,
   type Generation,
   type Platform,
@@ -35,12 +35,12 @@ function createProjectWorkspace() {
   const route = useRoute();
   const id = computed(() => String(route.params.id ?? ''));
   const router = useRouter();
-  const project = computed(() => projects.find((p) => p.id === id.value) ?? projects[0]);
-  const section = ref<SectionKey>('gen');
+  const project = computed(() => ({ ...((route.path.startsWith('/legacy/') ? originalProjects.find(p=>p.id===id.value) : studio.value.projects.find(p => p.id === id.value)) ?? { id: id.value, name: '项目不存在', desc: '', color: '#11a3fd', accountIds: [], archived: false }), platforms: ['TikTok'] as Platform[], status: '进行中', owner: '我', start: '', end: '' }));
+  const section = computed<SectionKey>({ get: () => String(route.query.section ?? 'gen') as SectionKey, set: value => { void router.replace({ query: { ...route.query, section: value } }); } });
   const extraProducts = ref<Product[]>([]);
   const projectProducts = computed(() => [
     ...extraProducts.value.filter((p) => p.projectId === project.value.id),
-    ...products.filter((p) => p.projectId === project.value.id),
+    ...studio.value.products.filter((p) => p.projectId === project.value.id),
   ]);
   const selProductId = ref(projectProducts.value[0]?.id ?? '');
   const view = ref<'grid' | 'list'>('grid');
@@ -178,7 +178,7 @@ function createProjectWorkspace() {
   });
   const selectedProduct = computed(() => projectProducts.value.find((p) => p.id === selProductId.value));
   const addProduct = (item: Product) => {
-    extraProducts.value = [item, ...extraProducts.value];
+    studio.value.products.unshift(item);
     selProductId.value = item.id;
   };
   return {

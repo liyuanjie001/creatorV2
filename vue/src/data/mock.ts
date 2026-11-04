@@ -180,6 +180,8 @@ export const tasks: Task[] = [
 export const inspirations: Inspiration[] = [
   {
     id: 'V-01',
+    category: '生活好物',
+    country: '美国',
     title: 'ASMR 开箱：10 美元小物的仪式感',
     platform: 'TikTok',
     views: '4.2M',
@@ -191,6 +193,8 @@ export const inspirations: Inspiration[] = [
   },
   {
     id: 'V-02',
+    category: '美妆个护',
+    country: '美国',
     title: 'GRWM · 5 分钟通勤妆容挑战',
     platform: 'TikTok',
     views: '2.8M',
@@ -202,6 +206,8 @@ export const inspirations: Inspiration[] = [
   },
   {
     id: 'V-03',
+    category: '3C 数码',
+    country: '英国',
     title: 'POV：第一次用便携投影仪露营',
     platform: 'Instagram',
     views: '1.9M',
@@ -213,6 +219,8 @@ export const inspirations: Inspiration[] = [
   },
   {
     id: 'V-04',
+    category: '3C 数码',
+    country: '美国',
     title: '测评：100 美元 vs 1000 美元降噪耳机',
     platform: 'YouTube',
     views: '3.5M',
@@ -224,6 +232,8 @@ export const inspirations: Inspiration[] = [
   },
   {
     id: 'V-05',
+    category: '家居生活',
+    country: '德国',
     title: '一分钟看懂：智能家居布线避坑',
     platform: 'YouTube',
     views: '1.2M',
@@ -235,6 +245,8 @@ export const inspirations: Inspiration[] = [
   },
   {
     id: 'V-06',
+    category: '家居生活',
+    country: '英国',
     title: 'Before/After：租房厨房大改造',
     platform: 'Instagram',
     views: '2.2M',
@@ -246,6 +258,8 @@ export const inspirations: Inspiration[] = [
   },
   {
     id: 'V-07',
+    category: '职场生活',
+    country: '美国',
     title: '办公室暗语：实习生第一天 VS 一年后',
     platform: 'X',
     views: '986K',
@@ -257,6 +271,8 @@ export const inspirations: Inspiration[] = [
   },
   {
     id: 'V-08',
+    category: 'AI 工具',
+    country: '英国',
     title: 'AI 帮我写周报？ LinkedIn 大佬实测',
     platform: 'LinkedIn',
     views: '456K',
@@ -268,6 +284,8 @@ export const inspirations: Inspiration[] = [
   },
   {
     id: 'V-09',
+    category: '电商购物',
+    country: '美国',
     title: '黑五清单：跨境买家必抢 TOP10',
     platform: 'Facebook',
     views: '1.5M',

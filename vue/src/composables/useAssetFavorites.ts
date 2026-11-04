@@ -1,50 +1,17 @@
-import { computed, ref } from 'vue';
-import { assets, type Asset, type Inspiration } from '@/data/mock';
+import { computed } from 'vue';
+import { inspirations, assets, type Asset, type Inspiration } from '@/data/mock';
 
-const GLOBAL_KEY = '__chuhai_asset_favorites__';
-
-type FavStore = {
-  extra: ReturnType<typeof ref<Asset[]>>;
-};
-
-function getStore(): FavStore {
-  const g = globalThis as typeof globalThis & { [GLOBAL_KEY]?: FavStore };
-  if (!g[GLOBAL_KEY]) {
-    g[GLOBAL_KEY] = { extra: ref<Asset[]>([]) };
-  }
-  return g[GLOBAL_KEY];
-}
-
-const { extra } = getStore();
-
+import { studio } from '@/services/studio';
 export function useAssetFavorites() {
+  const extra = computed<Asset[]>(() => studio.value.favorites.map(id => ({ id: `FAV-${id}`, name: inspirations.find(i => i.id === id)?.title ?? studio.value.references.find(r => r.id === id)?.title ?? `收藏参考 ${id}`, type: '视频', size: '—', duration: '00:24', updatedAt: '已收藏', project: '爆款视频', day: '今天', favorite: true })));
   const allAssets = computed(() => [...extra.value, ...assets]);
 
   function addInspirationFavorite(item: Inspiration, projectName?: string) {
-    const id = `FAV-${item.id}`;
-    if (extra.value.some((a) => a.id === id) || assets.some((a) => a.id === id && a.favorite)) {
-      const existing = assets.find((a) => a.id === id || a.name.includes(item.title));
-      if (existing && !existing.favorite) existing.favorite = true;
-      return;
-    }
-    const asset: Asset = {
-      id,
-      name: item.duration === '图文' ? `${item.title}.png` : `${item.title}.mp4`,
-      type: item.duration === '图文' ? '图片' : '视频',
-      size: '—',
-      duration: item.duration === '图文' ? undefined : item.duration,
-      updatedAt: '刚刚',
-      project: projectName || item.platform,
-      day: '今天',
-      favorite: true,
-    };
-    extra.value = [asset, ...extra.value.filter((a) => a.id !== id)];
+    if (!studio.value.favorites.includes(item.id)) studio.value.favorites.push(item.id);
+    void projectName;
   }
 
-  function removeInspirationFavorite(itemId: string) {
-    const id = `FAV-${itemId}`;
-    extra.value = extra.value.filter((a) => a.id !== id);
-  }
+  function removeInspirationFavorite(itemId: string) { studio.value.favorites = studio.value.favorites.filter(id => id !== itemId); }
 
   return {
     extraFavorites: extra,

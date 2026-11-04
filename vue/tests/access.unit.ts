@@ -1,3 +1,4 @@
+import { identityService } from '@/services/identity';
 import { createHash } from 'node:crypto';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
@@ -7,7 +8,7 @@ import { createAppRouter } from '@/router';
 import { ACCESS_STORAGE_KEY, createAccessGate } from '@/lib/access';
 
 let wrapper: VueWrapper | undefined;
-beforeEach(() => localStorage.clear());
+beforeEach(() => { localStorage.clear(); identityService.demo(); });
 afterEach(() => {
   wrapper?.unmount();
   wrapper = undefined;

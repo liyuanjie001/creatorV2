@@ -32,7 +32,7 @@ import { computed, ref } from 'vue';
 import { useHomeProjects } from '@/composables/useHomeProjects';
 import type { Project } from '@/types/domain';
 
-const HOT_HIDDEN_KEY = 'chuhai-hide-home-hot-videos';
+import { studio } from '@/services/studio';
 
 const router = useRouter();
 const { homeProjects, addHomeProject, renameHomeProject, removeHomeProject } = useHomeProjects();
@@ -48,20 +48,9 @@ const renameName = ref('');
 const deleteOpen = ref(false);
 const deleteTarget = ref<Project | null>(null);
 
-const hotHidden = ref(
-  typeof localStorage !== 'undefined' && localStorage.getItem(HOT_HIDDEN_KEY) === '1',
-);
-
-function hideHotVideos() {
-  hotHidden.value = true;
-  localStorage.setItem(HOT_HIDDEN_KEY, '1');
-  toast.success('已隐藏爆款推荐');
-}
-
-function showHotVideos() {
-  hotHidden.value = false;
-  localStorage.removeItem(HOT_HIDDEN_KEY);
-}
+const hotHidden = computed(() => studio.value.hiddenHot);
+function hideHotVideos() { studio.value.hiddenHot = true; try { localStorage.setItem('chuhai-hide-home-hot-videos', '1'); } catch { toast.error('浏览器存储不可用，推荐显示设置未保存'); } toast.success('已隐藏爆款推荐'); }
+function showHotVideos() { studio.value.hiddenHot = false; try { localStorage.removeItem('chuhai-hide-home-hot-videos'); } catch { toast.error('浏览器存储不可用，推荐显示设置未保存'); } }
 
 function openInspiration() {
   void router.push('/inspiration');
@@ -141,13 +130,15 @@ function confirmDelete() {
   removeHomeProject(target.id);
   deleteOpen.value = false;
   deleteTarget.value = null;
-  toast.success('已删除项目', { description: target.name });
+  toast.success('项目已移入归档', { description: target.name });
 }
 </script>
 
 <template>
   <div class="relative flex min-h-[calc(100vh-72px)] flex-col">
     <div class="flex-1 pb-6">
+    <details v-if="studio.projects.some(p => p.archived)" class="mb-5 rounded-xl border border-slate-200 p-4 text-xs text-slate-500"><summary class="cursor-pointer">已归档项目（{{ studio.projects.filter(p=>p.archived).length }}）</summary><div v-for="p in studio.projects.filter(p=>p.archived)" :key="p.id" class="mt-3 flex justify-between"><span>{{p.name}}</span><button class="text-sky-600" @click="p.archived=false">恢复项目</button></div></details>
+<div v-if="empty" class="mb-5 flex items-center justify-between rounded-xl bg-sky-50 p-4 text-xs text-sky-700"><span>开始使用：① 创建项目 → ② 授权 TK 帐号 → ③ 创作并发布</span><button class="underline" @click="router.push('/accounts')">授权帐号 →</button></div>
     <section v-if="empty">
       <PageHeader title="项目" desc="创建和管理出海内容工作区，从第一版开始跑起来" />
       <Card class="gap-0 overflow-hidden rounded-2xl border-slate-200 bg-white py-0 shadow-none">
@@ -156,7 +147,7 @@ function confirmDelete() {
             <span
               class="inline-flex rounded-full border border-sky-100 bg-sky-50 px-3 py-1 text-[11px] font-medium text-sky-600"
             >
-              出海动力
+              Roxy出海内容宣发平台
             </span>
             <h2 class="mt-5 text-3xl font-semibold leading-snug tracking-tight text-slate-800">
               还没有项目，
@@ -196,7 +187,7 @@ function confirmDelete() {
               </div>
               <div>
                 <p class="text-[14px] font-medium text-slate-700">GlowUp 美妆出海</p>
-                <p class="mt-1 text-[11px] text-slate-400">自由创作 · 产品卡 · 灵感库</p>
+                <p class="mt-1 text-[11px] text-slate-400">自由创作 · 产品卡 · 视频管理</p>
               </div>
             </div>
             <div class="mt-5 space-y-2">
@@ -204,7 +195,7 @@ function confirmDelete() {
                 v-for="item in [
                   { icon: Sparkles, label: '自由创作' },
                   { icon: CreditCard, label: '产品卡' },
-                  { icon: Clapperboard, label: '灵感库' },
+                  { icon: Clapperboard, label: '视频管理' },
                 ]"
                 :key="item.label"
                 class="flex items-center gap-2 rounded-xl border border-white bg-white/90 px-4 py-3 shadow-sm"

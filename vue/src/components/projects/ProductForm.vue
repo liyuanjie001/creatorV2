@@ -6,6 +6,7 @@ import { type Product } from '@/data/mock';
 import { toast } from 'vue-sonner';
 import { cn } from '@/lib/utils';
 import { ref } from 'vue';
+import { saveProduct as persistProduct } from '@/services/studio';
 import { useProjectWorkspaceContext } from '@/composables/useProjectWorkspace';
 
 const galleryHues = [0, 50, 120, 200];
@@ -47,6 +48,7 @@ const generatePoints = () => {
   toast.success('已生成 5 条卖点（演示）');
 };
 
+const saveProduct = () => { persistProduct(product.id, { name: name.value, desc: desc.value, points: [...points.value], sellingPoint: points.value[0] ?? '' }); toast.success('产品卡已保存'); };
 const goCreate = () => {
   section.value = 'gen';
   toast.success('已进入自由创作，可引用本产品卡');
@@ -163,7 +165,7 @@ const goCreate = () => {
         <Button
           size="sm"
           class="gap-1.5 brand-gradient text-white hover:opacity-90"
-          @click="toast.success('产品卡已保存（演示）')"
+          @click="saveProduct"
         >
           <Check class="h-3.5 w-3.5" />
           保存

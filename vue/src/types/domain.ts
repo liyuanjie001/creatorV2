@@ -14,6 +14,8 @@ export interface Task {
 }
 
 export interface Inspiration {
+  category?: string;
+  country?: string;
   id: string;
   title: string;
   platform: Platform;

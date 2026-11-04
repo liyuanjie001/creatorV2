@@ -4,7 +4,8 @@ import { Card } from '@/components/ui';
 import { Badge } from '@/components/ui';
 import { Button } from '@/components/ui';
 import { PageHeader, PlatformBadge } from '@/components/shared';
-import { projects } from '@/data/mock';
+import { useHomeProjects } from '@/composables/useHomeProjects';
+const { homeProjects: projects } = useHomeProjects();
 import { cn } from '@/lib/utils';
 import { RouterLink } from 'vue-router';
 const statusStyle: Record<string, string> = {

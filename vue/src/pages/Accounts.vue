@@ -172,7 +172,7 @@ watch(
             <span
               class="inline-flex rounded-full border border-sky-100 bg-sky-50 px-3 py-1 text-[11px] font-medium text-sky-600"
             >
-              ROXYBROWSER × 出海动力
+              ROXYBROWSER × Roxy出海内容宣发平台
             </span>
             <h2 class="mt-5 text-3xl font-semibold leading-snug tracking-tight text-slate-800">
               一个窗口，

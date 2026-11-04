@@ -107,7 +107,7 @@ function createAnalyticsWorkspace() {
   }
   function manageAccount(id: string) {
     const window = manager.accountWindows(id)[0];
-    void router.push({ path: '/accounts', query: window ? { window: window.id } : {} });
+    void router.push({ path: '/roxy', query: window ? { window: window.id } : {} });
   }
   return {
     manager,

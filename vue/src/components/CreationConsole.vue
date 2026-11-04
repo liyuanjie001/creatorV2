@@ -3,6 +3,8 @@ import type { ConsoleDraft } from '@/types/domain';
 import { useDemoTimers } from '@/composables/useDemoTimers';
 import {
   Sparkles,
+  Maximize2,
+  Minimize2,
   AtSign,
   FolderOpen,
   Monitor,
@@ -34,8 +36,10 @@ import ConsoleAssetPicker from '@/components/ConsoleAssetPicker.vue';
 import ConsoleProductPicker from '@/components/ConsoleProductPicker.vue';
 import { toast } from 'vue-sonner';
 import { cn } from '@/lib/utils';
+import { animateTaskTransfer } from '@/lib/animateTaskTransfer';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
+import { studio, startGeneration, blankAttributes } from '@/services/studio';
 import { products, projects, type Asset, type Product } from '@/data/mock';
 import { useOptionalProjectWorkspace } from '@/composables/useProjectWorkspace';
 import { REMAKE_PROMPT, useRemakeDraft } from '@/composables/useRemakeDraft';
@@ -58,13 +62,14 @@ const engines = [
 ] as const;
 
 const qualityOptions = ['480', '720', '1080P', '4K'] as const;
-const ratioOptions = ['9:16', '16:9', '1:1', '4:5'] as const;
+const ratioOptions = ['9:16', '16:9', '4:3', '1:1', '4:5'] as const;
 
 const { delay } = useDemoTimers();
-const { placeholder, className, projectId } = defineProps<{
+const { placeholder, className, projectId, spacious } = defineProps<{
   placeholder?: string;
   className?: string;
   projectId?: string;
+  spacious?: boolean;
 }>();
 const emit = defineEmits<{
   start: [];
@@ -72,8 +77,14 @@ const emit = defineEmits<{
 }>();
 
 const router = useRouter();
+const creationRoute = useRoute();
 const mode = ref<'视频' | '图文'>('视频');
 const brief = ref('');
+const inputExpanded = ref(false);
+function toggleInputSize() {
+  inputExpanded.value = !inputExpanded.value;
+  void nextTick(() => consoleRoot.value?.querySelector('textarea')?.focus());
+}
 const engine = ref(0);
 const quality = ref<(typeof qualityOptions)[number]>('480');
 const ratio = ref<(typeof ratioOptions)[number]>('9:16');
@@ -81,6 +92,8 @@ const duration = ref('15');
 const audio = ref(true);
 const batch = ref(1);
 const generating = ref(false);
+const generateButton = ref<HTMLButtonElement | null>(null);
+let stopTaskTransfer: (() => void) | undefined;
 const draftIdx = ref(0);
 const menu = ref<MenuKey>(null);
 const menuStyle = ref<Record<string, string>>({});
@@ -96,7 +109,7 @@ const referenceVideo = remakeRef;
 const selectedAssets = ref<Asset[]>([]);
 const selectedProducts = ref<Product[]>([]);
 const MAX_ASSETS = 3;
-const currentProject = computed(() => projects.find((item) => item.id === projectId));
+const currentProject = computed(() => studio.value.projects.find((item) => item.id === projectId) ?? projects.find((item) => item.id === projectId));
 const projectLabel = computed(() => currentProject.value?.name ?? '新建项目');
 const productOptions = computed<Product[]>(
   () => workspace?.projectProducts.value ?? products.filter((item) => !projectId || item.projectId === projectId),
@@ -258,17 +271,52 @@ function onDocumentClick(event: MouseEvent) {
   menu.value = null;
 }
 
+function resizePrompt() {
+  if (!spacious) return;
+  const textarea = consoleRoot.value?.querySelector('textarea');
+  if (!textarea) return;
+  if (inputExpanded.value) {
+    textarea.style.height = '';
+    textarea.style.overflowY = 'auto';
+    return;
+  }
+  textarea.style.height = '120px';
+  const height = Math.max(120, Math.min(220, textarea.scrollHeight));
+  textarea.style.height = `${height}px`;
+  textarea.style.overflowY = textarea.scrollHeight > 220 ? 'auto' : 'hidden';
+}
+watch([brief, inputExpanded], () => { void nextTick(resizePrompt); }, { flush: 'post' });
+
 function onResize() {
+  resizePrompt();
   if (menu.value) placeMenu(menu.value);
 }
 
 onMounted(() => {
+  void nextTick(resizePrompt);
+  const reference = studio.value.references.find(r=>r.id===creationRoute.query.reference);
+  if (reference) { referenceVideo.value = { id: reference.id, title: reference.title, author: reference.author }; brief.value = '参考该内容的 Hook、叙事结构与节奏，结合我的产品创作新的品牌视频。'; }
+  const routeProduct = productOptions.value.find(p=>p.id===creationRoute.query.product);
+  if (routeProduct) selectedProducts.value = [routeProduct];
   document.addEventListener('mousedown', onDocumentClick);
   window.addEventListener('resize', onResize);
   window.addEventListener('scroll', onResize, true);
   applyRemakeDraft();
+  const editingFilm = studio.value.films.find(f => f.id === creationRoute.query.editFilm && f.projectId === projectId);
+  if (editingFilm) {
+    brief.value = editingFilm.brief;
+    mode.value = editingFilm.type;
+    duration.value = editingFilm.duration;
+    if (ratioOptions.includes(editingFilm.ratio as typeof ratioOptions[number])) ratio.value = editingFilm.ratio as typeof ratioOptions[number];
+    if (qualityOptions.includes(editingFilm.quality as typeof qualityOptions[number])) quality.value = editingFilm.quality as typeof qualityOptions[number];
+    selectedProducts.value = productOptions.value.filter(p => editingFilm.productIds.includes(p.id));
+    referenceVideo.value = editingFilm.reference ? { id: editingFilm.reference.id, title: editingFilm.reference.title, author: editingFilm.reference.author } : null;
+    void nextTick(() => consoleRoot.value?.querySelector('textarea')?.focus());
+  }
+  if (reference) void nextTick(() => consoleRoot.value?.querySelector('textarea')?.focus());
 });
 onBeforeUnmount(() => {
+  stopTaskTransfer?.();
   document.removeEventListener('mousedown', onDocumentClick);
   window.removeEventListener('resize', onResize);
   window.removeEventListener('scroll', onResize, true);
@@ -276,6 +324,23 @@ onBeforeUnmount(() => {
 
 function generate() {
   if (generating.value) return;
+  if (!brief.value.trim()) { toast.error('请描述你的创作需求'); return; }
+  if (projectId && studio.value.projects.find(p=>p.id===projectId)?.archived) { toast.error('归档项目无法生成'); return; }
+  if (projectId) {
+    for (let i = 0; i < batch.value; i++) startGeneration({ projectId, title: `${brief.value.slice(0, 24)}${batch.value > 1 ? ` #${i+1}` : ''}`, type: mode.value, source: '普通创作', duration: duration.value || '15', ratio: ratio.value, quality: quality.value, brief: brief.value, productIds: selectedProducts.value.map(p=>p.id), reference: studio.value.references.find(r=>r.id===referenceVideo.value?.id), version: 1, mediaIds: [], inPublishing: false, attributes: { ...blankAttributes(), product: selectedProducts.value[0]?.name ?? '未分类', format: mode.value === '图文' ? '图文轮播' : '产品展示' } });
+    const target = document.querySelector<HTMLElement>('[data-video-management]');
+    if (generateButton.value && target) {
+      stopTaskTransfer?.();
+      stopTaskTransfer = animateTaskTransfer(generateButton.value, target);
+    }
+    toast.success('生成视频任务提交成功', {
+      action: {
+        label: '查看',
+        onClick: () => { void router.push({ path: `/projects/${projectId}`, query: { section: 'publish', tab: 'creations' } }); },
+      },
+    });
+    return;
+  }
   const count = batch.value;
   const firstDraft = draftIdx.value;
   generating.value = true;
@@ -300,7 +365,7 @@ const chipClass =
 <template>
   <div
     ref="consoleRoot"
-    :class="cn('rounded-2xl border border-slate-200 bg-white p-3 shadow-sm', className)"
+    :class="cn('w-full rounded-2xl border border-slate-200 bg-white p-3 shadow-sm', spacious && 'p-4 xl:p-5', className)"
   >
     <div class="flex gap-3">
       <div class="flex flex-col gap-1">
@@ -327,7 +392,7 @@ const chipClass =
       </div>
 
       <div class="min-w-0 flex-1">
-        <div class="mb-2 flex flex-wrap items-center gap-2">
+        <div class="mb-3 flex flex-wrap items-center gap-2">
           <button
             ref="assetBtn"
             type="button"
@@ -408,30 +473,46 @@ const chipClass =
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+
         </div>
 
         <div
-          class="overflow-hidden rounded-xl border border-slate-200 bg-white"
+          class="relative overflow-hidden rounded-xl border border-slate-200 bg-white"
           :class="hasAttachments && 'border-sky-200 bg-slate-50/40'"
         >
+          <button
+            v-if="spacious"
+            type="button"
+            :aria-label="inputExpanded ? '收起输入框' : '放大输入框'"
+            :title="inputExpanded ? '收起输入框（Esc）' : '放大输入框'"
+            :aria-expanded="inputExpanded"
+            class="absolute right-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-lg bg-white/90 text-slate-400 transition hover:bg-sky-50 hover:text-sky-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-500"
+            @click="toggleInputSize"
+          >
+            <component :is="inputExpanded ? Minimize2 : Maximize2" class="h-4 w-4" />
+          </button>
           <div
             v-if="referenceVideo || selectedAssets.length > 0"
             class="flex flex-wrap gap-2 px-3 pt-3"
+            :class="spacious && 'pr-12'"
           >
             <div
               v-if="referenceVideo"
-              class="inline-flex max-w-full items-center gap-2 rounded-lg border border-slate-200 bg-white px-2 py-1.5 shadow-sm"
+              class="inline-flex w-full max-w-[380px] items-center gap-2.5 rounded-xl border border-sky-100 bg-sky-50/60 px-3 py-2"
             >
               <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-sky-100 text-sky-600">
                 <Play class="h-3.5 w-3.5 translate-x-px" fill="currentColor" />
               </span>
-              <span class="min-w-0 truncate text-[12px] font-medium text-slate-700">
-                {{ truncateName(referenceVideo.title || referenceVideo.author) }}
-              </span>
+              <div class="min-w-0 flex-1">
+                <p class="text-[11px] font-semibold text-sky-600">爆款复刻参考 · {{ studio.references.find(r => r.id === referenceVideo?.id)?.source || '爆款视频' }}</p>
+                <p class="mt-0.5 truncate text-[12px] font-medium text-slate-700" :title="referenceVideo.title || referenceVideo.author">{{ referenceVideo.title || referenceVideo.author }}</p>
+                <p v-if="studio.references.find(r => r.id === referenceVideo?.id)?.url" class="mt-0.5 truncate text-[11px] text-slate-400" :title="studio.references.find(r => r.id === referenceVideo?.id)?.url">{{ studio.references.find(r => r.id === referenceVideo?.id)?.url }}</p>
+                <p class="mt-0.5 text-[11px] leading-5 text-slate-500">参考脚本与节奏，创作品牌新视频。</p>
+              </div>
               <button
                 type="button"
                 title="移除参考视频"
-                class="rounded p-0.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+                class="shrink-0 rounded p-0.5 text-slate-400 transition hover:bg-sky-100 hover:text-sky-600"
                 @click="clearReference"
               >
                 <X class="h-3.5 w-3.5" />
@@ -467,10 +548,14 @@ const chipClass =
           </div>
           <Textarea
             v-model="brief"
+            aria-label="创作提示词"
+            @keydown.esc="inputExpanded = false"
             :placeholder="placeholder ?? '描述你的场景，使用 @ 添加产品卡信息'"
             :class="
               cn(
-                'min-h-[88px] resize-none border-0 bg-transparent text-[13.5px] leading-relaxed placeholder:text-slate-400 focus-visible:ring-0',
+                'resize-none border-0 bg-transparent text-[13.5px] leading-relaxed placeholder:text-slate-400 focus-visible:ring-0',
+                spacious ? (inputExpanded ? 'h-[min(52vh,480px)] min-h-[260px] p-4 text-sm' : 'h-[120px] min-h-[120px] max-h-[220px] p-4 text-sm') : 'min-h-[88px]',
+                spacious && 'pr-12',
                 (referenceVideo || selectedAssets.length > 0) && 'pt-2',
               )
             "
@@ -571,6 +656,7 @@ const chipClass =
 
           <button
             type="button"
+            ref="generateButton"
             :disabled="generating"
             class="flex h-12 shrink-0 flex-col items-center justify-center rounded-xl brand-gradient px-5 text-white shadow-md shadow-sky-300/40 transition-all hover:opacity-90 disabled:opacity-60"
             @click="generate"

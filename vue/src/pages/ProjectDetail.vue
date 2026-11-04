@@ -1,273 +1,67 @@
 <script setup lang="ts">
-import {
-  Sparkles,
-  CreditCard,
-  Lightbulb,
-  Users,
-  Rocket,
-  CalendarClock,
-  MousePointerClick,
-  ChevronDown,
-  FolderPlus,
-} from 'lucide-vue-next';
-import CreationConsole from '@/components/CreationConsole.vue';
-import { cn } from '@/lib/utils';
-import BriefPanel from '@/components/projects/BriefPanel.vue';
-import ChatPanel from '@/components/projects/ChatPanel.vue';
-import DirectorPanel from '@/components/projects/DirectorPanel.vue';
-import { projects } from '@/data/mock';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui';
-type SectionKey =
-  | 'gen'
-  | 'brief'
-  | 'product'
-  | 'inspire'
-  | 'element'
-  | 'canvas'
-  | 'chat'
-  | 'director'
-  | 'account'
-  | 'publish'
-  | 'attribution'
-  | 'schedule'
-  | 'trash';
-const sectionTitles: Record<SectionKey, string> = {
-  gen: '自由创作',
-  brief: '项目简报',
-  product: '产品卡',
-  inspire: '灵感库',
-  element: '元素',
-  canvas: 'Canvas',
-  chat: 'AI 聊天',
-  director: 'AI 导演',
-  account: '账号管理',
-  publish: '发布管理',
-  attribution: '数据归因',
-  schedule: '任务调度',
-  trash: '回收站',
-};
-const primaryNav: { key: SectionKey; label: string; icon: typeof Sparkles }[] = [
-  { key: 'gen', label: '自由创作', icon: Sparkles },
-  { key: 'product', label: '产品卡', icon: CreditCard },
-  { key: 'inspire', label: '灵感库', icon: Lightbulb },
-];
-const manageNav: { key: SectionKey; label: string; icon: typeof Sparkles }[] = [
-  { key: 'account', label: '账号管理', icon: Users },
-  { key: 'publish', label: '发布管理', icon: Rocket },
-  { key: 'attribution', label: '数据归因', icon: MousePointerClick },
-  { key: 'schedule', label: '任务调度', icon: CalendarClock },
-];
-const comingSoonSections = new Set<SectionKey>(['account', 'publish', 'attribution', 'schedule']);
-const comingSoonCopy: Partial<
-  Record<SectionKey, { desc: string; highlights: string[] }>
-> = {
-  account: {
-    desc: '项目账号与窗口身份统一管理，协作更顺畅。批量开号、巡检状态，为自动发布打好底座。',
-    highlights: ['多号绑定', '状态巡检', '发布底座'],
-  },
-  publish: {
-    desc: '创作完成后一键分发多平台，曝光节奏可控。封面文案一次配置，多号复用更省心。',
-    highlights: ['批量发布', '素材复用', '进度追踪'],
-  },
-  attribution: {
-    desc: '串起播放到转化，看清真正带来增长的内容。爆款与低效分层，让数据反哺下一轮创作。',
-    highlights: ['三维归因', '爆款分层', '数据反哺'],
-  },
-  schedule: {
-    desc: '按日历自动排期，让矩阵内容持续稳定输出。创作到发布节点可视，少盯档、多打磨。',
-    highlights: ['日历排期', '节点可视', '人效提升'],
-  },
-};
-import { computed, ref, watch } from 'vue';
+import { computed, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import { Sparkles, CreditCard, Send, BarChart3, Settings, MessageSquare, ChevronDown, Check, FolderPlus } from 'lucide-vue-next';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui';
+import { studio } from '@/services/studio';
 import { useProjectWorkspace } from '@/composables/useProjectWorkspace';
-import GenerationsPanel from '@/components/projects/GenerationsPanel.vue';
 import ProductsPanel from '@/components/projects/ProductsPanel.vue';
-import ProjectInspirationPanel from '@/components/projects/ProjectInspirationPanel.vue';
-import ProjectElementsPanel from '@/components/projects/ProjectElementsPanel.vue';
-import CanvasPanel from '@/components/projects/CanvasPanel.vue';
-import ProjectAccountsPanel from '@/components/projects/ProjectAccountsPanel.vue';
-import PublishingPanel from '@/components/projects/PublishingPanel.vue';
-import AttributionPanel from '@/components/projects/AttributionPanel.vue';
-import SchedulePanel from '@/components/projects/SchedulePanel.vue';
-import ProjectTrashPanel from '@/components/projects/ProjectTrashPanel.vue';
-import ComingSoonMask from '@/components/ComingSoonMask.vue';
-const { project, section, generating, related, handleDone, router } = useProjectWorkspace();
-
-const showComingSoon = ref(false);
-const hasCreationHistory = computed(() => related.value.length > 0 || generating.value);
-const isComingSoonSection = computed(() => comingSoonSections.has(section.value));
-const comingSoonMeta = computed(
-  () =>
-    comingSoonCopy[section.value] ?? {
-      desc: '全新管理能力即将上线，助力项目从创作到发布、归因形成完整闭环。',
-      highlights: [] as string[],
-    },
-);
-
-watch(section, () => {
-  showComingSoon.value = false;
-});
-
-function switchProject(id: string) {
-  if (id === project.value.id) return;
-  void router.push(`/projects/${id}`);
-}
+import StudioCreation from '@/components/studio/StudioCreation.vue';
+import StudioPublishing from '@/components/studio/StudioPublishing.vue';
+import StudioAnalytics from '@/components/studio/StudioAnalytics.vue';
+import StudioSettings from '@/components/studio/StudioSettings.vue';
+const route = useRoute(); const router = useRouter(); useProjectWorkspace();
+const project = computed(() => studio.value.projects.find(p=>p.id === route.params.id));
+const nav = [{key:'gen',label:'自由创作',icon:Sparkles},{key:'product',label:'产品卡',icon:CreditCard},{key:'publish',label:'视频管理',icon:Send},{key:'analytics',label:'数据采集',icon:BarChart3},{key:'settings',label:'项目设置',icon:Settings}];
+const aliases: Record<string,string> = {attribution:'analytics',account:'settings',schedule:'publish',chat:'gen',director:'gen'};
+const section = computed(() => aliases[String(route.query.section)] ?? (nav.some(n=>n.key===route.query.section) ? String(route.query.section) : 'gen'));
+watch(() => route.query.section, legacy => {
+  if (legacy === 'chat' || legacy === 'director') void router.replace({query:{...route.query,section:'gen',mode:'expert'}});
+}, {immediate:true});
+const creationNav = [{ label: '自由创作', mode: 'normal', icon: Sparkles }, { label: '专家模式', mode: 'expert', icon: MessageSquare }];
+const managementNav = computed(() => nav.filter(n => ['product', 'publish', 'analytics'].includes(n.key)));
+function select(key: string, mode = 'normal') { void router.push({query:{...route.query, section:key, ...(key==='gen' ? {mode} : {mode:undefined})}}); }
 </script>
-
 <template>
-  <div class="flex h-full overflow-hidden">
-    <aside aria-label="项目栏目" class="flex w-60 shrink-0 flex-col border-r border-slate-200/80 bg-white">
-      <div class="flex-1 overflow-y-auto scroll-slim px-3 pb-2 pt-5">
+  <div v-if="project" class="flex h-full min-w-0">
+    <aside class="flex w-56 shrink-0 flex-col border-r border-slate-100 px-3 py-4 xl:w-60">
+      <div class="mb-5">
         <DropdownMenu>
           <DropdownMenuTrigger as-child>
-            <button
-              type="button"
-              aria-label="切换项目"
-              class="mb-4 flex w-full items-center gap-2 rounded-xl px-2 py-1.5 text-left transition-colors hover:bg-slate-50"
-            >
-              <span
-                class="h-3.5 w-3.5 shrink-0 rounded-[5px]"
-                :style="{
-                  backgroundColor: project.color,
-                }"
-              ></span>
-              <span class="min-w-0 flex-1 truncate text-[15px] font-semibold text-slate-800">{{
-                project.name
-              }}</span>
+            <button type="button" aria-label="切换项目" class="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-800 outline-none hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-sky-200">
+              <span class="h-3.5 w-3.5 shrink-0 rounded-md" :style="{ background: project.color }" />
+              <span class="min-w-0 flex-1 truncate text-left">{{ project.name }}</span>
               <ChevronDown class="h-4 w-4 shrink-0 text-slate-400" />
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align="start"
-            class="w-56 border-slate-200 bg-white p-1 text-slate-800 shadow-lg"
-          >
-            <DropdownMenuItem
-              v-for="item in projects"
-              :key="item.id"
-              class="cursor-pointer gap-2 focus:bg-sky-50"
-              @click="switchProject(item.id)"
-            >
-              <span
-                class="h-2.5 w-2.5 shrink-0 rounded-[4px]"
-                :style="{ backgroundColor: item.color }"
-              />
-              <span class="truncate" :class="item.id === project.id ? 'font-medium text-sky-600' : ''">{{
-                item.name
-              }}</span>
-            </DropdownMenuItem>
-            <DropdownMenuSeparator class="bg-slate-100" />
-            <DropdownMenuItem
-              class="cursor-pointer gap-2 focus:bg-sky-50"
-              @click="router.push('/projects/new')"
-            >
-              <FolderPlus class="h-3.5 w-3.5 text-slate-400" />
-              新建项目
+          <DropdownMenuContent align="start" :side-offset="8" class="w-64 max-w-[calc(100vw-32px)] rounded-2xl border-slate-200 bg-white p-1.5 shadow-lg" aria-label="项目列表">
+            <div class="max-h-72 overflow-y-auto">
+              <DropdownMenuItem v-for="p in studio.projects.filter(p=>!p.archived)" :key="p.id" class="my-0.5 flex cursor-pointer items-center gap-3 rounded-xl px-3 py-3 text-sm" :class="p.id === project.id ? 'bg-sky-50 text-sky-600' : 'text-slate-700'" :aria-current="p.id === project.id ? 'page' : undefined" @select="router.push(`/projects/${p.id}`)">
+                <span class="h-3.5 w-3.5 shrink-0 rounded-md" :style="{ background: p.color }" />
+                <span class="min-w-0 flex-1 truncate">{{ p.name }}</span>
+                <Check v-if="p.id === project.id" class="h-4 w-4 shrink-0 text-sky-600" />
+              </DropdownMenuItem>
+            </div>
+            <DropdownMenuSeparator class="my-1.5 bg-slate-100" />
+            <DropdownMenuItem class="flex cursor-pointer items-center gap-3 rounded-xl px-3 py-3 text-sm text-slate-700" @select="router.push('/projects/new')">
+              <FolderPlus class="h-4 w-4 text-slate-500" />新建项目
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-        <nav class="space-y-0.5">
-          <button
-            v-for="item in primaryNav"
-            :key="item.key"
-            @click="section = item.key"
-            :class="
-              cn(
-                'flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-[14px] transition-colors',
-                section === item.key
-                  ? 'bg-sky-50 font-medium text-sky-600'
-                  : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800',
-              )
-            "
-          >
-            <component :is="item.icon" class="h-4 w-4 shrink-0" />
-            <span class="flex-1 text-left">{{ item.label }}</span>
-          </button>
-        </nav>
-        <div class="mb-1.5 mt-6 px-2 text-[11px] font-medium tracking-wider text-slate-400">管理</div>
-        <nav class="space-y-0.5">
-          <button
-            v-for="item in manageNav"
-            :key="item.key"
-            @click="section = item.key"
-            :class="
-              cn(
-                'flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-[14px] transition-colors',
-                section === item.key
-                  ? 'bg-sky-50 font-medium text-sky-600'
-                  : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800',
-              )
-            "
-          >
-            <component :is="item.icon" class="h-4 w-4 shrink-0" />
-            <span class="flex-1 text-left">{{ item.label }}</span>
-          </button>
-        </nav>
       </div>
+      <nav aria-label="项目导航">
+        <p class="mb-2 px-3 text-[11px] font-medium text-slate-400">创作</p>
+        <button v-for="n in creationNav" :key="n.mode" class="mb-1 flex w-full items-center gap-3 rounded-xl px-3 py-3 text-[13px]" :class="section==='gen' && (route.query.mode==='expert'?'expert':'normal')===n.mode ? 'bg-sky-50 font-medium text-sky-600':'text-slate-500 hover:bg-slate-50'" :aria-current="section==='gen' && (route.query.mode==='expert'?'expert':'normal')===n.mode ? 'page':undefined" @click="select('gen', n.mode)">
+          <component :is="n.icon" class="h-4 w-4" />{{n.label}}
+        </button>
+        <p class="mb-2 mt-7 px-3 text-[11px] font-medium text-slate-400">管理</p>
+        <button v-for="n in managementNav" :key="n.key" :data-video-management="n.key === 'publish' ? '' : undefined" class="mb-1 flex w-full items-center gap-3 rounded-xl px-3 py-3 text-[13px]" :class="section===n.key?'bg-sky-50 font-medium text-sky-600':'text-slate-500 hover:bg-slate-50'" :aria-current="section===n.key?'page':undefined" @click="select(n.key)">
+          <component :is="n.icon" class="h-4 w-4" />{{n.label}}
+        </button>
+      </nav>
+      <button aria-label="项目设置" title="项目设置" class="mt-auto self-end rounded-lg p-2 text-slate-400 hover:bg-slate-50 hover:text-sky-600" @click="select('settings')"><Settings class="h-4 w-4" /></button>
     </aside>
-    <div class="flex min-w-0 flex-1 flex-col">
-      <div class="flex-1 overflow-y-auto scroll-slim">
-        <template v-if="section === 'gen'">
-          <div class="pb-16 pt-10">
-            <div
-              class="mx-auto max-w-4xl px-6"
-              :class="!hasCreationHistory && 'translate-y-[200px]'"
-            >
-              <h1 class="text-center text-[28px] font-bold brand-text">让你的品牌故事鲜活起来</h1>
-              <p class="mt-2 text-center text-[13px] text-slate-500">
-                可选择产品卡与目标项目；未选项目时点击生成会自动新建项目
-              </p>
-              <CreationConsole
-                class="mt-8"
-                :project-id="project.id"
-                placeholder="描述你的场景，使用 @ 添加产品卡信息"
-                @start="generating = true"
-                @done="handleDone"
-              />
-            </div>
-            <div v-if="hasCreationHistory" class="mt-10 px-6">
-              <GenerationsPanel />
-            </div>
-          </div>
-        </template>
-        <div v-else class="relative min-h-full px-6 py-5">
-          <div :class="isComingSoonSection && showComingSoon && 'pointer-events-none select-none'">
-            <div class="flex flex-wrap items-center gap-2.5">
-              <h1 class="text-lg font-semibold text-slate-800">
-                {{ sectionTitles[section] }}
-              </h1>
-              <ComingSoonMask v-if="isComingSoonSection" @open="showComingSoon = true" />
-            </div>
-            <div class="mt-5">
-              <template v-if="section === 'brief'"><BriefPanel :projectId="project.id"></BriefPanel></template>
-              <ProductsPanel v-if="section === 'product'" />
-              <ProjectInspirationPanel v-if="section === 'inspire'" />
-              <template v-if="section === 'chat'"><ChatPanel></ChatPanel></template>
-              <template v-if="section === 'director'"><DirectorPanel></DirectorPanel></template>
-              <ProjectElementsPanel v-if="section === 'element'" />
-              <CanvasPanel v-if="section === 'canvas'" />
-              <ProjectAccountsPanel v-if="section === 'account'" />
-              <PublishingPanel v-if="section === 'publish'" />
-              <AttributionPanel v-if="section === 'attribution'" />
-              <SchedulePanel v-if="section === 'schedule'" />
-              <ProjectTrashPanel v-if="section === 'trash'" />
-            </div>
-          </div>
-          <ComingSoonMask
-            v-if="isComingSoonSection && showComingSoon"
-            mode="page"
-            :title="`${sectionTitles[section]} · 敬请期待`"
-            :desc="comingSoonMeta.desc"
-            :highlights="comingSoonMeta.highlights"
-            @back="showComingSoon = false"
-          />
-        </div>
-      </div>
-    </div>
+    <main class="min-w-0 flex-1 overflow-y-auto scroll-slim"><div v-if="project.archived" class="m-6 rounded-xl bg-amber-50 p-4 text-sm text-amber-700">该项目已归档，仅供查看。<button class="ml-4 underline" @click="project.archived=false">恢复项目</button></div><StudioCreation v-if="section==='gen'" :project-id="project.id" /><div v-else class="p-6"><header class="mb-6"><h1 class="text-xl font-semibold text-slate-800">{{nav.find(n=>n.key===section)?.label}}</h1><p class="mt-2 text-xs text-slate-400">{{project.name}} · {{section==='publish'?'统一管理创作内容，预览下载、一键发布，随时追踪发布进度':section==='analytics'?'用真实的数据边界，理解每一条内容':'让创作与管理保持有序'}}</p></header><ProductsPanel v-if="section==='product'" /><StudioPublishing v-if="section==='publish'" :project-id="project.id" /><StudioAnalytics v-if="section==='analytics'" :project-id="project.id" /><StudioSettings v-if="section==='settings'" :project-id="project.id" /></div></main>
   </div>
+  <div v-else class="p-16 text-center"><h1 class="text-xl">项目不存在</h1><p class="my-4 text-sm text-slate-400">项目可能已删除，或属于另一个工作空间。</p><button class="studio-primary" @click="router.push('/')">返回项目</button></div>
 </template>

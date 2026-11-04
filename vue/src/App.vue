@@ -1,4 +1,11 @@
 <script setup lang="ts">
+import { onMounted, onBeforeUnmount } from 'vue';
+import { tickStudio, storageError } from '@/services/studio';
+import { currentUser } from '@/services/identity';
+let ticker: ReturnType<typeof setInterval>;
+let ticking = false;
+onMounted(() => { ticker = setInterval(async () => { if (ticking || !currentUser.value) return; ticking = true; try { await tickStudio(); } finally { ticking = false; } }, 1000); });
+onBeforeUnmount(() => clearInterval(ticker));
 import { RouterView, useRoute } from 'vue-router';
 import { Toaster } from 'vue-sonner';
 import Sidebar from '@/layout/Sidebar.vue';
@@ -9,9 +16,10 @@ const route = useRoute();
 
 <template>
   <div class="min-h-screen bg-[#eef0f3] text-slate-900">
-    <RouterView v-if="route.name === 'unlock'" />
+    <RouterView v-if="route.name === 'unlock' || route.name === 'auth'" />
     <template v-else-if="route.matched.length">
       <Sidebar />
+      <div v-if="storageError" role="alert" class="fixed bottom-4 right-4 z-50 rounded-xl bg-amber-50 p-3 text-xs text-amber-800">{{ storageError }}</div>
       <div class="min-h-screen py-3 pl-[104px] pr-3">
         <div
           :class="

@@ -250,7 +250,7 @@ const adopt = () => {
       </Button>
     </div>
     <p class="mt-2 text-center text-[11px] text-slate-300">
-      每次对话生成的方案会自动保存到「妙记」，可在创意中心下方查看
+      每次对话生成的方案会自动保存到「妙记」，可在爆款视频下方查看
     </p>
   </div>
 </template>

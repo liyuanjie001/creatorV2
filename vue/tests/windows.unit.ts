@@ -1,3 +1,4 @@
+import { identityService } from '@/services/identity';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { createMemoryHistory } from 'vue-router';
@@ -12,6 +13,7 @@ const manager = useWindowManager();
 let wrapper: VueWrapper | undefined;
 let warnings: string[] = [];
 beforeEach(() => {
+  identityService.demo();
   localStorage.clear();
   localStorage.setItem(ACCESS_STORAGE_KEY, __ACCESS_PASSWORD_HASH__);
   manager.reload();
@@ -27,7 +29,7 @@ afterEach(async () => {
   vi.useRealTimers();
   expect(warnings).toEqual([]);
 });
-async function open(path = '/accounts') {
+async function open(path = '/roxy') {
   const router = createAppRouter(createMemoryHistory());
   await router.push(path);
   await router.isReady();
@@ -157,7 +159,7 @@ test('窗口搜索、状态筛选、空状态与清除筛选可操作', async ()
 
 test('窗口详情识别未登录平台，失效账号恢复并同步后状态持久化', async () => {
   manager.synchronize(['roxy-P2']);
-  await open('/accounts?window=W-P2-2');
+  await open('/roxy?window=W-P2-2');
   expect(dialog().textContent).toContain('未登录');
   expect(dialog().textContent).toContain('登录失效');
   await click('模拟恢复登录并同步');
@@ -206,11 +208,11 @@ test('每日趋势、单视频、窗口和平台汇总在相同范围下相符',
 
 test('项目详情只展示所属窗口，无匹配项目不回退其他账号', async () => {
   manager.synchronize(['roxy-P1', 'roxy-P2']);
-  const { app, router } = await open('/projects/P1');
+  const { app, router } = await open('/legacy/projects/P1');
   await click('账号管理');
   expect(app.text()).toContain('GlowUp · 品牌主窗口');
   expect(app.text()).not.toContain('TechNova · 品牌主窗口');
-  await router.push('/projects/P3');
+  await router.push('/legacy/projects/P3');
   await flushPromises();
   await click('账号管理');
   expect(app.text()).toContain('当前项目尚未同步窗口');
@@ -243,7 +245,7 @@ test('任务按项目和平台选择有效账号，切换条件清理旧选择',
 
 test('从项目发布入口进入任务时保留项目与默认平台', async () => {
   manager.synchronize(['roxy-P1', 'roxy-P2']);
-  const { app, router } = await open('/projects/P2');
+  const { app, router } = await open('/legacy/projects/P2');
   await router.push({ path: '/tasks/new', query: { project: 'P2' } });
   await flushPromises();
   expect(router.currentRoute.value.query.project).toBe('P2');

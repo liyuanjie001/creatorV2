@@ -1,4 +1,5 @@
 import { createRouter, createWebHashHistory, type RouterHistory } from 'vue-router';
+import { currentUser } from '@/services/identity';
 import { accessGate, unlockDestination } from '@/lib/access';
 
 export function createAppRouter(history: RouterHistory = createWebHashHistory(), gate = accessGate) {
@@ -6,6 +7,9 @@ export function createAppRouter(history: RouterHistory = createWebHashHistory(),
     history,
     scrollBehavior: () => ({ top: 0 }),
     routes: [
+      { path: '/auth', name: 'auth', component: () => import('./pages/Auth.vue') },
+      { path: '/legacy/projects/:id', component: () => import('./pages/LegacyProjectDetail.vue'), meta: { immersive: true } },
+      { path: '/roxy', component: () => import('./pages/Accounts.vue'), meta: { wide: true } },
       { path: '/unlock', name: 'unlock', component: () => import('./pages/Unlock.vue') },
       { path: '/', component: () => import('./pages/Dashboard.vue'), meta: { wide: true } },
       {
@@ -16,7 +20,7 @@ export function createAppRouter(history: RouterHistory = createWebHashHistory(),
       { path: '/notes', component: () => import('./pages/Notes.vue'), meta: { wide: true } },
       { path: '/create', component: () => import('./pages/Create.vue'), meta: { wide: true } },
       { path: '/trends', component: () => import('./pages/Trends.vue'), meta: { wide: true } },
-      { path: '/accounts', component: () => import('./pages/Accounts.vue'), meta: { wide: true } },
+      { path: '/accounts', component: () => import('./pages/TKAccounts.vue'), meta: { wide: true } },
       { path: '/analytics', component: () => import('./pages/Analytics.vue'), meta: { wide: true } },
       { path: '/tasks', component: () => import('./pages/Tasks.vue') },
       { path: '/tasks/new', component: () => import('./pages/NewTask.vue') },
@@ -50,6 +54,8 @@ export function createAppRouter(history: RouterHistory = createWebHashHistory(),
       return gate.isUnlocked() ? { path: unlockDestination(to.query.redirect), replace: true } : true;
     }
     if (!gate.isUnlocked()) return { name: 'unlock', query: { redirect: to.fullPath }, replace: true };
+    if (!currentUser.value && to.name !== 'auth') return { name: 'auth', query: { redirect: to.fullPath }, replace: true };
+    if (currentUser.value && to.name === 'auth') return { path: unlockDestination(to.query.redirect), replace: true };
     return true;
   });
   return router;

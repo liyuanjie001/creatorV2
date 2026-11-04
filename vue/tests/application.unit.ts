@@ -1,3 +1,5 @@
+import { studio } from '@/services/studio';
+import { identityService } from '@/services/identity';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { createMemoryHistory } from 'vue-router';
@@ -13,11 +15,13 @@ let wrapper: VueWrapper | undefined;
 let warnings: string[] = [];
 
 beforeEach(() => {
+  identityService.demo();
   localStorage.setItem(ACCESS_STORAGE_KEY, __ACCESS_PASSWORD_HASH__);
   localStorage.removeItem(WINDOW_STORAGE_KEY);
   localStorage.removeItem('chuhai-home-projects');
   localStorage.removeItem('chuhai-hide-home-hot-videos');
   resetHomeProjects();
+  studio.value.hiddenHot = false;
   useWindowManager().reload();
   warnings = [];
   vi.useFakeTimers();
@@ -66,16 +70,16 @@ function button(text: string | RegExp, root = wrapper) {
 describe('全部路由挂载真实 Vue 组件', () => {
   const paths = [
     ['/', '还没有项目'],
-    ['/inspiration', '创意中心'],
+    ['/inspiration', '爆款视频'],
     ['/notes', '妙记'],
     ['/create', '让你的品牌故事鲜活起来'],
-    ['/accounts', '窗口管理'],
+    ['/accounts', '帐号管理'],
     ['/analytics', '数据分析'],
     ['/tasks', '任务管理'],
     ['/tasks/new', '新建任务'],
     ['/projects', '全部项目'],
     ['/projects/new', '品牌'],
-    ['/projects/P1', 'GlowUp 美妆出海'],
+    ['/projects/P1', '项目不存在'],
     ['/assets', '素材'],
     ['/settings', '设置中心'],
     ['/trash', '回收站'],
@@ -112,7 +116,7 @@ test('创作控制台生成结果出现在我的创作', async () => {
 });
 
 test('商品切换重置表单，跨项目导航隔离状态', async () => {
-  const { app, router } = await open('/projects/P1');
+  const { app, router } = await open('/legacy/projects/P1');
   const productNav = app.findAll('aside button').find((item) => item.text().startsWith('产品卡'));
   if (!productNav) throw new Error('产品卡导航不存在');
   await productNav.trigger('click');
@@ -122,14 +126,14 @@ test('商品切换重置表单，跨项目导航隔离状态', async () => {
   expect(names).toContain('烟酰胺焕肤精华 30ml');
   await button(/透明质酸保湿面霜/).trigger('click');
   expect(app.findAll('input').map((item) => item.element.value)).toContain('透明质酸保湿面霜');
-  await router.push('/projects/P2');
+  await router.push('/legacy/projects/P2');
   await flushPromises();
   expect(app.text()).toContain('TechNova 北美');
   expect(app.text()).not.toContain('透明质酸保湿面霜');
 });
 
 test('项目详情 13 个栏目使用真实面板', async () => {
-  const { app } = await open('/projects/P1');
+  const { app } = await open('/legacy/projects/P1');
   const expected = [
     ['产品卡', '烟酰胺焕肤精华'],
     ['灵感库', '翻拍'],
@@ -149,7 +153,7 @@ test('项目详情 13 个栏目使用真实面板', async () => {
 });
 
 test('创作台点击素材库和产品卡打开选择面板', async () => {
-  const { app } = await open('/projects/P1');
+  const { app } = await open('/legacy/projects/P1');
   await app.find('button[title="从素材库选择"]').trigger('click');
   await flushPromises();
   expect(document.body.textContent).toContain('本地上传');
@@ -164,7 +168,7 @@ test('创作台点击素材库和产品卡打开选择面板', async () => {
 });
 
 test('项目灵感库按源码展示推荐爆款与翻拍操作', async () => {
-  const { app } = await open('/projects/P1');
+  const { app } = await open('/legacy/projects/P1');
   const nav = app.findAll('aside button').find((item) => item.text().startsWith('灵感库'));
   if (!nav) throw new Error('灵感库导航不存在');
   await nav.trigger('click');
@@ -178,7 +182,13 @@ test('项目灵感库按源码展示推荐爆款与翻拍操作', async () => {
 
   const remake = app.findAll('button').find((item) => item.text() === '一键翻拍');
   if (!remake) throw new Error('一键翻拍按钮不存在');
+  studio.value.projects.push({ id: 'P1', name: 'GlowUp 美妆出海', desc: '', color: '#11a3fd', accountIds: [], archived: false });
   await remake.trigger('click');
+  await vi.advanceTimersByTimeAsync(100);
+  await flushPromises();
+  const projectChoice = Array.from(document.querySelectorAll('[data-remake-project-picker] button')).find(item => item.textContent?.trim() === 'GlowUp 美妆出海');
+  expect(projectChoice).toBeTruthy();
+  (projectChoice as HTMLButtonElement).click();
   await flushPromises();
   expect(app.text()).toContain('自由创作');
   expect(app.find('button[title="移除参考视频"]').exists()).toBe(true);
@@ -188,8 +198,8 @@ test('项目灵感库按源码展示推荐爆款与翻拍操作', async () => {
   expect((textarea.element as HTMLTextAreaElement).value).toContain('完全复刻原视频脚本和画面');
 });
 
-test('项目侧栏可切换到其他项目', async () => {
-  const { app, router } = await open('/projects/P1');
+test('旧项目侧栏可切换到其他项目', async () => {
+  const { app, router } = await open('/legacy/projects/P1');
   expect(app.text()).toContain('GlowUp 美妆出海');
   const trigger = app.find('button[aria-label="切换项目"]');
   expect(trigger.exists()).toBe(true);
@@ -201,7 +211,7 @@ test('项目侧栏可切换到其他项目', async () => {
   if (!option) throw new Error('项目切换菜单未打开');
   (option as HTMLElement).click();
   await flushPromises();
-  expect(router.currentRoute.value.path).toBe('/projects/P2');
+  expect(router.currentRoute.value.path).toBe('/legacy/projects/P2');
   expect(app.text()).toContain('TechNova 北美');
 });
 
@@ -288,6 +298,7 @@ test('第一版创建校验项目名并进入工作区，返回首页展示项�
   const snapshot = [...projects];
   try {
     resetHomeProjects();
+  studio.value.hiddenHot = false;
     const { app, router } = await open('/');
     expect(app.text()).toContain('还没有项目');
     expect(app.text()).not.toContain('从模板新建');
@@ -313,7 +324,7 @@ test('第一版创建校验项目名并进入工作区，返回首页展示项�
     field.dispatchEvent(new Event('input', { bubbles: true }));
     confirm.click();
     await flushPromises();
-    expect(router.currentRoute.value.path).toMatch(/^\/projects\/P-\d+$/);
+    expect(router.currentRoute.value.path).toMatch(/^\/projects\/P-[a-f0-9-]+$/);
     await router.push('/');
     await flushPromises();
     expect(app.text()).toContain('我的项目');
@@ -321,6 +332,7 @@ test('第一版创建校验项目名并进入工作区，返回首页展示项�
     expect(app.text()).not.toContain('还没有项目');
   } finally {
     resetHomeProjects();
+  studio.value.hiddenHot = false;
     projects.splice(0, projects.length, ...snapshot);
   }
 });
@@ -331,6 +343,7 @@ test('手动创建项目校验品牌名称并进入工作区', async () => {
   const snapshot = [...projects];
   try {
     resetHomeProjects();
+  studio.value.hiddenHot = false;
     const { app, router } = await open('/projects/new');
     await button('手动创建品牌套件').trigger('click');
     await button('创建项目').trigger('click');
@@ -339,7 +352,7 @@ test('手动创建项目校验品牌名称并进入工作区', async () => {
     await app.find('input[placeholder="你的品牌名称"]').setValue('测试品牌');
     await button('创建项目').trigger('click');
     await flushPromises();
-    expect(router.currentRoute.value.path).toMatch(/^\/projects\/P-\d+$/);
+    expect(router.currentRoute.value.path).toMatch(/^\/projects\/P-[a-f0-9-]+$/);
     await router.push('/');
     await flushPromises();
     expect(app.text()).toContain('我的项目');
@@ -348,6 +361,7 @@ test('手动创建项目校验品牌名称并进入工作区', async () => {
     expect(app.find('aside').text()).not.toContain('测试品牌');
   } finally {
     resetHomeProjects();
+  studio.value.hiddenHot = false;
     projects.splice(0, projects.length, ...snapshot);
   }
 });
@@ -358,6 +372,7 @@ test('离开首页再返回仍展示已创建的项目卡', async () => {
   const snapshot = [...projects];
   try {
     resetHomeProjects();
+  studio.value.hiddenHot = false;
     addHomeProject({ name: '回访项目卡' });
     const { app, router } = await open('/');
     expect(app.text()).toContain('我的项目');
@@ -371,6 +386,7 @@ test('离开首页再返回仍展示已创建的项目卡', async () => {
     expect(app.text()).not.toContain('还没有项目');
   } finally {
     resetHomeProjects();
+  studio.value.hiddenHot = false;
     projects.splice(0, projects.length, ...snapshot);
   }
 });
@@ -400,6 +416,7 @@ test('项目卡支持重命名与删除，删空后回到缺省页', async () =>
   const snapshot = [...projects];
   try {
     resetHomeProjects();
+  studio.value.hiddenHot = false;
     const item = addHomeProject({ name: '待改名项目' });
     renameHomeProject(item.id, '已改名项目');
     const { app, router } = await open('/');
@@ -411,9 +428,10 @@ test('项目卡支持重命名与删除，删空后回到缺省页', async () =>
     await router.push('/');
     await flushPromises();
     expect(app.text()).toContain('还没有项目');
-    expect(app.text()).not.toContain('已改名项目');
+    expect(app.text()).toContain('已归档项目');
   } finally {
     resetHomeProjects();
+  studio.value.hiddenHot = false;
     projects.splice(0, projects.length, ...snapshot);
   }
 });

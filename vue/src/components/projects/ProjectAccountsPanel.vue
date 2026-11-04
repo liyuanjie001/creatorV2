@@ -18,7 +18,7 @@ const { project, projectWindows, router } = useProjectWorkspaceContext();
         variant="outline"
         size="sm"
         class="border-slate-200 text-sky-600"
-        @click="router.push({ path: '/accounts', query: { project: project.id } })"
+        @click="router.push({ path: '/roxy', query: { project: project.id } })"
       >
         管理与同步窗口
         <ArrowRight class="h-3.5 w-3.5" />
@@ -35,7 +35,7 @@ const { project, projectWindows, router } = useProjectWorkspaceContext();
       </p>
       <Button
         class="brand-gradient mt-5 text-white"
-        @click="router.push({ path: '/accounts', query: { project: project.id } })"
+        @click="router.push({ path: '/roxy', query: { project: project.id } })"
       >
         去同步窗口
       </Button>
@@ -53,7 +53,7 @@ const { project, projectWindows, router } = useProjectWorkspaceContext();
         </div>
         <button
           class="text-[12px] text-sky-600"
-          @click="router.push({ path: '/accounts', query: { window: window.id } })"
+          @click="router.push({ path: '/roxy', query: { window: window.id } })"
         >
           查看窗口详情
         </button>

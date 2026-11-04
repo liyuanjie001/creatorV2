@@ -50,7 +50,7 @@ function changeProject(event: Event) {
           size="sm"
           variant="outline"
           class="border-slate-200 text-slate-600"
-          @click="router.push('/accounts')"
+          @click="router.push('/roxy')"
         >
           管理窗口
         </Button>
@@ -145,7 +145,7 @@ function changeProject(event: Event) {
     >
       <h2 class="text-lg font-medium text-slate-700">先同步窗口，再查看内容表现</h2>
       <p class="text-[13px] text-slate-400">在窗口管理中绑定 RoxyBrowser，并选择要同步的项目。</p>
-      <Button class="brand-gradient mt-2 text-white" @click="router.push('/accounts')">去同步窗口</Button>
+      <Button class="brand-gradient mt-2 text-white" @click="router.push('/roxy')">去同步窗口</Button>
     </Card>
     <AnalyticsDetails />
   </div>

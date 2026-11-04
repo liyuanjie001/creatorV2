@@ -1,3 +1,4 @@
+import { identityService } from '@/services/identity';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { mount, flushPromises, type VueWrapper } from '@vue/test-utils';
 import { createMemoryHistory } from 'vue-router';
@@ -15,6 +16,7 @@ const stages = useAnalyticsStages();
 let wrapper: VueWrapper | undefined;
 let warnings: string[] = [];
 beforeEach(() => {
+  identityService.demo();
   localStorage.clear();
   localStorage.setItem(ACCESS_STORAGE_KEY, __ACCESS_PASSWORD_HASH__);
   manager.reload();
@@ -78,7 +80,7 @@ test('未绑定时展示同步入口，窗口页不再内嵌内容报表', async
   const { app, router } = await open();
   expect(app.text()).toContain('先同步窗口');
   await click('去同步窗口');
-  await vi.waitFor(() => expect(router.currentRoute.value.path).toBe('/accounts'));
+  await vi.waitFor(() => expect(router.currentRoute.value.path).toBe('/roxy'));
   manager.synchronize(['roxy-P1']);
   await flushPromises();
   expect(app.text()).not.toContain('数据概览');
@@ -87,7 +89,7 @@ test('未绑定时展示同步入口，窗口页不再内嵌内容报表', async
 
 test('窗口查看数据跳转保留项目窗口和平台，返回后绑定不变', async () => {
   manager.synchronize(['roxy-P1']);
-  const { app, router } = await open('/accounts?window=W-P1-1');
+  const { app, router } = await open('/roxy?window=W-P1-1');
   await click('查看此窗口数据');
   expect(router.currentRoute.value.path).toBe('/analytics');
   expect(router.currentRoute.value.query).toMatchObject({
@@ -360,9 +362,9 @@ test('带筛选的分析页跳转窗口详情后不会被查询参数监听拉�
   const { router } = await open('/analytics?tab=accounts&project=P1&platform=YouTube');
   await click('查看账号');
   await click('管理所属窗口');
-  await vi.waitFor(() => expect(router.currentRoute.value.path).toBe('/accounts'));
+  await vi.waitFor(() => expect(router.currentRoute.value.path).toBe('/roxy'));
   await flushPromises();
   await flushPromises();
-  expect(router.currentRoute.value.fullPath).toBe('/accounts?window=W-P1-1');
+  expect(router.currentRoute.value.fullPath).toBe('/roxy?window=W-P1-1');
   expect(dialog().textContent).toContain('GlowUp · 品牌主窗口');
 });

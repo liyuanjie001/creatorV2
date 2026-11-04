@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { LockKeyhole, Orbit, ArrowRight } from 'lucide-vue-next';
+import { LockKeyhole, ArrowRight } from 'lucide-vue-next';
 import { Input, Button } from '@/components/ui';
 import { accessGate, unlockDestination } from '@/lib/access';
 
@@ -34,11 +34,9 @@ async function submit() {
   <main class="flex min-h-screen items-center justify-center px-6 py-12">
     <section class="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
       <div class="mb-8 flex items-center gap-3">
-        <div class="brand-gradient flex size-10 items-center justify-center rounded-xl text-white">
-          <Orbit class="size-6" />
-        </div>
+        <img src="/favicon.svg" alt="" class="size-10 shrink-0" />
         <div>
-          <div class="text-base font-semibold text-slate-800">出海动力</div>
+          <div class="text-base font-semibold text-slate-800">Roxy出海内容宣发平台</div>
           <p class="text-xs text-slate-400">海外社媒内容工作台</p>
         </div>
       </div>

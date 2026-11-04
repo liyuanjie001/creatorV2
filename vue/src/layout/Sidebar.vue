@@ -1,42 +1,17 @@
 <script setup lang="ts">
-import { FolderKanban, FolderOpen, Lightbulb, Users, BarChart3, Orbit } from 'lucide-vue-next';
+import { FolderKanban, FolderOpen, Lightbulb, Users, BarChart3 } from 'lucide-vue-next';
+import { currentUser } from '@/services/identity';
 import { Avatar, AvatarFallback } from '@/components/ui';
 import { CreditsIcon } from '@/components/shared';
 import { cn } from '@/lib/utils';
 import { RouterLink, useRouter, useRoute } from 'vue-router';
 
 const mainNav = [
-  {
-    to: '/',
-    label: '项目',
-    icon: FolderKanban,
-    match: (path: string) => path === '/' || path.startsWith('/projects'),
-  },
-  {
-    to: '/assets',
-    label: '素材库',
-    icon: FolderOpen,
-    match: (path: string) => path.startsWith('/assets'),
-  },
-  {
-    to: '/inspiration',
-    label: '创意中心',
-    icon: Lightbulb,
-    match: (path: string) =>
-      path.startsWith('/inspiration') || path.startsWith('/notes') || path.startsWith('/create'),
-  },
-  {
-    to: '/accounts',
-    label: '帐号管理',
-    icon: Users,
-    match: (path: string) => path.startsWith('/accounts'),
-  },
-  {
-    to: '/analytics',
-    label: '数据分析',
-    icon: BarChart3,
-    match: (path: string) => path.startsWith('/analytics'),
-  },
+  { to: '/', label: '项目', icon: FolderKanban, match: (path: string) => path === '/' || path.startsWith('/projects') },
+  { to: '/assets', label: '素材库', icon: FolderOpen, match: (path: string) => path.startsWith('/assets') },
+  { to: '/inspiration', label: '爆款视频', icon: Lightbulb, match: (path: string) => ['/inspiration', '/notes', '/create', '/trends'].some(p => path.startsWith(p)) },
+  { to: '/accounts', label: '帐号管理', icon: Users, match: (path: string) => path.startsWith('/accounts') || path.startsWith('/roxy') },
+  { to: '/analytics', label: '数据分析', icon: BarChart3, match: (path: string) => path.startsWith('/analytics') },
 ];
 
 const router = useRouter();
@@ -49,11 +24,7 @@ const location = useRoute();
     class="fixed inset-y-0 left-0 z-40 flex w-[92px] flex-col bg-[#eef0f3]"
   >
     <div class="flex h-14 items-center justify-center">
-      <div
-        class="brand-gradient flex h-8 w-8 items-center justify-center rounded-lg shadow-md shadow-sky-300/40"
-      >
-        <Orbit class="h-5 w-5 text-white" />
-      </div>
+      <img src="/favicon.svg" alt="Roxy出海内容宣发平台" title="Roxy出海内容宣发平台" class="h-10 w-10" />
     </div>
     <nav class="flex flex-col items-center gap-1 px-2 pt-1">
       <RouterLink
@@ -97,7 +68,7 @@ const location = useRoute();
         @click="router.push('/me')"
       >
         <Avatar class="h-9 w-9 border border-slate-200">
-          <AvatarFallback class="brand-gradient text-[12px] font-semibold text-white">LY</AvatarFallback>
+          <AvatarFallback class="brand-gradient text-[12px] font-semibold text-white">{{ currentUser?.name.slice(0,2).toUpperCase() ?? 'LY' }}</AvatarFallback>
         </Avatar>
       </button>
     </div>

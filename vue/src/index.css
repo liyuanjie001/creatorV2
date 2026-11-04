@@ -80,3 +80,18 @@
     background: transparent;
   }
 }
+
+@layer components {
+  .studio-field { @apply h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[13px] text-slate-700 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100; }
+  .studio-label { @apply mb-2 block text-xs font-medium text-slate-500; }
+  .studio-btn { @apply inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-[13px] font-medium text-slate-600 transition hover:border-sky-300 hover:bg-sky-50 hover:text-sky-600 disabled:cursor-not-allowed disabled:opacity-40; }
+  .studio-primary { @apply studio-btn border-transparent bg-gradient-to-r from-[#11a3fd] to-[#1769ff] text-white shadow-sm hover:text-white hover:opacity-90; }
+  .studio-card { @apply rounded-2xl border border-slate-200 bg-white p-5; }
+  .studio-tab { @apply rounded-lg px-4 py-2 text-[13px] font-medium text-slate-500 transition hover:bg-slate-50; }
+  .studio-active { @apply bg-sky-50 text-sky-600; }
+  .studio-badge { @apply inline-flex rounded-md bg-slate-100 px-2 py-1 text-[11px] text-slate-500; }
+  .studio-table { @apply w-full text-left text-[12px]; }
+  .studio-table th { @apply whitespace-nowrap bg-slate-50 px-4 py-3 text-xs font-normal text-slate-400; }
+  .studio-table td { @apply border-t border-slate-100 px-4 py-4 text-slate-600; }
+  .studio-table tbody tr { @apply hover:bg-sky-50/30; }
+}

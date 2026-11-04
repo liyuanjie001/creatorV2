@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import UserSettings from '@/components/studio/UserSettings.vue';
 import { MessageCircle, Check } from 'lucide-vue-next';
 import {
   Card,
@@ -111,6 +112,7 @@ function openRecharge(pack: RechargePack) {
 <template>
   <div class="space-y-6">
     <PageHeader title="个人中心" desc="查看积分余额并充值，按档位获取更多 AI 积分" />
+    <UserSettings />
 
     <div class="mx-auto max-w-[1180px] space-y-8">
       <!-- 顶部：我的积分 + 低调定制化 -->
