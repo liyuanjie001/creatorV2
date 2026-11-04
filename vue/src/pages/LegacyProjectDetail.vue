@@ -47,7 +47,7 @@ const sectionTitles: Record<SectionKey, string> = {
   chat: 'AI 聊天',
   director: 'AI 导演',
   account: '账号管理',
-  publish: '视频管理',
+  publish: '我的作品',
   attribution: '数据归因',
   schedule: '任务调度',
   trash: '回收站',
@@ -59,7 +59,7 @@ const primaryNav: { key: SectionKey; label: string; icon: typeof Sparkles }[] = 
 ];
 const manageNav: { key: SectionKey; label: string; icon: typeof Sparkles }[] = [
   { key: 'account', label: '账号管理', icon: Users },
-  { key: 'publish', label: '视频管理', icon: Rocket },
+  { key: 'publish', label: '我的作品', icon: Rocket },
   { key: 'attribution', label: '数据归因', icon: MousePointerClick },
   { key: 'schedule', label: '任务调度', icon: CalendarClock },
 ];
@@ -72,7 +72,7 @@ const comingSoonCopy: Partial<
     highlights: ['多号绑定', '状态巡检', '发布底座'],
   },
   publish: {
-    desc: '创作完成后一键分发多平台，曝光节奏可控。封面文案一次配置，多号复用更省心。',
+    desc: '集中管理视频与图文作品，配置帐号、文案和排期并追踪发布状态。',
     highlights: ['批量发布', '素材复用', '进度追踪'],
   },
   attribution: {

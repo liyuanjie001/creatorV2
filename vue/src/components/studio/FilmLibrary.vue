@@ -31,6 +31,11 @@ const publishable = computed(() => chosen.value.length > 0 && chosen.value.every
 function formatCreatedAt(value: string) {
   return new Date(value).toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
 }
+function formatDuration(value: string) {
+  const seconds = Number(value);
+  if (!Number.isFinite(seconds) || seconds < 0) return '—';
+  return `${Math.floor(seconds / 60).toString().padStart(2, '0')}:${Math.floor(seconds % 60).toString().padStart(2, '0')}`;
+}
 async function downloadSelected() {
   downloading.value = true;
   try { for (const film of chosen.value) await download(film); }
@@ -75,6 +80,14 @@ function coverImage(f: Film) {
   return `/images/creation-covers/cover-${index}.jpg`;
 }
 function sourceLabel(f: Film) { return f.source === '本地上传' ? '本地上传' : f.reference ? '爆款复刻' : f.source === '专家创作' ? '专家模式' : '自由创作'; }
+function productNames(f: Film) { return f.productIds.map(id => studio.value.products.find(p => p.id === id)?.name ?? '已移除的产品卡').join('、') || '未引用'; }
+function referenceNames(f: Film) { return [f.reference?.title, ...(f.referenceAssets ?? []).map(a => a.name)].filter(Boolean).join('、') || '未引用'; }
+function publication(f: Film) {
+  const tasks = studio.value.tasks.filter(t => t.filmId === f.id).sort((a,b) => b.createdAt.localeCompare(a.createdAt));
+  const task = tasks[0];
+  const content = task?.platformId ? studio.value.content.find(c => c.id === task.platformId) : undefined;
+  return { status: task?.status ?? '未发布', time: content?.publishedAt ? formatCreatedAt(content.publishedAt) : task?.scheduledAt ? `计划：${formatCreatedAt(task.scheduledAt)}` : '—' };
+}
 function modifyVideo(f: Film) {
   close();
   void router.push({ path: `/projects/${props.projectId}`, query: { section: 'gen', mode: 'normal', editFilm: f.id } });
@@ -104,7 +117,7 @@ function regenerate(f:Film){const {id: _id,createdAt: _date,...rest}=f;void _id;
       </div>
     </div>
   </article>
-</div><div v-else class="overflow-auto rounded-2xl border border-slate-200"><table class="studio-table" aria-label="创作记录列表"><thead><tr><th>选择</th><th>视频 / 图文</th><th>规格</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead><tbody><tr v-for="f in films" :key="f.id"><td><input v-model="selected" class="h-5 w-5 cursor-pointer align-middle accent-sky-500 disabled:cursor-not-allowed" type="checkbox" :value="f.id" :disabled="archived || creationStatus(f)!=='成功'" :aria-label="`选择 ${f.title}`"></td><td><div class="flex items-center gap-3"><button :aria-label="`预览 ${f.title}`" class="thumb-gradient flex h-12 w-20 shrink-0 items-center justify-center overflow-hidden rounded-lg text-white" @click="open(f)"><img :src="coverImage(f)" alt="示例视频封面" class="h-full w-full object-cover" loading="lazy"></button><div class="min-w-0"><input :value="f.title" :aria-label="`修改视频名称 ${f.title}`" :disabled="archived" class="h-9 w-full min-w-0 truncate rounded-lg border border-transparent bg-transparent px-2 text-sm font-medium text-slate-800 outline-none transition hover:border-slate-200 hover:bg-slate-50 focus:border-sky-400 focus:bg-white focus:ring-2 focus:ring-sky-100" @change="renameFilm(f, $event)" @keydown.enter="($event.target as HTMLInputElement).blur()" @keydown.esc="($event.target as HTMLInputElement).value=f.title;($event.target as HTMLInputElement).blur()"><p class="mt-2 text-xs text-slate-400">{{sourceLabel(f)}}</p></div></div></td><td>{{f.type}} · {{f.ratio}} · {{f.duration}}s</td><td><span class="studio-badge" :class="statusClass(f)">{{creationStatus(f)}}</span><p v-if="studio.jobs.find(j=>j.id===f.id)?.status==='已取消'" class="mt-1 text-xs text-slate-400">已取消</p></td><td>{{formatCreatedAt(f.createdAt)}}</td><td><div v-if="creationStatus(f)==='成功'" class="flex items-center gap-3 whitespace-nowrap"><button class="studio-btn !h-8 !rounded-lg !border-sky-300 !px-3 !text-xs !text-sky-600" :disabled="!canPublish(f)" @click="publish(f)">去发布</button><button @click="download(f)">下载</button></div><div v-else class="whitespace-nowrap"><button v-if="creationStatus(f)==='失败'" class="text-sky-600" @click="retryGeneration(f.id)">重试生成</button></div></td></tr></tbody></table></div><div v-if="!films.length" class="rounded-2xl border border-dashed border-slate-200 py-16 text-center text-sm text-slate-400">还没有成片，前往自由创作开始第一次创作</div></section><Dialog :open="deleting" @update:open="deleting=$event"><DialogContent class="max-w-md bg-white"><DialogTitle>删除所选创作记录？</DialogTitle><DialogDescription>将删除 {{chosen.length}} 条本地创作记录，并取消关联的待发布或已排期任务。已有发布历史和 TikTok 内容会保留。</DialogDescription><div class="flex justify-end gap-3"><button class="studio-btn" @click="deleting=false">取消</button><button class="studio-primary" @click="deleteSelected">确认删除</button></div></DialogContent></Dialog><Dialog :open="!!preview" @update:open="!$event&&close()">
+</div><div v-else class="overflow-auto rounded-2xl border border-slate-200"><table class="studio-table" aria-label="创作记录列表"><thead><tr><th>选择</th><th>视频 / 图文</th><th>规格</th><th>状态</th><th>操作</th></tr></thead><tbody><tr v-for="f in films" :key="f.id"><td><input v-model="selected" class="h-5 w-5 cursor-pointer align-middle accent-sky-500 disabled:cursor-not-allowed" type="checkbox" :value="f.id" :disabled="archived || creationStatus(f)!=='成功'" :aria-label="`选择 ${f.title}`"></td><td><div class="flex items-center gap-3"><button :aria-label="`预览 ${f.title}`" class="relative flex h-[72px] w-[54px] shrink-0 items-center justify-center overflow-hidden rounded-md bg-slate-100 text-white" @click="open(f)"><img v-if="creationStatus(f)==='成功'" :src="coverImage(f)" alt="视频封面" class="h-full w-full object-cover" loading="lazy"><span v-else class="text-[10px] text-slate-400">{{creationStatus(f)}}</span><span v-if="f.type==='视频' && creationStatus(f)==='成功'" class="absolute inset-x-0 bottom-0 bg-black/40 py-0.5 text-center text-[9px] font-medium tabular-nums">{{formatDuration(f.duration)}}</span></button><div class="min-w-[200px] max-w-sm"><input :title="f.title" :value="f.title" :aria-label="`修改视频名称 ${f.title}`" :disabled="archived" class="h-9 w-full min-w-0 truncate rounded-lg border border-transparent bg-transparent px-2 text-sm font-medium text-slate-800 outline-none transition hover:border-slate-200 hover:bg-slate-50 focus:border-sky-400 focus:bg-white focus:ring-2 focus:ring-sky-100" @change="renameFilm(f, $event)" @keydown.enter="($event.target as HTMLInputElement).blur()" @keydown.esc="($event.target as HTMLInputElement).value=f.title;($event.target as HTMLInputElement).blur()"><p class="mt-1 px-2 text-[10px] text-slate-400">{{formatCreatedAt(f.createdAt)}}</p></div></div></td><td>{{f.type}} · {{f.ratio}} · {{f.duration}}s</td><td><span class="studio-badge" :class="statusClass(f)">{{creationStatus(f)}}</span><p v-if="studio.jobs.find(j=>j.id===f.id)?.status==='已取消'" class="mt-1 text-xs text-slate-400">已取消</p></td><td><div v-if="creationStatus(f)==='成功'" class="flex items-center gap-3 whitespace-nowrap"><button class="studio-btn !h-8 !rounded-lg !border-sky-300 !px-3 !text-xs !text-sky-600" :disabled="!canPublish(f)" @click="publish(f)">去发布</button><button @click="download(f)">下载</button></div><div v-else class="whitespace-nowrap"><button v-if="creationStatus(f)==='失败'" class="text-sky-600" @click="retryGeneration(f.id)">重试生成</button></div></td></tr></tbody></table></div><div v-if="!films.length" class="rounded-2xl border border-dashed border-slate-200 py-16 text-center text-sm text-slate-400">还没有成片，前往自由创作开始第一次创作</div></section><Dialog :open="deleting" @update:open="deleting=$event"><DialogContent class="max-w-md bg-white"><DialogTitle>删除所选创作记录？</DialogTitle><DialogDescription>将删除 {{chosen.length}} 条本地创作记录，并取消关联的待发布或已排期任务。已有发布历史和 TikTok 内容会保留。</DialogDescription><div class="flex justify-end gap-3"><button class="studio-btn" @click="deleting=false">取消</button><button class="studio-primary" @click="deleteSelected">确认删除</button></div></DialogContent></Dialog><Dialog :open="!!preview" @update:open="!$event&&close()">
   <DialogContent class="flex h-[min(720px,82vh)] w-[92vw] max-w-[1120px] gap-0 overflow-hidden rounded-2xl bg-white p-0">
     <template v-if="preview">
       <div class="flex min-w-0 flex-1 items-center justify-center bg-slate-950 p-5" aria-label="媒体预览">
@@ -115,8 +128,18 @@ function regenerate(f:Film){const {id: _id,createdAt: _date,...rest}=f;void _id;
       <aside class="flex w-[46%] min-w-[330px] max-w-[520px] flex-col border-l border-slate-100 bg-white" aria-label="创作详情">
         <div class="min-h-0 flex-1 overflow-y-auto px-6 pb-6 pt-7">
           <DialogTitle class="pr-6 text-lg font-semibold leading-7 text-slate-800">{{preview.title}}</DialogTitle>
-          <DialogDescription class="mt-2 text-xs leading-6 text-slate-400">{{sourceLabel(preview)}} · {{formatCreatedAt(preview.createdAt)}}</DialogDescription>
-          <div class="mt-4 flex flex-wrap gap-2"><span class="studio-badge">{{preview.source==='本地上传'?'已上传':'生成完成'}}</span><span class="studio-badge">{{preview.type}}</span><span class="studio-badge">{{preview.ratio}} · {{preview.duration}}s</span><span class="studio-badge">{{preview.quality}}</span></div>
+          <DialogDescription class="mt-2 text-xs leading-6 text-slate-400">视频创作与发布详情</DialogDescription>
+          <dl class="mt-4 grid grid-cols-2 gap-x-4 gap-y-4 text-xs">
+            <div><dt class="mb-1.5 text-slate-400">创作方式</dt><dd class="text-slate-700">{{sourceLabel(preview)}}</dd></div>
+            <div><dt class="mb-1.5 text-slate-400">生成状态</dt><dd><span class="studio-badge" :class="statusClass(preview)">{{creationStatus(preview)}}</span></dd></div>
+            <div class="col-span-2"><dt class="mb-1.5 text-slate-400">视频名称</dt><dd class="break-words text-slate-700">{{preview.title}}</dd></div>
+            <div><dt class="mb-1.5 text-slate-400">视频参数</dt><dd class="text-slate-700">{{preview.type}} · {{preview.ratio}} · {{preview.duration}}s · {{preview.quality}}</dd></div>
+            <div><dt class="mb-1.5 text-slate-400">生成时间</dt><dd class="text-slate-700">{{formatCreatedAt(preview.createdAt)}}</dd></div>
+            <div><dt class="mb-1.5 text-slate-400">发布时间</dt><dd class="text-slate-700">{{publication(preview).time}}</dd></div>
+            <div><dt class="mb-1.5 text-slate-400">发布状态</dt><dd class="text-slate-700">{{publication(preview).status}}</dd></div>
+            <div class="col-span-2"><dt class="mb-1.5 text-slate-400">参考素材</dt><dd class="break-words text-slate-700">{{referenceNames(preview)}}</dd></div>
+            <div class="col-span-2"><dt class="mb-1.5 text-slate-400">参考产品卡</dt><dd class="break-words text-slate-700">{{productNames(preview)}}</dd></div>
+          </dl>
           <h3 class="mb-3 mt-6 text-sm font-medium text-slate-500">创作提示词</h3>
           <div class="rounded-2xl border border-slate-100 bg-slate-50/70 p-4 text-sm leading-7 text-slate-600">
             <p class="whitespace-pre-wrap break-words">{{preview.brief || '暂无创作提示词'}}</p>

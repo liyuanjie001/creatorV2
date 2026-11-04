@@ -17,10 +17,23 @@ test.beforeEach(async ({ page }, testInfo) => {
   await page.addInitScript(() => {
     Math.random = () => 0.5;
   });
-  await page.addInitScript(({ token, skipDemo }) => {
-    localStorage.setItem('chuhai-access-token', token);
-    if (!skipDemo) localStorage.setItem('chuhai-studio-session', JSON.stringify({ id: 'demo', name: '林悦', identity: 'demo@chuhai.studio', method: 'email', bindings: ['email'] }));
-  }, { token: accessToken, skipDemo: testInfo.title.includes('登录注册') });
+  await page.addInitScript(
+    ({ token, skipDemo }) => {
+      localStorage.setItem('chuhai-access-token', token);
+      if (!skipDemo)
+        localStorage.setItem(
+          'chuhai-studio-session',
+          JSON.stringify({
+            id: 'demo',
+            name: '林悦',
+            identity: 'demo@chuhai.studio',
+            method: 'email',
+            bindings: ['email'],
+          }),
+        );
+    },
+    { token: accessToken, skipDemo: testInfo.title.includes('登录注册') },
+  );
 });
 
 test.afterEach(async ({ page }) => {
@@ -70,12 +83,18 @@ test('爆款视频和设置查询参数、历史导航与重定向', async ({ pa
 
 test('项目导航和创作模式可切换并恢复到地址', async ({ page }) => {
   await page.goto('/#/projects/P1');
-  await expect(page.locator('aside[aria-label="一级导航"] nav a')).toHaveText(['项目', '素材库', '爆款视频', '帐号管理', '数据分析']);
+  await expect(page.locator('aside[aria-label="一级导航"] nav a')).toHaveText([
+    '项目',
+    '素材库',
+    '爆款视频',
+    '帐号管理',
+    '数据分析',
+  ]);
   const navigation = page.locator('nav[aria-label="项目导航"]');
   for (const [label, section] of [
     ['自由创作', 'gen'],
     ['产品卡', 'product'],
-    ['发布管理', 'publish'],
+    ['我的作品', 'publish'],
     ['数据采集', 'analytics'],
   ]) {
     await navigation.getByRole('button', { name: new RegExp(label) }).click();
@@ -87,7 +106,7 @@ test('项目导航和创作模式可切换并恢复到地址', async ({ page }) 
   await expect(page).toHaveURL(/section=gen.*mode=expert|mode=expert.*section=gen/);
   await page.reload();
   await expect(page.getByText('历史会话 · 当前项目')).toBeVisible();
-  await page.screenshot({path: `/tmp/roxy-navigation-${test.info().project.name}.png`});
+  await page.screenshot({ path: `/tmp/roxy-navigation-${test.info().project.name}.png` });
   await page.getByRole('button', { name: '项目设置', exact: true }).click();
   await expect(page).toHaveURL(/section=settings/);
 });
@@ -97,12 +116,18 @@ test('项目下拉高亮当前项目并支持切换和新建', async ({ page }) 
   const trigger = page.getByRole('button', { name: '切换项目', exact: true });
   await trigger.click();
   const menu = page.getByRole('menu', { name: '切换项目' });
-  await expect(menu.getByRole('menuitem', { name: 'GlowUp 美妆出海' })).toHaveAttribute('aria-current', 'page');
+  await expect(menu.getByRole('menuitem', { name: 'GlowUp 美妆出海' })).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
   await page.keyboard.press('Escape');
   await expect(menu).toBeHidden();
   await expect(trigger).toBeFocused();
   await trigger.click();
-  const target = menu.getByRole('menuitem').filter({ hasNotText: /GlowUp 美妆出海|新建项目/ }).first();
+  const target = menu
+    .getByRole('menuitem')
+    .filter({ hasNotText: /GlowUp 美妆出海|新建项目/ })
+    .first();
   const targetName = (await target.innerText()).trim();
   await target.click();
   await expect(trigger).toContainText(targetName);
@@ -223,21 +248,19 @@ test('TK 帐号可走通模拟授权并保留 Roxy 入口', async ({ page }) => 
 
 test('发布单条成片并在项目分析中区分尚未采集的数据', async ({ page }) => {
   await page.goto('/#/projects/P1?section=publish');
-  await page.getByRole('button', { name: '配置发布' }).first().click();
-  await page.getByLabel(/发布帐号/).selectOption({ label: 'GlowUp Official · @glowup.official' });
-  await page.getByLabel(/可见范围/).selectOption('PUBLIC_TO_EVERYONE');
-  await page.getByRole('button', { name: '预览并确认发布' }).click();
-  await page.getByLabel('我已确认以上帐号、内容、可见范围与披露设置').check();
-  await page.getByRole('button', { name: '确认提交发布' }).click();
-  await expect(page.locator('span.studio-badge').filter({hasText: /^发布中$/})).toBeVisible({ timeout: 10_000 });
-  await expect(page.locator('span.studio-badge').filter({hasText: /^发布成功$/})).toBeVisible({ timeout: 10_000 });
-  const navigation = page.locator('nav[aria-label="项目导航"]');
-  await navigation.getByRole('button', { name: '数据采集' }).click();
+  await page.getByRole('button', { name: '去发布', exact: true }).first().click();
+  await page.locator('select').first().selectOption('tk-glow');
+  await page.getByRole('button', { name: '立即发布', exact: true }).click();
+  await expect(page.getByRole('table').locator('tbody tr').filter({ hasText: '发布中' })).toHaveCount(1, {
+    timeout: 10000,
+  });
+  await expect(
+    page.getByRole('table').locator('tbody tr').filter({ hasText: 'GlowUp 晨间护肤日记' }),
+  ).toContainText('发布成功', { timeout: 10000 });
+  await page.locator('aside').getByRole('button', { name: '数据采集', exact: true }).click();
   await page.getByRole('button', { name: '内容明细', exact: true }).click();
-  await expect(page.getByText('GlowUp · 晨间护肤短片')).toBeVisible();
   await expect(page.getByRole('cell', { name: '未采集', exact: true }).first()).toBeVisible();
 });
-
 
 test('自由创作输入框放大收起保留提示词', async ({ page }) => {
   await page.goto('/#/projects/P1?section=gen&mode=normal');
@@ -253,7 +276,9 @@ test('自由创作输入框放大收起保留提示词', async ({ page }) => {
   await expect(page.getByRole('button', { name: '放大输入框' })).toHaveAttribute('aria-expanded', 'false');
   await expect(input).toHaveValue('为新品创作一条清晨护肤视频，保留这个创作想法。');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-  await test.info().attach('creation-input', { body: await page.screenshot({ fullPage: true }), contentType: 'image/png' });
+  await test
+    .info()
+    .attach('creation-input', { body: await page.screenshot({ fullPage: true }), contentType: 'image/png' });
 });
 
 test('爆款视频品类国家与关键词组合筛选', async ({ page }) => {
@@ -275,7 +300,7 @@ test('爆款视频品类国家与关键词组合筛选', async ({ page }) => {
   await expect(cards).toHaveCount(9);
 });
 
-test('视频管理统一展示创作记录', async ({ page }) => {
+test('我的作品统一展示创作记录', async ({ page }) => {
   await page.goto('/#/projects/P1?section=gen&mode=normal');
   await expect(page.getByRole('heading', { name: /创作记录/ })).toHaveCount(0);
   const expand = page.getByRole('button', { name: '放大输入框' });
@@ -284,15 +309,18 @@ test('视频管理统一展示创作记录', async ({ page }) => {
   const inputBox = (await input.boundingBox())!;
   expect(buttonBox.y).toBeGreaterThanOrEqual(inputBox.y);
   expect(buttonBox.x + buttonBox.width).toBeLessThanOrEqual(inputBox.x + inputBox.width);
-  await page.getByRole('button', { name: '视频管理', exact: true }).click();
-  await expect(page.getByRole('heading', { name: /创作记录/ })).toBeVisible();
+  await page.getByRole('button', { name: '我的作品', exact: true }).click();
+  await expect(page.getByRole('heading', { name: '我的作品', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: '成片列表', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: '列表视图', exact: true }).click();
   await page.reload();
-  await expect(page.getByRole('button', { name: '列表视图', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: '列表视图', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
 });
 
-test('生成任务沿轨迹加入视频管理并可查看记录', async ({ page }) => {
+test('生成任务沿轨迹加入我的作品并可查看记录', async ({ page }) => {
   await page.goto('/#/projects/P1?section=gen&mode=normal');
   await page.getByRole('textbox', { name: '创作提示词' }).fill('动画回归：清晨护肤视频');
   await page.getByRole('button', { name: /生成.*消耗 20 积分/ }).click();
@@ -301,9 +329,8 @@ test('生成任务沿轨迹加入视频管理并可查看记录', async ({ page 
   await expect(page.locator('[data-task-transfer]')).toHaveCount(0);
   await page.getByRole('button', { name: '查看', exact: true }).click();
   await expect(page).toHaveURL(/section=publish&tab=creations/);
-  await expect(page.getByRole('heading', { name: /创作记录/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '我的作品', exact: true })).toBeVisible();
 });
-
 
 test('创作提示词自动增高到220像素后滚动', async ({ page }) => {
   await page.goto('/#/projects/P1?section=gen&mode=normal');
@@ -333,52 +360,50 @@ test('创作页隐藏标题并展示爆款视频瀑布流', async ({ page }) => 
   await expect(page.getByText('历史会话 · 当前项目')).toBeVisible();
 });
 
-
 test('创作记录视图切换共用选择并直接配置发布', async ({ page }) => {
   await page.goto('/#/projects/P1?section=publish');
-  await expect(page.getByText('统一管理创作内容，预览下载、一键发布，随时追踪发布进度', { exact: false })).toBeVisible();
-  await page.getByRole('button', { name: '列表视图', exact: true }).click();
-  await expect(page.getByRole('table', { name: '创作记录列表' })).toBeVisible();
-  const selection = page.getByRole('checkbox', { name: /选择 / }).first();
+  await expect(page.getByRole('table', { name: '全部视频列表' })).toBeVisible();
+  const selection = page.getByRole('checkbox', {
+    name: '选择 GlowUp 晨间护肤日记 · 三分钟打造自然透亮的日常好气色',
+    exact: true,
+  });
   await selection.check();
-  await page.getByRole('button', { name: '缩略图视图', exact: true }).click();
-  await expect(page.getByRole('checkbox', { name: /选择 / }).first()).toBeChecked();
+  await page.getByRole('button', { name: '缩略图视图' }).click();
+  await expect(selection).toBeChecked();
   await page.getByRole('button', { name: '发布', exact: true }).click();
-  await expect(page.getByRole('dialog')).toBeVisible();
+  await expect(page).toHaveURL(/tab=configure/);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
 });
-
 
 test('创作记录按选择展示批量操作与完整时间', async ({ page }) => {
   await page.goto('/#/projects/P1?section=publish&view=list');
-  await expect(page.getByRole('button', { name: '发布', exact: true })).toHaveCount(0);
-  const table = page.getByRole('table', { name: '创作记录列表' });
+  const table = page.getByRole('table', { name: '全部视频列表' });
+  await expect(table).toBeVisible();
+  const count = await table.locator('tbody tr').count();
   await expect(table.getByRole('row').nth(1)).toContainText(/\d{2}:\d{2}:\d{2}/);
-  await page.getByRole('checkbox', { name: /选择 / }).first().check();
-  await expect(page.getByRole('button', { name: '发布', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: '删除', exact: true })).toBeVisible();
+  await page
+    .getByRole('checkbox', { name: '选择 GlowUp 晨间护肤日记 · 三分钟打造自然透亮的日常好气色', exact: true })
+    .check();
   const download = page.waitForEvent('download');
-  await page.getByRole('button', { name: '下载', exact: true }).first().click();
+  await page.getByRole('button', { name: '下载', exact: true }).click();
   await download;
   await page.getByRole('button', { name: '删除', exact: true }).click();
-  await page.getByRole('button', { name: '确认删除', exact: true }).click();
+  await page.getByRole('button', { name: '确认删除' }).click();
+  await expect(table.locator('tbody tr')).toHaveCount(count - 1);
   await expect(page.getByRole('button', { name: '发布', exact: true })).toHaveCount(0);
-  await expect(table.getByRole('row')).toHaveCount(1);
 });
 
 test('创作记录查看为左右分栏详情弹窗', async ({ page }) => {
   await page.goto('/#/projects/P1?section=publish&view=list');
-  const table = page.getByRole('table', { name: '创作记录列表' });
-  await expect(table.getByRole('button', { name: '预览', exact: true })).toHaveCount(0);
+  const table = page.getByRole('table', { name: '全部视频列表' });
   await expect(table.getByRole('button', { name: '重新生成', exact: true })).toHaveCount(0);
-  await table.getByRole('button', { name: /^预览 / }).first().click();
+  await table.getByRole('button', { name: '查看视频详情', exact: true }).first().click();
   const dialog = page.getByRole('dialog');
-  await expect(dialog.getByText('创作提示词', { exact: true })).toBeVisible();
-  await expect(dialog.getByRole('button', { name: '下载视频', exact: true })).toBeVisible();
-  await expect(dialog.getByRole('button', { name: '重新生成', exact: true })).toBeVisible();
-  await expect(dialog.getByRole('button', { name: '修改视频', exact: true })).toBeVisible();
+  await expect(dialog.getByText('提示词', { exact: true })).toBeVisible();
+  await expect(dialog.getByRole('button', { name: '下载', exact: true })).toBeVisible();
   expect((await dialog.boundingBox())!.width).toBeLessThanOrEqual(1120);
-  const media = (await dialog.getByLabel('媒体预览').boundingBox())!;
-  const details = (await dialog.getByLabel('创作详情').boundingBox())!;
+  const media = (await dialog.getByRole('region', { name: '媒体预览' }).boundingBox())!;
+  const details = (await dialog.getByRole('region', { name: '创作详情' }).boundingBox())!;
   expect(media.x + media.width).toBeLessThanOrEqual(details.x + 1);
   const prompt = await dialog.locator('.whitespace-pre-wrap').first().innerText();
   await dialog.getByRole('button', { name: '修改视频', exact: true }).click();
@@ -387,20 +412,14 @@ test('创作记录查看为左右分栏详情弹窗', async ({ page }) => {
 });
 
 test('创作记录展示排队生成成功和失败状态', async ({ page }) => {
-  await page.goto('/#/projects/P1?section=gen&mode=normal');
-  await page.getByRole('textbox', { name: '创作提示词' }).fill('状态回归视频');
-  const generate = page.getByRole('button', { name: /生成.*消耗 20 积分/ });
-  await generate.click();
-  await generate.click();
-  await page.getByRole('button', { name: '视频管理', exact: true }).click();
-  await page.getByRole('button', { name: '列表视图', exact: true }).click();
-  const table = page.getByRole('table', { name: '创作记录列表' });
-  await expect(table.getByText('生成中', { exact: true })).toBeVisible();
-  await expect(table.getByText('等待中', { exact: true })).toBeVisible();
-  await table.getByRole('row').filter({ hasText: '等待中' }).getByRole('button', { name: '取消生成' }).click();
-  await expect(table.getByText('失败', { exact: true })).toBeVisible();
-  await expect(table.getByRole('button', { name: '重试生成' })).toBeVisible();
-  await expect(table.getByText('成功', { exact: true })).toHaveCount(2, { timeout: 10000 });
+  await page.goto('/#/projects/P1?section=publish');
+  const table = page.getByRole('table', { name: '全部视频列表' });
+  for (const status of ['生成中', '等待中', '成功', '失败'])
+    await expect(table.getByText(status, { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: '取消生成', exact: true })).toHaveCount(0);
+  await table.getByRole('button', { name: '重试生成', exact: true }).click();
+  await expect(table.getByText('失败', { exact: true })).toHaveCount(0);
+  await expect(table.getByText('生成中', { exact: true })).toHaveCount(2);
 });
 
 test('去发布进入二级页面并恢复配置草稿', async ({ page }) => {
@@ -409,13 +428,10 @@ test('去发布进入二级页面并恢复配置草稿', async ({ page }) => {
   await expect(page).toHaveURL(/tab=configure/);
   await expect(page.getByRole('dialog')).toHaveCount(0);
   const config = page.getByRole('region', { name: '发布配置页面' });
-  await expect(config).toBeVisible();
-  await config.locator('textarea').fill('发布草稿恢复测试');
+  await config.locator('textarea').first().fill('发布草稿恢复测试');
   await page.reload();
-  await expect(page.getByRole('region', { name: '发布配置页面' }).locator('textarea')).toHaveValue('发布草稿恢复测试');
-  await page.getByRole('button', { name: '预览并确认发布' }).click();
-  await expect(page.getByRole('heading', { name: /发布前确认/ })).toBeVisible();
-  await expect(page.getByRole('dialog')).toHaveCount(0);
-  await page.getByRole('button', { name: '返回创作记录' }).click();
-  await expect(page.getByRole('table', { name: '创作记录列表' })).toBeVisible();
+  await expect(config.locator('textarea').first()).toHaveValue('发布草稿恢复测试');
+  await expect(page.getByRole('button', { name: '立即发布', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '返回上一个页面' }).click();
+  await expect(page.getByRole('table', { name: '全部视频列表' })).toBeVisible();
 });

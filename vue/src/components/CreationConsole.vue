@@ -40,6 +40,9 @@ import { animateTaskTransfer } from '@/lib/animateTaskTransfer';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { studio, startGeneration, blankAttributes } from '@/services/studio';
+import { currentUser } from '@/services/identity';
+import { saveMedia } from '@/services/media';
+import { uid } from '@/services/storage';
 import { products, projects, type Asset, type Product } from '@/data/mock';
 import { useOptionalProjectWorkspace } from '@/composables/useProjectWorkspace';
 import { REMAKE_PROMPT, useRemakeDraft } from '@/composables/useRemakeDraft';
@@ -107,6 +110,7 @@ const workspace = useOptionalProjectWorkspace();
 const { remakeRef, remakeBrief, remakeNonce, takeBrief, clearReference } = useRemakeDraft();
 const referenceVideo = remakeRef;
 const selectedAssets = ref<Asset[]>([]);
+const selectedLocalImageRefs = ref<{ id: string; name: string; type: string; mediaId: string }[]>([]);
 const selectedProducts = ref<Product[]>([]);
 const MAX_ASSETS = 3;
 const currentProject = computed(() => studio.value.projects.find((item) => item.id === projectId) ?? projects.find((item) => item.id === projectId));
@@ -116,7 +120,7 @@ const productOptions = computed<Product[]>(
 );
 const currentEngine = computed(() => engines[engine.value]!);
 const hasAttachments = computed(
-  () => selectedAssets.value.length > 0 || !!referenceVideo.value || selectedProducts.value.length > 0,
+  () => selectedAssets.value.length > 0 || selectedLocalImageRefs.value.length > 0 || !!referenceVideo.value || selectedProducts.value.length > 0,
 );
 const assetChipLabel = computed(() =>
   selectedAssets.value.length > 0
@@ -158,6 +162,18 @@ function truncateName(name: string, max = 18) {
 
 function removeAsset(id: string) {
   selectedAssets.value = selectedAssets.value.filter((item) => item.id !== id);
+}
+async function uploadReferenceImages(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const files = Array.from(input.files ?? []).filter(file => file.type.startsWith('image/'));
+  if (!files.length) return;
+  if (selectedAssets.value.length + selectedLocalImageRefs.value.length + files.length > MAX_ASSETS) {
+    toast.error(`参考素材最多选择 ${MAX_ASSETS} 个`); input.value = ''; return;
+  }
+  try {
+    for (const file of files) selectedLocalImageRefs.value.push({ id: uid(), name: file.name, type: '图片', mediaId: await saveMedia(currentUser.value!.id, file) });
+  } catch (error) { toast.error((error as Error).message); }
+  finally { input.value = ''; }
 }
 
 function removeProduct(id: string) {
@@ -327,7 +343,7 @@ function generate() {
   if (!brief.value.trim()) { toast.error('请描述你的创作需求'); return; }
   if (projectId && studio.value.projects.find(p=>p.id===projectId)?.archived) { toast.error('归档项目无法生成'); return; }
   if (projectId) {
-    for (let i = 0; i < batch.value; i++) startGeneration({ projectId, title: `${brief.value.slice(0, 24)}${batch.value > 1 ? ` #${i+1}` : ''}`, type: mode.value, source: '普通创作', duration: duration.value || '15', ratio: ratio.value, quality: quality.value, brief: brief.value, productIds: selectedProducts.value.map(p=>p.id), reference: studio.value.references.find(r=>r.id===referenceVideo.value?.id), version: 1, mediaIds: [], inPublishing: false, attributes: { ...blankAttributes(), product: selectedProducts.value[0]?.name ?? '未分类', format: mode.value === '图文' ? '图文轮播' : '产品展示' } });
+    for (let i = 0; i < batch.value; i++) startGeneration({ projectId, title: `${brief.value}${batch.value > 1 ? ` #${i+1}` : ''}`, type: mode.value, source: '普通创作', duration: duration.value || '15', ratio: ratio.value, quality: quality.value, brief: brief.value, productIds: selectedProducts.value.map(p=>p.id), referenceAssets: [...selectedAssets.value.map(({id,name,type}) => ({id,name,type})), ...selectedLocalImageRefs.value.map(({id,name,type,mediaId}) => ({id,name,type,mediaId}))], reference: studio.value.references.find(r=>r.id===referenceVideo.value?.id), version: 1, mediaIds: [], inPublishing: false, attributes: { ...blankAttributes(), product: selectedProducts.value[0]?.name ?? '未分类', format: mode.value === '图文' ? '图文轮播' : '产品展示' } });
     const target = document.querySelector<HTMLElement>('[data-video-management]');
     if (generateButton.value && target) {
       stopTaskTransfer?.();
@@ -409,6 +425,7 @@ const chipClass =
             <FolderOpen v-else class="h-3.5 w-3.5" />
             {{ assetChipLabel }}
           </button>
+          <label :class="cn(chipClass, 'cursor-pointer')" title="上传图片作为 AI 参考素材"><ImageIcon class="h-3.5 w-3.5" />上传参考图<input class="hidden" type="file" accept="image/*" multiple @change="uploadReferenceImages"></label>
           <template v-if="selectedProducts.length > 0">
             <span
               v-for="item in selectedProducts"
@@ -492,7 +509,7 @@ const chipClass =
             <component :is="inputExpanded ? Minimize2 : Maximize2" class="h-4 w-4" />
           </button>
           <div
-            v-if="referenceVideo || selectedAssets.length > 0"
+            v-if="referenceVideo || selectedAssets.length > 0 || selectedLocalImageRefs.length > 0"
             class="flex flex-wrap gap-2 px-3 pt-3"
             :class="spacious && 'pr-12'"
           >
@@ -544,6 +561,11 @@ const chipClass =
               >
                 <X class="h-3.5 w-3.5" />
               </button>
+            </div>
+            <div v-for="asset in selectedLocalImageRefs" :key="asset.id" class="inline-flex max-w-full items-center gap-2 rounded-lg border border-slate-200 bg-white px-2 py-1.5 shadow-sm">
+              <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-sky-100 text-sky-600"><ImageIcon class="h-3.5 w-3.5" /></span>
+              <span class="max-w-48 truncate text-[12px] font-medium text-slate-700">{{ asset.name }}</span>
+              <button type="button" title="移除参考图片" class="rounded p-0.5 text-slate-400 hover:text-slate-700" @click="selectedLocalImageRefs = selectedLocalImageRefs.filter(item => item.id !== asset.id)"><X class="h-3.5 w-3.5" /></button>
             </div>
           </div>
           <Textarea
