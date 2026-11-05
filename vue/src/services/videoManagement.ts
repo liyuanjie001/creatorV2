@@ -37,6 +37,30 @@ export function dateTime(value?: string) {
       })
     : '—';
 }
+export function scheduledDateTime(value?: string) {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  const formatted = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Los_Angeles',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZoneName: 'shortOffset',
+  }).format(date);
+  return `${formatted} Los Angeles`;
+}
+export function publishStatusLabel(value: string) {
+  return value === '已排期' ? '定时发布' : value;
+}
+export function workPublishStatus(row: VideoRow) {
+  if (row.publishStatus === '已排期') return '定时发布';
+  if (row.publishStatus === '发布成功') return row.task ? '发布成功' : '已发布';
+  if (row.publishStatus === '发布失败') return '发布失败';
+  return '未发布';
+}
 export function duration(value?: string) {
   const n = Number(value);
   return value && Number.isFinite(n)
@@ -65,6 +89,9 @@ export function metrics(row: VideoRow) {
   return row.publishStatus === '发布成功' && row.content?.collection === '可用'
     ? [...row.content.snapshots].sort((a, b) => b.date.localeCompare(a.date))[0]
     : undefined;
+}
+export function mediaTypeName(row: VideoRow) {
+  return row.film?.type === '图文' || row.content?.type === '图文' ? '图集' : '视频';
 }
 export function metricReason(row: VideoRow) {
   return row.publishStatus !== '发布成功'

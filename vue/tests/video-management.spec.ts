@@ -28,18 +28,22 @@ test('统一列表、筛选地址恢复、缩略图及视频详情', async ({ pa
   await page.goto('/#/projects/P1?section=publish');
   const manager = page.getByRole('region', { name: '我的作品内容' });
   await expect(page.getByRole('table', { name: '全部视频列表' })).toBeVisible();
-  await page.getByLabel('创作方式筛选').selectOption('专家模式');
+  await page.getByLabel('创作方式筛选').click();
+  await page.getByRole('checkbox', { name: '专家模式' }).check();
+  await page.getByRole('button', { name: '应用', exact: true }).click();
   await expect(page).toHaveURL(/source=/);
+  await expect(page.getByRole('button', { name: '清除创作方式筛选' })).toBeVisible();
+  await expect(page.getByLabel('创作方式筛选')).toHaveClass(/text-sky-700/);
   await page.reload();
-  await expect(page.getByLabel('创作方式筛选')).toHaveValue('专家模式');
-  await manager.getByRole('button', { name: '重置', exact: true }).click();
-  await page.getByRole('button', { name: '搜索视频', exact: true }).click();
+  await expect(page.getByLabel('创作方式筛选')).toContainText('专家模式');
+  await page.getByRole('button', { name: '清除创作方式筛选' }).click();
+  await expect(page).not.toHaveURL(/source=/);
   await page.getByRole('textbox', { name: '搜索视频' }).fill('晨间');
   await page.getByRole('textbox', { name: '搜索视频' }).press('Enter');
   await expect(page).toHaveURL(/q=/);
-  await manager.getByRole('button', { name: '重置', exact: true }).click();
+  await page.getByRole('textbox', { name: '搜索视频' }).press('Escape');
   await page.getByRole('button', { name: '缩略图视图' }).click();
-  await expect(manager.locator('article')).toHaveCount(12);
+  await expect(manager.locator('article')).toHaveCount(10);
   await expect(manager.locator('article').filter({ hasText: '生成中' }).first()).toBeVisible();
   await page.screenshot({ path: `/tmp/video-management-${info.project.name}-grid.png`, fullPage: true });
   await page.getByRole('button', { name: '列表视图' }).click();
@@ -47,9 +51,10 @@ test('统一列表、筛选地址恢复、缩略图及视频详情', async ({ pa
   await expect(page.getByRole('dialog')).toContainText('参考产品卡');
   await expect(page.getByRole('dialog')).toContainText('实际发布时间');
   await page.keyboard.press('Escape');
-  await page.getByRole('button', { name: /^已发布/ }).click();
+  await page.getByRole('complementary').getByRole('button', { name: '发布记录' }).click();
   await expect(page.getByRole('table', { name: '已发布视频列表' })).toBeVisible();
-  await expect(page.getByRole('button', { name: '上传视频', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('table', { name: '已发布视频列表' }).locator('tbody tr')).toHaveCount(10);
+  await expect(page.getByRole('button', { name: '发布本地作品', exact: true })).toBeVisible();
   await page.screenshot({ path: `/tmp/video-management-${info.project.name}-published.png`, fullPage: true });
   expect(errors).toEqual([]);
 });
@@ -62,6 +67,8 @@ test('独立配置发布、排期调整取消与刷新恢复', async ({ page }) 
   await page.getByRole('radio', { name: '定时发布', exact: true }).check();
   await page.getByRole('button', { name: '定时发布', exact: true }).click();
   await expect(page.getByRole('table', { name: '已发布视频列表' })).toBeVisible();
+  await expect(page.getByRole('table')).toContainText('定时发布');
+  await expect(page.getByRole('table')).toContainText('Los Angeles');
   await expect(page.getByRole('button', { name: '改期', exact: true })).toBeVisible();
   await page.reload();
   await page.getByRole('button', { name: '改期', exact: true }).click();
@@ -71,13 +78,66 @@ test('独立配置发布、排期调整取消与刷新恢复', async ({ page }) 
   await page.getByLabel('选择当前页').check();
   await expect(page.getByRole('button', { name: '取消排期', exact: true }).first()).toBeDisabled();
   await page.getByRole('button', { name: '取消选择', exact: true }).click();
-  await page.getByLabel('发布状态筛选').selectOption('已排期');
+  await page.getByLabel('发布状态筛选').click();
+  await page.getByRole('checkbox', { name: '定时发布' }).check();
+  await page.getByRole('button', { name: '应用', exact: true }).click();
   await page.getByLabel('选择当前页').check();
   await page.getByRole('button', { name: '取消排期', exact: true }).first().click();
   await page.getByRole('button', { name: '确认取消' }).click();
   await expect(page.getByRole('table').locator('tbody tr')).toHaveCount(0);
-  await page.getByRole('button', { name: '重置', exact: true }).click();
+  await page.getByLabel('发布状态筛选').click();
+  await page.getByRole('button', { name: '清除', exact: true }).click();
   await expect(page.getByRole('table')).toContainText('已取消');
+});
+
+test('多个本地图文上传合成一个作品，BGM 与图片顺序刷新恢复并可发布', async ({ page }) => {
+  await page.goto('/#/projects/P1?section=publish');
+  const manager = page.getByRole('region', { name: '我的作品内容' });
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jDuoAAAAASUVORK5CYII=', 'base64');
+  await page.getByRole('button', { name: '上传并发布本地作品' }).click();
+  await page.getByRole('menuitem', { name: '图集', exact: true }).locator('input').setInputFiles([
+    { name: 'carousel-cover.png', mimeType: 'image/png', buffer: png },
+    { name: 'carousel-detail.png', mimeType: 'image/png', buffer: png },
+  ]);
+  await expect(page.getByText('上传完成，媒体已保存在本机浏览器')).toBeVisible();
+  await expect(page).toHaveURL(/tab=configure/);
+  await expect(page.getByText('2 张 · 首张为封面')).toBeVisible();
+  await page.getByRole('button', { name: '返回上一个页面' }).click();
+  await page.getByRole('button', { name: '上传并发布本地作品' }).click();
+  await page.getByRole('menuitem', { name: '图集', exact: true }).locator('input').setInputFiles({
+    name: 'additional-work.png',
+    mimeType: 'image/png',
+    buffer: png,
+  });
+  await expect(page).toHaveURL(/tab=configure/);
+  await page.getByRole('button', { name: '返回上一个页面' }).click();
+  await expect(page.getByRole('textbox', { name: '修改视频名称 additional-work', exact: true })).toBeVisible();
+  const title = page.getByRole('textbox', { name: '修改视频名称 carousel-cover', exact: true });
+  await expect(title).toBeVisible();
+  const row = manager.getByRole('row').filter({ has: title });
+  await expect(row).toBeVisible();
+  await expect(row).toContainText('2 张图片');
+  await row.getByRole('button', { name: '去发布', exact: true }).click();
+  await expect(page).toHaveURL(/tab=configure/);
+  await expect(page.getByText('2 张 · 首张为封面')).toBeVisible();
+  await page.getByRole('button', { name: '添加图片 1' }).click();
+  await page.getByRole('button', { name: /additional-work/ }).click();
+  await page.getByRole('button', { name: '完成', exact: true }).click();
+  await expect(page.getByText('3 张 · 首张为封面')).toBeVisible();
+  const thumbs = page.locator('[draggable="true"][aria-label^="第 "]');
+  const before = await thumbs.evaluateAll(items => items.map(item => item.getAttribute('data-media-id')));
+  await thumbs.nth(2).dragTo(thumbs.nth(0));
+  const after = await thumbs.evaluateAll(items => items.map(item => item.getAttribute('data-media-id')));
+  expect(after).toEqual([before[2], before[0], before[1]]);
+  await page.locator('select[required]').selectOption('tk-glow');
+  const bgmSection = page.getByRole('region', { name: '图文图片与背景音乐' });
+  await expect(bgmSection.getByRole('button', { name: '选择音乐' })).toBeVisible();
+  await page.reload();
+  await expect(page.getByText('3 张 · 首张为封面')).toBeVisible();
+  await expect(page.getByRole('region', { name: '图文图片与背景音乐' }).getByRole('button', { name: '选择音乐' })).toBeVisible();
+  await page.getByRole('button', { name: '立即发布', exact: true }).click();
+  await expect(page).toHaveURL(/tab=records/);
+  await expect(page.getByRole('table').locator('tbody tr').filter({ hasText: 'carousel-cover' })).toContainText('发布成功', { timeout: 12000 });
 });
 
 test('分页、批量部分失败重试和再次发布保留原记录', async ({ page }) => {
@@ -186,6 +246,6 @@ test('生成任务重命名、批量禁用原因与外部内容解除关联', as
     () => JSON.parse(localStorage.getItem('chuhai-studio-v1:demo')!).content,
   );
   expect(contents).toHaveLength(8);
-  await page.getByRole('button', { name: /^已发布/ }).click();
+  await page.getByRole('complementary').getByRole('button', { name: '发布记录' }).click();
   await expect(page.getByRole('table').locator('tbody tr')).toHaveCount(3);
 });

@@ -104,8 +104,30 @@ test('项目导航和创作模式可切换并恢复到地址', async ({ page }) 
   await navigation.getByRole('button', { name: '专家模式' }).click();
   await expect(navigation.getByRole('button', { name: '专家模式' })).toHaveAttribute('aria-current', 'page');
   await expect(page).toHaveURL(/section=gen.*mode=expert|mode=expert.*section=gen/);
-  await page.reload();
+  await expect(page.getByRole('textbox', { name: '专家对话' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '解锁专业创意，打造高质量营销视频' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '放大输入框' })).toHaveCount(0);
+  const expertTitle = await page.getByRole('heading', { name: '解锁专业创意，打造高质量营销视频' }).boundingBox();
+  const expertInput = await page.getByRole('textbox', { name: '专家对话' }).boundingBox();
+  expect(expertTitle!.y + expertTitle!.height).toBeLessThan(expertInput!.y);
+  await expect(page).toHaveURL(/session=/);
+  const initialSessionId = await page.evaluate(() => new URLSearchParams(location.hash.split('?')[1]).get('session'));
+  const initialSessionCount = await page.evaluate(() => JSON.parse(localStorage.getItem('chuhai-studio-v1:demo') || '{}').sessions?.filter((item: { projectId: string }) => item.projectId === 'P1').length);
+  expect(initialSessionCount).toBe(1);
+  await expect(page.getByText('历史会话 · 当前项目')).toBeHidden();
+  await page.getByRole('textbox', { name: '专家对话' }).fill('推广 GlowUp 精华，面向通勤女性，突出快速吸收');
+  await page.getByRole('button', { name: '发送消息' }).click();
   await expect(page.getByText('历史会话 · 当前项目')).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole('textbox', { name: '专家对话' })).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`session=${initialSessionId}`));
+  await expect(page.getByText('历史会话 · 当前项目')).toBeHidden();
+  await page.getByRole('button', { name: '展开历史会话' }).click();
+  await expect(page.getByText('历史会话 · 当前项目')).toBeVisible();
+  await page.getByRole('button', { name: '新建会话', exact: true }).click();
+  const newestSessionId = await page.evaluate(() => new URLSearchParams(location.hash.split('?')[1]).get('session'));
+  await page.goto('/#/projects/P1?section=gen&mode=expert');
+  await expect(page).toHaveURL(new RegExp(`session=${newestSessionId}`));
   await page.screenshot({ path: `/tmp/roxy-navigation-${test.info().project.name}.png` });
   await page.getByRole('button', { name: '项目设置', exact: true }).click();
   await expect(page).toHaveURL(/section=settings/);
@@ -210,7 +232,7 @@ test('爆款视频支持从输入区上传视频并带入创作', async ({ page 
   await expect(page.getByText('选择复刻到的项目')).toBeVisible();
   await page.getByRole('button', { name: 'GlowUp 美妆出海', exact: true }).click();
   await expect(page).toHaveURL(/section=gen.*reference=|reference=.*section=gen/);
-  await expect(page.getByRole('heading', { name: '自由创作' })).toBeVisible();
+  await expect(page.getByRole('textbox', { name: '创作提示词' })).toBeVisible();
   await expect(page.getByText('reference-video.mp4', { exact: true })).toBeVisible();
 });
 
@@ -357,6 +379,12 @@ test('创作页隐藏标题并展示爆款视频瀑布流', async ({ page }) => 
   await page.goto('/#/projects/P1?section=gen&mode=expert');
   await expect(page.getByRole('heading', { name: '专家模式', exact: true })).toHaveCount(0);
   await expect(page.getByRole('region', { name: '爆款视频推荐' })).toHaveCount(0);
+  await expect(page.getByText('历史会话 · 当前项目')).toBeHidden();
+  await page.getByRole('button', { name: '展开历史会话' }).click();
+  await expect(page.getByText('历史会话 · 当前项目')).toBeVisible();
+  await page.getByRole('button', { name: '收起历史会话' }).click();
+  await expect(page.getByText('历史会话 · 当前项目')).toBeHidden();
+  await page.getByRole('button', { name: '展开历史会话' }).click();
   await expect(page.getByText('历史会话 · 当前项目')).toBeVisible();
 });
 
@@ -397,11 +425,21 @@ test('创作记录查看为左右分栏详情弹窗', async ({ page }) => {
   await page.goto('/#/projects/P1?section=publish&view=list');
   const table = page.getByRole('table', { name: '全部视频列表' });
   await expect(table.getByRole('button', { name: '重新生成', exact: true })).toHaveCount(0);
-  await table.getByRole('button', { name: '查看视频详情', exact: true }).first().click();
+  await table
+    .getByRole('button', { name: /^查看 GlowUp 晨间护肤日记/ })
+    .click();
   const dialog = page.getByRole('dialog');
   await expect(dialog.getByText('提示词', { exact: true })).toBeVisible();
+  await expect(dialog.getByRole('region', { name: '生成信息' })).toBeVisible();
+  await expect(dialog.getByRole('region', { name: '发布信息' })).toBeVisible();
   await expect(dialog.getByRole('button', { name: '下载', exact: true })).toBeVisible();
+  const detailsPanel = dialog.getByRole('region', { name: '创作详情' });
+  const scrollBody = detailsPanel.locator('.overflow-y-auto').first();
+  expect(await scrollBody.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
   expect((await dialog.boundingBox())!.width).toBeLessThanOrEqual(1120);
+  const dialogBox = (await dialog.boundingBox())!;
+  const footerBox = (await detailsPanel.locator('footer').boundingBox())!;
+  expect(footerBox.y + footerBox.height).toBeCloseTo(dialogBox.y + dialogBox.height, 0);
   const media = (await dialog.getByRole('region', { name: '媒体预览' }).boundingBox())!;
   const details = (await dialog.getByRole('region', { name: '创作详情' }).boundingBox())!;
   expect(media.x + media.width).toBeLessThanOrEqual(details.x + 1);
@@ -409,6 +447,15 @@ test('创作记录查看为左右分栏详情弹窗', async ({ page }) => {
   await dialog.getByRole('button', { name: '修改视频', exact: true }).click();
   await expect(page).toHaveURL(/editFilm=/);
   await expect(page.getByRole('textbox', { name: '创作提示词' })).toHaveValue(prompt);
+});
+
+test('未发布作品详情隐藏发布信息', async ({ page }) => {
+  await page.goto('/#/projects/P1?section=publish&view=list');
+  const unpublished = page.getByRole('table', { name: '全部视频列表' }).locator('tbody tr').filter({ hasText: '未发布' }).first();
+  await unpublished.getByRole('button', { name: '查看视频详情' }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByRole('region', { name: '生成信息' })).toBeVisible();
+  await expect(dialog.getByRole('region', { name: '发布信息' })).toHaveCount(0);
 });
 
 test('创作记录展示排队生成成功和失败状态', async ({ page }) => {

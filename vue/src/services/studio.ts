@@ -13,7 +13,7 @@ function seed(owner: string): StudioState {
       const attributes = { ...blankAttributes(), theme: i % 2 ? '使用测评' : '商品种草', hook: i % 2 ? '对比反差' : '问题开场', confirmed: true };
       const publishedAt = new Date(Date.now() - (i + 1) * 86400000).toISOString();
       const snapshots = Array.from({ length: i + 2 }, (_, j) => ({ date: new Date(new Date(publishedAt).getTime() + j * 86400000).toISOString().slice(0, 10), views: (j + 1) * (731 + i * 216), likes: (j + 1) * (32 + i * 7), comments: (j + 1) * (3 + i), shares: (j + 1) * (7 + i) }));
-      state.content.push({ id: `external-${i}`, accountId: 'tk-glow', projectIds: i < 4 ? ['P1'] : [], title: ['晨间护肤的正确打开方式', '7 天实测，记录真实变化', '你的精华用对了吗', '一瓶精华的旅行日记'][i % 4]!, type: i === 3 ? '图文' : '视频', publishedAt, attributes, snapshots, collection: i === 7 ? '采集失败' : '可用' });
+      state.content.push({ id: `external-${i}`, accountId: 'tk-glow', projectIds: i < 2 ? ['P1'] : [], title: ['晨间护肤的正确打开方式', '7 天实测，记录真实变化', '你的精华用对了吗', '一瓶精华的旅行日记'][i % 4]!, type: i === 3 ? '图文' : '视频', publishedAt, attributes, snapshots, collection: i === 7 ? '采集失败' : '可用' });
     }
     state.films.push({ id: 'film-demo', projectId: 'P1', title: 'GlowUp 晨间护肤日记 · 三分钟打造自然透亮的日常好气色', type: '视频', source: '普通创作', createdAt: now(), duration: '15', ratio: '9:16', quality: '1080P', brief: '以晨间护肤场景展现产品卖点', productIds: [], version: 1, mediaIds: [], inPublishing: true, attributes: blankAttributes() });
   }
@@ -77,6 +77,63 @@ export function createProject(name: string, desc = '', color = '#11a3fd'): Studi
   if (!name.trim()) throw new Error('请填写项目名称');
   const project = { id: `P-${uid()}`, name: name.trim(), desc, color, accountIds: [], archived: false };
   studio.value.projects.unshift(project); return project;
+}
+export function ensureDemoProjectContent(projectId: string) {
+  if (currentUser.value?.id !== 'demo') return;
+  const project = studio.value.projects.find(item => item.id === projectId);
+  if (!project) return;
+  if (projectId === 'P1') {
+    for (const content of studio.value.content.filter(item => ['external-2', 'external-3'].includes(item.id)))
+      content.projectIds = content.projectIds.filter(id => id !== projectId);
+  }
+  let films = studio.value.films.filter(film => film.projectId === projectId);
+  if (!films.length) {
+    const examples: Film[] = [
+      { id: `demo-work-${projectId}-1`, projectId, title: '新品亮点短片 · 展示核心卖点与使用场景', type: '视频', source: '普通创作', createdAt: now(), duration: '15', ratio: '9:16', quality: '1080P', brief: '展示产品核心卖点与真实使用场景。', productIds: [], version: 1, mediaIds: [], inPublishing: true, attributes: blankAttributes() },
+      { id: `demo-work-${projectId}-2`, projectId, title: '产品细节图集 · 多角度呈现设计与质感', type: '图文', source: '本地上传', createdAt: now(), duration: '0', ratio: '1:1', quality: '原始', brief: '产品图片演示作品。', productIds: [], version: 1, mediaIds: [], inPublishing: true, attributes: blankAttributes() },
+      { id: `demo-work-${projectId}-3`, projectId, title: '品牌故事 · 专家模式脚本创作示例', type: '视频', source: '专家创作', createdAt: now(), duration: '30', ratio: '4:3', quality: '1080P', brief: '以品牌故事介绍产品价值。', productIds: [], version: 1, mediaIds: [], inPublishing: true, attributes: blankAttributes() },
+    ];
+    studio.value.films.push(...examples);
+    films = examples;
+  }
+  const accountId = project.accountIds.find(id => studio.value.accounts.some(account => account.id === id)) ?? studio.value.accounts.find(account => account.status === '已授权')?.id;
+  if (!accountId || films.length < 2) return;
+  const publishedFilm = films[0]!;
+  const failedFilm = films[1]!;
+  const publishedAt = new Date(Date.now() - 86400000).toISOString();
+  const publishedTaskId = `demo-publish-${projectId}-1`;
+  const failedTaskId = `demo-publish-${projectId}-2`;
+  const makeTask = (id: string, film: Film, status: PublishTask['status'], title: string): PublishTask => ({
+    id, batchId: `demo-batch-${projectId}`, filmId: film.id, projectId, accountId, title, tags: '', privacy: 'PUBLIC_TO_EVERYONE', comments: true, duet: true, stitch: true, ai: false, commercial: false, cover: '', photoMusic: false, scheduledAt: '', status, createdAt: publishedAt, submittedAt: publishedAt, updatedAt: publishedAt, publishedAt: status === '发布成功' ? publishedAt : undefined, dueAt: 0, platformId: status === '发布成功' ? `demo-content-${projectId}-1` : undefined, error: status === '发布失败' ? '平台暂时繁忙，请重新配置后重试' : undefined, simulateFailure: false, attempt: 1,
+  });
+  if (!studio.value.tasks.some(task => task.id === publishedTaskId)) {
+    studio.value.tasks.unshift(
+      makeTask(publishedTaskId, publishedFilm, '发布成功', '新品亮点短片 · TikTok 发布记录'),
+      makeTask(failedTaskId, failedFilm, '发布失败', '产品细节图集 · 发布失败示例'),
+    );
+    studio.value.content.unshift({ id: `demo-content-${projectId}-1`, accountId, filmId: publishedFilm.id, projectIds: [projectId], title: '新品亮点短片 · TikTok 发布记录', type: publishedFilm.type, publishedAt, attributes: { ...publishedFilm.attributes }, snapshots: [{ date: publishedAt.slice(0, 10), views: 1462, likes: 64, comments: 6, shares: 8 }], collection: '可用' });
+  }
+
+  const projectTasks = studio.value.tasks.filter(task => task.projectId === projectId && task.status !== '待配置');
+  const representedContent = new Set(projectTasks.map(task => task.platformId).filter(Boolean));
+  const publishedRows = () => projectTasks.length + studio.value.content.filter(content => content.projectIds.includes(projectId) && !representedContent.has(content.id)).length;
+  const sampleStatuses: PublishTask['status'][] = ['已排期', '发布中', '待发布', '已取消'];
+  let sampleIndex = 0;
+  while (publishedRows() < 10) {
+    sampleIndex++;
+    const id = `demo-publish-${projectId}-${sampleIndex + 2}`;
+    if (studio.value.tasks.some(task => task.id === id)) continue;
+    const film = films[(sampleIndex + 1) % films.length]!;
+    const status = sampleStatuses[(sampleIndex - 1) % sampleStatuses.length]!;
+    const task = makeTask(id, film, status, `${film.title} · 发布示例 ${sampleIndex}`);
+    task.createdAt = new Date(Date.now() - (sampleIndex + 2) * 3600000).toISOString();
+    task.submittedAt = task.createdAt;
+    task.updatedAt = task.createdAt;
+    task.scheduledAt = status === '已排期' ? new Date(Date.now() + (sampleIndex + 2) * 3600000).toISOString() : '';
+    task.dueAt = status === '已排期' ? new Date(task.scheduledAt).getTime() : Date.now() + 86400000;
+    studio.value.tasks.unshift(task);
+    projectTasks.push(task);
+  }
 }
 export function authorize(handle: string, groupId: string, scenario: string) {
   if (scenario === '拒绝') throw new Error('用户拒绝授权，可重新发起');

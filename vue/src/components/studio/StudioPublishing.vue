@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Upload, Search, ArrowLeft, Sparkles, ChevronDown, Clock3, CalendarDays, Loader2, Heart, MessageCircle, Share2, Music2, House, UsersRound, Inbox, UserRound, Plus, X, GripVertical } from 'lucide-vue-next';
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui';
 import { studio, blankAttributes, ensurePublishTask, submitPublish } from '@/services/studio';
 import { currentUser } from '@/services/identity';
 import { getMedia, saveMedia } from '@/services/media';
@@ -39,37 +40,38 @@ const busy = ref(false);
 const error = ref('');
 const writingTasks = ref<string[]>([]);
 const uploading = ref(false);
+const uploadMenuOpen = ref(false);
 const imageUrls = ref<Record<string, { id: string; url: string }[]>>({});
-const imageSourceSelection = ref<Record<string, string>>({});
-const musicSearch = ref<Record<string, string>>({});
 const imageBusy = ref<Record<string, boolean>>({});
-const bgmTracks = [
-  { id: 'roxy-calm', name: 'Soft Morning', artist: 'Roxy Library' },
-  { id: 'roxy-pop', name: 'Daily Glow', artist: 'Roxy Library' },
-  { id: 'roxy-acoustic', name: 'Little Moments', artist: 'Roxy Library' },
-  { id: 'roxy-beat', name: 'Fresh Start', artist: 'Roxy Library' },
-];
+const imagePickerTask = ref<PublishTask | null>(null);
+const imagePickerItems = ref<{ id: string; url: string; title: string }[]>([]);
+const imagePickerSelection = ref<string[]>([]);
+const imagePickerSearch = ref('');
 
 const project = computed(() => studio.value.projects.find(p => p.id === props.projectId)!);
 const accounts = computed(() => studio.value.accounts.filter(a => project.value.accountIds.includes(a.id) && a.status === '已授权'));
 const mutable = (task?: PublishTask) => !task || ['待配置', '发布失败', '已取消'].includes(task.status);
-async function upload(event: Event) {
+async function upload(event: Event, kind: 'video' | 'image') {
   const files = Array.from((event.target as HTMLInputElement).files ?? []);
   if (!files.length) return;
   uploading.value = true;
+  uploadMenuOpen.value = false;
   try {
     const isVideo = files.every(f => f.type.startsWith('video/'));
     const isImage = files.every(f => f.type.startsWith('image/'));
-    if (!isVideo && !isImage) throw new Error('请一次上传视频，或一次上传图片组成图文');
+    if ((kind === 'video' && !isVideo) || (kind === 'image' && !isImage)) throw new Error(kind === 'video' ? '请选择视频文件' : '请选择图片文件');
     const groups = isImage ? [files] : files.map(f => [f]);
+    const uploadedIds: string[] = [];
     for (const groupFiles of groups) {
       const mediaIds: string[] = [];
       for (const file of groupFiles) mediaIds.push(await saveMedia(currentUser.value!.id, file));
       const film: Film = { id: uid(), projectId: props.projectId, title: groupFiles[0]!.name.replace(/\.[^.]+$/, ''), type: isVideo ? '视频' : '图文', source: '本地上传', createdAt: now(), duration: '15', ratio: '9:16', quality: '原始', brief: '本地上传媒体', productIds: [], version: 1, mediaIds, inPublishing: true, attributes: blankAttributes() };
       studio.value.films.unshift(film);
       ensurePublishTask(film);
+      uploadedIds.push(film.id);
     }
     toast.success('上传完成，媒体已保存在本机浏览器');
+    configure(uploadedIds);
   } catch (e) { toast.error((e as Error).message); }
   finally { uploading.value = false; (event.target as HTMLInputElement).value = ''; }
 }
@@ -114,14 +116,43 @@ watch(() => drafts.value.map(t => `${t.id}:${(t.imageMediaIds ?? []).join(',')}`
   }
   imageUrls.value = urls;
 }, { immediate: true });
-onBeforeUnmount(() => Object.values(imageUrls.value).flat().forEach(item => URL.revokeObjectURL(item.url)));
-function addWorkImages(task: PublishTask) {
-  const film = studio.value.films.find(f => f.id === imageSourceSelection.value[task.id]);
-  if (!film || film.type !== '图文') return;
-  const ids = task.imageMediaIds ??= [...(filmFor(task)?.mediaIds ?? [])];
-  const next = film.mediaIds.filter(id => !ids.includes(id));
-  if (!next.length) { toast.info('这些图片已添加'); return; }
-  task.imageMediaIds = [...ids, ...next];
+onBeforeUnmount(() => {
+  Object.values(imageUrls.value).flat().forEach(item => URL.revokeObjectURL(item.url));
+  imagePickerItems.value.forEach(item => URL.revokeObjectURL(item.url));
+});
+async function openImagePicker(task: PublishTask) {
+  imagePickerTask.value = task;
+  imagePickerSelection.value = [];
+  imagePickerSearch.value = '';
+  const items: { id: string; url: string; title: string }[] = [];
+  const works = studio.value.films.filter(f => f.projectId === props.projectId && f.type === '图文');
+  for (const work of works) {
+    for (const id of work.mediaIds) {
+      const blob = await getMedia(currentUser.value!.id, id);
+      if (blob) items.push({ id, url: URL.createObjectURL(blob), title: work.title });
+    }
+  }
+  imagePickerItems.value.forEach(item => URL.revokeObjectURL(item.url));
+  imagePickerItems.value = items;
+}
+function finishImagePicker() {
+  const task = imagePickerTask.value;
+  if (task && imagePickerSelection.value.length) {
+    const current = task.imageMediaIds ??= [...(filmFor(task)?.mediaIds ?? [])];
+    task.imageMediaIds = [...current, ...imagePickerSelection.value.filter(id => !current.includes(id))];
+  }
+  imagePickerTask.value = null;
+}
+function togglePickerImage(id: string) {
+  imagePickerSelection.value = imagePickerSelection.value.includes(id)
+    ? imagePickerSelection.value.filter(item => item !== id)
+    : [...imagePickerSelection.value, id];
+}
+async function uploadFromPicker(event: Event) {
+  const task = imagePickerTask.value;
+  if (!task) return;
+  await uploadTaskImages(task, event);
+  imagePickerTask.value = null;
 }
 async function uploadTaskImages(task: PublishTask, event: Event) {
   const input = event.target as HTMLInputElement;
@@ -141,13 +172,6 @@ function moveTaskImage(task: PublishTask, from: string, to: string) {
   const source = ids.indexOf(from); const target = ids.indexOf(to);
   if (source < 0 || target < 0 || source === target) return;
   ids.splice(target, 0, ids.splice(source, 1)[0]!); task.imageMediaIds = ids;
-}
-async function uploadBgm(task: PublishTask, event: Event) {
-  const input = event.target as HTMLInputElement; const file = input.files?.[0]; if (!file) return;
-  if (!file.type.startsWith('audio/')) { toast.error('请选择音频文件'); input.value = ''; return; }
-  try { task.bgm = { source: 'local', name: file.name, mediaId: await saveMedia(currentUser.value!.id, file) }; }
-  catch (cause) { toast.error((cause as Error).message); }
-  finally { input.value = ''; }
 }
 function captionFor(task: PublishTask) { return [task.title, task.tags].filter(Boolean).join('\n'); }
 function updateCaption(task: PublishTask, value: string) { task.title = value.slice(0, 2200); }
@@ -174,15 +198,57 @@ async function helpWrite(task: PublishTask) {
 </script>
 <template>
   <VideoManagement v-if="tab !== 'configure'" :project-id="projectId" :published="tab==='records'" @publish="configure">
-    <template #upload><label class="studio-primary cursor-pointer"><Upload class="h-4 w-4" />{{uploading?'上传中…':'上传视频 / 图文'}}<input class="hidden" type="file" accept="video/*,image/*" multiple :disabled="uploading||project.archived" @change="upload"></label></template>
+    <template #upload>
+      <div class="relative" @mouseenter="uploadMenuOpen = true" @mouseleave="uploadMenuOpen = false" @keydown.esc="uploadMenuOpen = false">
+        <button type="button" class="studio-primary" aria-haspopup="menu" :aria-expanded="uploadMenuOpen" :disabled="uploading || project.archived" @click="uploadMenuOpen = true"><Upload class="h-4 w-4" />{{ uploading ? '上传中…' : tab === 'records' ? '发布本地作品' : '上传本地作品' }}<ChevronDown class="h-3.5 w-3.5" /></button>
+        <div v-if="uploadMenuOpen && !uploading && !project.archived" role="menu" aria-label="上传作品类型" class="absolute right-0 top-full z-30 min-w-44 pt-2">
+          <div class="rounded-xl border border-slate-200 bg-white p-1 shadow-lg">
+            <label role="menuitem" tabindex="0" class="flex cursor-pointer items-center rounded-lg px-4 py-2.5 text-xs text-slate-700 hover:bg-sky-50 hover:text-sky-600" @keydown.enter="($event.currentTarget as HTMLElement).querySelector('input')?.click()">视频<input class="hidden" type="file" accept="video/*" multiple :disabled="uploading || project.archived" @change="upload($event, 'video')"></label>
+            <label role="menuitem" tabindex="0" class="flex cursor-pointer items-center rounded-lg px-4 py-2.5 text-xs text-slate-700 hover:bg-sky-50 hover:text-sky-600" @keydown.enter="($event.currentTarget as HTMLElement).querySelector('input')?.click()">图集<input class="hidden" type="file" accept="image/*" multiple :disabled="uploading || project.archived" @change="upload($event, 'image')"></label>
+          </div>
+        </div>
+      </div>
+    </template>
   </VideoManagement>
+  <Dialog :open="!!imagePickerTask" @update:open="!$event && (imagePickerTask = null)">
+    <DialogContent class="flex max-h-[88vh] max-w-4xl flex-col overflow-hidden bg-white p-0">
+      <header class="border-b border-slate-100 px-6 py-5">
+        <DialogTitle class="text-base font-semibold text-slate-800">添加图片</DialogTitle>
+        <DialogDescription class="mt-1 text-xs text-slate-400">从本地上传，或选择当前项目“我的作品”中的图片。</DialogDescription>
+      </header>
+      <div class="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto p-6">
+        <div>
+          <h3 class="mb-2 text-xs font-semibold text-slate-700">本地上传</h3>
+          <label class="flex h-24 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 bg-slate-50 text-xs text-slate-500 hover:border-sky-400 hover:text-sky-600">
+            <Upload class="h-5 w-5" />点击或拖拽图片至此处上传
+            <input type="file" accept="image/*" multiple class="hidden" :disabled="!imagePickerTask || imageBusy[imagePickerTask.id]" @change="uploadFromPicker">
+          </label>
+        </div>
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <h3 class="text-sm font-semibold text-slate-800">我的作品（图片）</h3>
+          <label class="relative"><Search class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input v-model="imagePickerSearch" class="studio-field !h-9 !w-56 !pl-9 !text-xs" placeholder="搜索素材" aria-label="搜索我的作品图片"></label>
+        </div>
+        <div v-if="imagePickerItems.filter(item => item.title.toLowerCase().includes(imagePickerSearch.toLowerCase())).length" class="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-5">
+          <button v-for="item in imagePickerItems.filter(entry => entry.title.toLowerCase().includes(imagePickerSearch.toLowerCase()))" :key="item.id" type="button" class="overflow-hidden rounded-lg border text-left transition" :class="imagePickerSelection.includes(item.id) ? 'border-sky-500 ring-2 ring-sky-100' : 'border-slate-200 hover:border-slate-300'" :aria-pressed="imagePickerSelection.includes(item.id)" @click="togglePickerImage(item.id)">
+            <img :src="item.url" :alt="item.title" class="aspect-square w-full object-cover">
+            <span class="block truncate px-2 py-2 text-xs text-slate-600">{{ item.title }}</span>
+          </button>
+        </div>
+        <p v-else class="py-12 text-center text-sm text-slate-400">暂无可选图片，可从本地上传。</p>
+      </div>
+      <footer class="flex items-center justify-between border-t border-slate-100 px-6 py-4">
+        <span class="text-xs text-slate-500">已选择 {{ imagePickerSelection.length }} 张</span>
+        <div class="flex gap-2"><button type="button" class="studio-btn !h-9 !text-xs" @click="imagePickerTask = null">取消</button><button type="button" class="studio-primary !h-9 !text-xs" @click="finishImagePicker">完成</button></div>
+      </footer>
+    </DialogContent>
+  </Dialog>
   <FilmPreview :film="preview" @close="preview=null" />
   <section v-if="tab === 'configure'" class="w-full space-y-5" aria-label="发布配置页面">
     <header class="flex items-start gap-3"><button class="studio-btn !px-3 !text-xs !font-normal" aria-label="返回上一个页面" @click="backToCreations"><ArrowLeft class="h-4 w-4" />返回</button><div><h1 class="text-lg font-normal text-slate-800">配置发布</h1><p class="mt-2 text-xs text-slate-400">共 {{ drafts.length }} 条成片 · 逐条确认帐号与发布内容，修改自动保存。</p></div></header>
     <div>
     <div v-if="!drafts.length" class="py-12 text-center text-sm text-slate-400">没有可配置的发布任务<button class="ml-3 text-sky-600" @click="backToCreations">返回创作记录</button></div><template v-if="drafts.length"><div v-for="(task, index) in drafts" :key="task.id" class="mb-4 mt-4 grid items-start gap-6 [&+div]:mt-9 md:grid-cols-[minmax(0,1fr)_220px] xl:grid-cols-[minmax(0,1fr)_280px]"><section class="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white">
       <header class="flex items-center gap-3 bg-slate-100/80 px-5 py-3">
-        <span class="flex h-9 min-w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-[#11a3fd] to-[#1769ff] px-2 text-lg font-bold tabular-nums text-white" :aria-label="`第 ${index + 1} 条视频`">{{ index + 1 }}</span>
+        <span v-if="filmFor(task)?.type !== '图文'" class="flex h-9 min-w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-[#11a3fd] to-[#1769ff] px-2 text-lg font-bold tabular-nums text-white" :aria-label="`第 ${index + 1} 条视频`">{{ index + 1 }}</span>
         <h3 class="min-w-0 flex-1 truncate text-sm font-semibold text-slate-800" :title="filmFor(task)?.title">{{ filmFor(task)?.title }}</h3>
         <span class="shrink-0 text-xs text-slate-400">{{ filmFor(task)?.type }}<template v-if="filmFor(task)?.type === '视频'"> · {{ filmFor(task)?.duration }}s</template><template v-else> · {{ (task.imageMediaIds ?? filmFor(task)?.mediaIds ?? []).length }} 张图片</template></span>
       </header>
@@ -191,37 +257,20 @@ async function helpWrite(task: PublishTask) {
           <section v-if="filmFor(task)?.type === '图文'" class="space-y-3 rounded-xl bg-slate-50 p-3" aria-label="图文图片与背景音乐">
             <div class="flex flex-wrap items-center justify-between gap-2">
               <div><h4 class="text-xs font-semibold text-slate-800">图文图片 <span class="font-normal text-slate-400">{{ (task.imageMediaIds ?? filmFor(task)?.mediaIds ?? []).length }} 张 · 首张为封面</span></h4></div>
-              <div class="flex items-center gap-2">
-                <select v-model="imageSourceSelection[task.id]" class="studio-field !h-8 !w-40 !bg-white !text-xs" :aria-label="`从作品选择图片 ${index + 1}`">
-                  <option value="">从作品选择</option>
-                  <option v-for="work in studio.films.filter(item => item.projectId === projectId && item.type === '图文' && item.id !== filmFor(task)?.id && item.mediaIds.length)" :key="work.id" :value="work.id">{{ work.title }} · {{ work.mediaIds.length }} 张</option>
-                </select>
-                <button type="button" class="studio-btn !h-8 !px-2.5 !text-xs" @click="addWorkImages(task)"><Plus class="h-3.5 w-3.5" />添加</button>
-                <label class="studio-btn !h-8 !cursor-pointer !px-2.5 !text-xs"><Upload class="h-3.5 w-3.5" />{{ imageBusy[task.id] ? '上传中' : '本地上传' }}<input type="file" accept="image/*" multiple class="hidden" :disabled="imageBusy[task.id]" @change="uploadTaskImages(task, $event)"></label>
-              </div>
             </div>
-            <div v-if="(task.imageMediaIds ?? filmFor(task)?.mediaIds ?? []).length" class="flex flex-wrap gap-2">
-              <div v-for="(id, imageIndex) in (task.imageMediaIds ?? filmFor(task)?.mediaIds ?? [])" :key="id" draggable="true" class="group relative h-24 w-[68px] cursor-grab overflow-hidden rounded-lg bg-slate-200 active:cursor-grabbing" :aria-label="`第 ${imageIndex + 1} 张图片`" @dragstart="($event.dataTransfer?.setData('text/plain', id))" @dragover.prevent @drop.prevent="moveTaskImage(task, $event.dataTransfer?.getData('text/plain') || '', id)">
+            <div class="flex flex-wrap gap-3">
+              <div v-for="(id, imageIndex) in (task.imageMediaIds ?? filmFor(task)?.mediaIds ?? [])" :key="id" :data-media-id="id" draggable="true" class="group relative aspect-square w-24 cursor-grab overflow-hidden rounded-lg bg-slate-200 active:cursor-grabbing" :aria-label="`第 ${imageIndex + 1} 张图片`" @dragstart="($event.dataTransfer?.setData('text/plain', id))" @dragover.prevent @drop.prevent="moveTaskImage(task, $event.dataTransfer?.getData('text/plain') || '', id)">
                 <img v-if="imageUrls[task.id]?.find(item => item.id === id)" :src="imageUrls[task.id]?.find(item => item.id === id)?.url" :alt="`图文图片 ${imageIndex + 1}`" class="h-full w-full object-cover">
                 <span v-else class="grid h-full place-items-center px-1 text-center text-[10px] text-slate-500">媒体缺失</span>
                 <span v-if="imageIndex === 0" class="absolute inset-x-0 bottom-0 bg-sky-600/90 py-1 text-center text-[9px] font-medium text-white">封面</span>
                 <button type="button" class="absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-full bg-black/60 text-white opacity-0 transition group-hover:opacity-100" :aria-label="`移除第 ${imageIndex + 1} 张图片`" @click="removeTaskImage(task, id)"><X class="h-3 w-3" /></button>
                 <GripVertical class="absolute left-1 top-1 h-3.5 w-3.5 text-white drop-shadow" />
               </div>
+              <button type="button" class="grid aspect-square w-24 place-items-center rounded-lg border border-dashed border-slate-300 bg-white text-slate-400 transition hover:border-sky-400 hover:text-sky-600" :aria-label="`添加图片 ${index + 1}`" @click="openImagePicker(task)"><Plus class="h-7 w-7" /></button>
             </div>
-            <p v-else class="rounded-lg border border-dashed border-slate-300 px-3 py-4 text-center text-xs text-slate-400">添加一张或多张图片，可拖动调整顺序。第一张图片将作为封面。</p>
-            <div class="border-t border-slate-200 pt-3">
-              <div class="flex flex-wrap items-center gap-2">
-                <Music2 class="h-4 w-4 text-sky-600" /><span class="text-xs font-semibold text-slate-700">背景音乐 <span class="font-normal text-slate-400">可选</span></span>
-                <select class="studio-field !h-8 !min-w-44 !bg-white !text-xs" :value="task.bgm?.source === 'library' ? task.bgm.id : ''" :aria-label="`选择背景音乐 ${index + 1}`" @change="(task.bgm = ($event.target as HTMLSelectElement).value ? { source: 'library', id: ($event.target as HTMLSelectElement).value, name: bgmTracks.find(track => track.id === ($event.target as HTMLSelectElement).value)?.name || '' } : undefined)">
-                  <option value="">从模拟曲库选择</option>
-                  <option v-for="track in bgmTracks.filter(track => `${track.name} ${track.artist}`.toLowerCase().includes((musicSearch[task.id] || '').toLowerCase()))" :key="track.id" :value="track.id">{{ track.name }} · {{ track.artist }}</option>
-                </select>
-                <input v-model="musicSearch[task.id]" class="studio-field !h-8 !w-28 !bg-white !text-xs" placeholder="搜索曲库" :aria-label="`搜索背景音乐 ${index + 1}`">
-                <label class="studio-btn !h-8 !cursor-pointer !px-2.5 !text-xs"><Upload class="h-3.5 w-3.5" />上传音频<input type="file" accept="audio/*" class="hidden" @change="uploadBgm(task, $event)"></label>
-                <span v-if="task.bgm" class="inline-flex max-w-full items-center gap-1 rounded-md bg-white px-2 py-1 text-[11px] text-slate-600"><Music2 class="h-3 w-3 text-sky-600" /><span class="max-w-44 truncate">{{ task.bgm.name }}</span><button type="button" aria-label="移除背景音乐" class="text-slate-400 hover:text-slate-700" @click="task.bgm = undefined"><X class="h-3 w-3" /></button></span>
-              </div>
-              <p class="mt-1.5 text-[10px] text-slate-400">曲库为演示数据；也可上传本地音频。未选择音乐仍可发布。</p>
+            <div class="pt-2">
+              <h4 class="mb-2 text-xs font-semibold text-slate-800">背景音乐 <span class="font-normal text-slate-400">可选</span></h4>
+              <button type="button" class="flex h-10 w-full max-w-sm items-center justify-center gap-2 rounded-lg bg-slate-100 text-sm font-medium text-slate-700 hover:bg-slate-200" @click="toast.info('背景音乐选择暂未开放')"><Plus class="h-4 w-4" />选择音乐</button>
             </div>
           </section>
           <label><span class="studio-label">发布帐号<InfoTip text="请选择项目内已授权的 TikTok 帐号，此项必填。" /></span><select v-model="task.accountId" required class="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:ring-1 focus:ring-sky-300"><option value="">请选择帐号</option><option v-for="account in accounts" :key="account.id" :value="account.id">{{ account.name }} · {{ account.handle }}</option></select></label>
