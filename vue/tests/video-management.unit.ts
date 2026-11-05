@@ -1,5 +1,5 @@
 import { beforeEach, expect, test } from 'vitest';
-import { identityService } from '@/services/identity';
+import { currentUser, identityService } from '@/services/identity';
 import {
   studio,
   createProject,
@@ -12,8 +12,9 @@ import {
   reschedulePublishTask,
   startGeneration,
   validatePublish,
+  ensureDemoProjectContent,
 } from '@/services/studio';
-import { videoRows, metrics, duration, publishReason, mediaTypeName, workPublishStatus } from '@/services/videoManagement';
+import { videoRows, metrics, duration, publishReason, mediaTypeName, workPublishStatus, videoActions, latestSubmittedTask } from '@/services/videoManagement';
 import type { Film, PlatformContent } from '@/types/studio';
 beforeEach(() => {
   localStorage.clear();
@@ -107,7 +108,7 @@ test('作品发布状态映射到筛选项，发布任务状态不泄漏待配�
   task.status = '发布成功';
   expect(workPublishStatus({ ...row, publishStatus: task.status })).toBe('发布成功');
   const publishedRow = { ...row, task: undefined, content: external(p.id), publishStatus: '发布成功' };
-  expect(workPublishStatus(publishedRow)).toBe('已发布');
+  expect(workPublishStatus(publishedRow)).toBe('发布成功');
 });
 test('真实零指标与未发布、无权限指标区分，时长统一格式', () => {
   const { p, task } = setup();
@@ -188,6 +189,93 @@ test('失败重试保留任务，旧成功任务不被新草稿借用实际发�
   const draft = ensurePublishTask(film);
   expect(draft.publishedAt).toBeUndefined();
   const row = videoRows(studio.value, p.id, false).find((r) => r.film?.id === film.id)!;
-  expect(row.content).toBeUndefined();
-  expect(row.publishStatus).toBe('待配置');
+  expect(row.content).toBeDefined();
+  expect(row.publishStatus).toBe('发布成功');
+});
+
+
+test('最新提交结果忽略草稿与更新时间，取消未提交草稿不覆盖成功历史', () => {
+  const { p, film, task } = setup();
+  Object.assign(task, {status:'发布成功',submittedAt:'2026-11-01T00:00:00Z',updatedAt:'2099-01-01T00:00:00Z'});
+  const draft = ensurePublishTask(film);
+  expect(videoRows(studio.value,p.id,false)[0]!.publishStatus).toBe('发布成功');
+  expect(videoActions(studio.value,videoRows(studio.value,p.id,false)[0]!,false).find(a=>a.id==='publish')?.label).toBe('再次发布');
+  Object.assign(draft,{status:'发布失败',submittedAt:'2026-11-02T00:00:00Z'});
+  expect(latestSubmittedTask(studio.value.tasks)?.id).toBe(draft.id);
+  expect(videoRows(studio.value,p.id,false)[0]!.publishStatus).toBe('发布失败');
+  expect(videoActions(studio.value,videoRows(studio.value,p.id,false)[0]!,false).find(a=>a.id==='publish')?.label).toBe('重新配置');
+  expect(ensurePublishTask(film,draft.id).id).toBe(draft.id);
+});
+
+test('状态操作矩阵：排队、失败、上传、缺失媒体、排期、归档及外部内容', () => {
+  const {p,film,task} = setup();
+  const row = () => videoRows(studio.value,p.id,false)[0]!;
+  const actions = (published=false,missing=false) => videoActions(studio.value,row(),published,missing);
+  expect(actions().map(a=>a.id)).toEqual(['publish','download','regenerate','modify','delete']);
+  film.source='本地上传';
+  expect(actions().some(a=>a.id==='modify'||a.id==='regenerate')).toBe(false);
+  expect(actions().find(a=>a.id==='publish')?.reason).toContain('媒体');
+  film.source='普通创作';
+  expect(actions(false,true).find(a=>a.id==='download')?.reason).toContain('媒体');
+  task.status='已排期';task.submittedAt=new Date().toISOString();
+  expect(actions().filter(a=>a.primary).map(a=>a.id)).toEqual(['reschedule']);
+  expect(actions().find(a=>a.id==='publish')?.reason).toContain('执行中');
+  expect(actions(true).some(a=>a.id==='delete')).toBe(false);
+  task.status='发布中';
+  expect(actions().find(a=>a.id==='delete')?.reason).toContain('正在发布');
+  p.archived=true;
+  expect(actions().filter(a=>a.id!=='download').every(a=>!!a.reason)).toBe(true);
+  p.archived=false;
+  const job=startGeneration({...film});job.status='等待中';
+  const queued=videoRows(studio.value,p.id,false).find(r=>r.job)!;
+  expect(queued.generation).toBe('生成中');
+  expect(videoActions(studio.value,queued,false).map(a=>a.id)).toEqual(['delete']);
+  expect(videoActions(studio.value,queued,false)[0]!.reason).toContain('生成中');
+  job.status='生成失败';
+  const failed=videoRows(studio.value,p.id,false).find(r=>r.job)!;
+  expect(videoActions(studio.value,failed,false).map(a=>a.id)).toEqual(['retry','modify','delete']);
+  const c=external(p.id);studio.value.content.push(c);
+  const ext=videoRows(studio.value,p.id,false).find(r=>r.content?.id===c.id)!;
+  expect(workPublishStatus(ext)).toBe('发布成功');
+  expect(videoActions(studio.value,ext,true).find(a=>a.id==='publish')?.reason).toBeTruthy();
+  expect(videoActions(studio.value,ext,true).find(a=>a.id==='analytics')?.reason).toBe('');
+});
+
+test('默认示例覆盖所有状态、保持稳定且删除后不补回，普通用户不注入', async () => {
+  studio.value.projects=[{id:'P1',name:'演示',desc:'',color:'#000',accountIds:[],archived:false}];
+  authorize('@demo_examples','ungrouped','成功');
+  studio.value.videoExamplesVersion=undefined;
+  await ensureDemoProjectContent('P1');
+  const works=videoRows(studio.value,'P1',false);
+  expect(new Set(works.map(r=>r.generation))).toEqual(new Set(['生成成功','生成中','生成失败']));
+  expect(new Set(works.map(workPublishStatus))).toEqual(new Set(['未发布','待发布','定时发布','发布中','发布成功','发布失败','已取消']));
+  const statuses=studio.value.tasks.map(t=>t.status);
+  await tickStudio(Date.now()+864000000);
+  expect(studio.value.tasks.map(t=>t.status)).toEqual(statuses);
+  studio.value.films=studio.value.films.filter(f=>f.id!=='video-v2-0');
+  await ensureDemoProjectContent('P1');
+  expect(studio.value.films.some(f=>f.id==='video-v2-0')).toBe(false);
+});
+
+
+test('成功记录再次发布不复用其他失败历史；取消未提交草稿不进入发布记录', () => {
+  const {p,film,task}=setup();
+  Object.assign(task,{status:'发布成功',submittedAt:'2026-11-01T00:00:00Z',attempt:1});
+  const failed=ensurePublishTask(film);
+  Object.assign(failed,{status:'发布失败',submittedAt:'2026-11-02T00:00:00Z',attempt:1});
+  const next=ensurePublishTask(film,'new');
+  expect(next.id).not.toBe(failed.id);
+  next.status='已取消';
+  expect(latestSubmittedTask(studio.value.tasks)?.id).toBe(failed.id);
+  expect(videoRows(studio.value,p.id,true).map(row=>row.task?.id)).not.toContain(next.id);
+});
+
+test('普通注册帐号不注入示例',async()=>{
+  currentUser.value={id:'ordinary-user',name:'普通用户',identity:'user@example.com',method:'email',bindings:['email']};
+  studio.value.projects=[{id:'P1',name:'普通项目',desc:'',color:'#000',accountIds:[],archived:false}];
+  authorize('@ordinary_user','ungrouped','成功');
+  await ensureDemoProjectContent('P1');
+  expect(studio.value.films).toHaveLength(0);
+  expect(studio.value.tasks).toHaveLength(0);
+  expect(studio.value.videoExamplesVersion).toBeUndefined();
 });

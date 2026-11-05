@@ -56,7 +56,7 @@ function deleteSelected() {
 function creationStatus(film: Film) {
   if (studio.value.films.some(f => f.id === film.id)) return '成功';
   const job = studio.value.jobs.find(j => j.id === film.id);
-  return job?.status === '等待中' ? '等待中' : job?.status === '生成中' ? '生成中' : '失败';
+  return job && ['等待中','生成中'].includes(job.status) ? '生成中' : '失败';
 }
 const statusClass = (film: Film) => ({ '成功': '!bg-emerald-50 !text-emerald-600', '生成中': '!bg-sky-50 !text-sky-600', '等待中': '!bg-amber-50 !text-amber-600', '失败': '!bg-rose-50 !text-rose-500' })[creationStatus(film)];
 const films=computed(() => {

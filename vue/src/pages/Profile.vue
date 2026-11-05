@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { creditsBalance, creditsTotal, createRechargeOrder, completeRecharge, type RechargeOrder, type PaymentChannel } from '@/services/credits';
+import { toast } from 'vue-sonner';
 import UserSettings from '@/components/studio/UserSettings.vue';
 import { MessageCircle, Check } from 'lucide-vue-next';
 import {
@@ -14,13 +16,8 @@ import { PageHeader, CreditsIcon } from '@/components/shared';
 import { cn } from '@/lib/utils';
 import { computed, ref } from 'vue';
 
-/** 演示：免费用户赠送额度 */
-const creditsBalance = 100;
-const creditsGifted = 100;
-/** 当前额度上限（演示按赠送额度计） */
-const creditsTotal = creditsGifted;
 const creditsPct = computed(() =>
-  creditsTotal <= 0 ? 0 : Math.min(100, Math.round((creditsBalance / creditsTotal) * 100)),
+  creditsTotal.value <= 0 ? 0 : Math.min(100, Math.round((creditsBalance.value / creditsTotal.value) * 100)),
 );
 
 type PackKey = 'p50' | 'p100' | 'p490' | 'p1000' | 'custom';
@@ -102,10 +99,27 @@ const benefits = ['爆款复刻', '批量生成', '输出无水印', '项目管�
 
 const contactOpen = ref(false);
 const selectedPack = ref<RechargePack | null>(null);
+const paymentOpen = ref(false);
+const paymentChannel = ref<PaymentChannel>('alipay');
+const order = ref<RechargeOrder | null>(null);
+const paying = ref(false);
+const channelName = computed(() => paymentChannel.value === 'alipay' ? '支付宝' : '微信');
+async function pay() {
+  if (!order.value || paying.value || order.value.status === 'completed') return;
+  paying.value = true;
+  try { order.value = completeRecharge(order.value.id, paymentChannel.value); }
+  catch (error) { toast.error((error as Error).message); }
+  finally { paying.value = false; }
+}
 
 function openRecharge(pack: RechargePack) {
   selectedPack.value = pack;
-  contactOpen.value = true;
+  if (pack.custom) { contactOpen.value = true; return; }
+  try {
+    order.value = createRechargeOrder(pack.key as Exclude<PackKey, 'custom'>);
+    paymentChannel.value = 'alipay';
+    paymentOpen.value = true;
+  } catch (error) { toast.error((error as Error).message); }
 }
 </script>
 
@@ -276,6 +290,34 @@ function openRecharge(pack: RechargePack) {
       </section>
     </div>
 
+    <Dialog v-model:open="paymentOpen">
+      <DialogContent class="max-w-sm rounded-2xl border-slate-200 bg-white p-7 text-center">
+        <DialogTitle class="text-lg text-slate-900">{{ order?.status === 'completed' ? '支付成功' : '积分充值' }}</DialogTitle>
+        <DialogDescription class="text-sm text-slate-500">演示支付，不会实际扣款</DialogDescription>
+        <template v-if="order?.status === 'completed'">
+          <Check class="mx-auto h-12 w-12 rounded-full bg-emerald-50 p-2 text-emerald-600" />
+          <p class="text-base font-medium text-slate-800">已到账 {{ order.credits.toLocaleString() }} 积分</p>
+          <p class="text-sm text-slate-500">最新余额：{{ creditsBalance.toLocaleString() }} 积分</p>
+          <Button class="brand-gradient w-full text-white" @click="paymentOpen = false">完成</Button>
+        </template>
+        <template v-else-if="order">
+          <div class="rounded-xl bg-slate-50 p-4">
+            <p class="text-3xl font-semibold text-slate-900">¥{{ order.amount }}</p>
+            <p class="mt-2 text-sm text-slate-500">到账 {{ order.credits.toLocaleString() }} 积分</p>
+          </div>
+          <div class="flex gap-2" role="group" aria-label="支付方式">
+            <button v-for="channel in (['alipay', 'wechat'] as const)" :key="channel" type="button" class="h-10 flex-1 rounded-lg border text-sm" :class="paymentChannel === channel ? 'border-sky-500 bg-sky-50 font-medium text-sky-600' : 'border-slate-200 text-slate-600'" :aria-pressed="paymentChannel === channel" @click="paymentChannel = channel">
+              {{ channel === 'alipay' ? '支付宝' : '微信支付' }}
+            </button>
+          </div>
+          <div class="mx-auto rounded-xl border border-slate-200 bg-white p-4">
+            <img :src="`/demo-${paymentChannel}-qr.svg`" :alt="`${channelName}演示支付二维码`" class="h-44 w-44 [image-rendering:pixelated]" />
+          </div>
+          <p class="text-sm text-slate-500">使用{{ channelName }}扫一扫 · 示例二维码</p>
+          <Button class="brand-gradient w-full text-white" :disabled="paying" @click="pay">模拟支付成功</Button>
+        </template>
+      </DialogContent>
+    </Dialog>
     <Dialog v-model:open="contactOpen">
       <DialogContent class="max-w-sm rounded-2xl border-slate-200 bg-white p-7 text-center">
         <div

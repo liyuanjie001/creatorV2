@@ -205,10 +205,6 @@ function toggleAll() {
             <DropdownMenuItem @select="router.push('/roxy')">Roxy 窗口管理 ↗</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-        <button class="studio-primary" @click="openAuth">
-          <Plus class="h-4 w-4" />
-          添加 TK 帐号
-        </button>
       </div>
     </header>
     <nav class="flex gap-2 border-b border-slate-100 pb-3" aria-label="帐号分类">
@@ -238,6 +234,10 @@ function toggleAll() {
             placeholder="搜索帐号、用户名、备注"
           />
         </div>
+        <button class="studio-primary" @click="openAuth">
+          <Plus class="h-4 w-4" />
+          添加 TK 帐号
+        </button>
         <button
           v-if="group || status || query"
           class="text-xs text-sky-600"

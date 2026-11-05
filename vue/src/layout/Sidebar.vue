@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { FolderKanban, FolderOpen, Lightbulb, Users, BarChart3 } from 'lucide-vue-next';
+import { creditsBalance } from '@/services/credits';
 import { currentUser } from '@/services/identity';
 import { Avatar, AvatarFallback } from '@/components/ui';
 import { CreditsIcon } from '@/components/shared';
@@ -53,7 +54,7 @@ const location = useRoute();
         @click="router.push('/me')"
       >
         <CreditsIcon class="h-4 w-4" />
-        <span class="text-[13px] font-semibold tabular-nums text-slate-800">100</span>
+        <span class="text-[13px] font-semibold tabular-nums text-slate-800" aria-label="积分余额">{{ creditsBalance.toLocaleString() }}</span>
       </button>
       <button
         type="button"

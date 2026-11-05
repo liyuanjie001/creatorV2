@@ -3,7 +3,7 @@ import { projects as legacyProjects, products as legacyProducts } from '@/data/m
 import type { ContentAttributes, Film, GenerationJob, PlatformContent, PublishTask, Reference, StudioProject, StudioState } from '@/types/studio';
 import { currentUser } from './identity';
 import { now, readJSON, uid, writeJSON } from './storage';
-import { getMedia } from './media';
+import { getMedia, saveMedia } from './media';
 export const blankAttributes = (): ContentAttributes => ({ theme: '商品种草', product: '未分类', hook: '问题开场', scene: '日常生活', format: '产品展示', confirmed: false });
 function seed(owner: string): StudioState {
   const demo = owner === 'demo';
@@ -78,62 +78,52 @@ export function createProject(name: string, desc = '', color = '#11a3fd'): Studi
   const project = { id: `P-${uid()}`, name: name.trim(), desc, color, accountIds: [], archived: false };
   studio.value.projects.unshift(project); return project;
 }
-export function ensureDemoProjectContent(projectId: string) {
-  if (currentUser.value?.id !== 'demo') return;
-  const project = studio.value.projects.find(item => item.id === projectId);
-  if (!project) return;
-  if (projectId === 'P1') {
-    for (const content of studio.value.content.filter(item => ['external-2', 'external-3'].includes(item.id)))
-      content.projectIds = content.projectIds.filter(id => id !== projectId);
+export async function ensureDemoProjectContent(projectId: string) {
+  if (currentUser.value?.id !== 'demo' || projectId !== 'P1' || studio.value.videoExamplesVersion === 2) return;
+  const state = studio.value;
+  const project = state.projects.find(p => p.id === projectId);
+  const account = state.accounts.find(a => !a.deleted && a.status === '已授权');
+  if (!project || !account) return;
+  if (!project.accountIds.includes(account.id)) project.accountIds.push(account.id);
+  // Retire only untouched legacy fixtures; preserve submitted retries and user edits.
+  state.jobs = state.jobs.filter(j => !(j.id.startsWith('job-status-example-') && j.demoPreview));
+  const titles = ['晨间护肤故事', '品牌成分解读', '精华使用日记', '产品细节展示', '好物生活分享', '换季护肤心得', '自然光产品实拍', '水润肌肤图集', '护肤旅行记录', '精华质地特写', '生活里的护肤灵感'];
+  const statuses: (PublishTask['status'] | null)[] = [null,'待发布','已排期','发布中','发布成功','发布失败','已取消','发布成功','发布失败','已取消','发布成功'];
+  const at = (hours: number) => new Date(Date.now() - hours * 3600000).toISOString();
+  for (let i = 0; i < titles.length; i++) {
+    const id = `video-v2-${i}`;
+    if (state.films.some(f => f.id === id)) continue;
+    const film: Film = { id, projectId, title: `${titles[i]}（演示）`, type: i === 7 ? '图文' : '视频', source: i === 6 ? '本地上传' : i % 2 ? '专家创作' : '普通创作', createdAt: at(48+i), duration: '15', ratio: '9:16', quality: '1080P', brief: '以自然生活场景展示产品特点与真实使用体验。', productIds: [], version: 1, mediaIds: [], inPublishing: false, attributes: blankAttributes() };
+    if (i === 2) film.reference = state.references[0];
+    state.films.push(film);
+    const makeTask = (suffix: string, status: PublishTask['status'], hours: number): PublishTask => ({ id: `${id}-${suffix}`, filmId: id, projectId, batchId: id, accountId: account.id, title: film.title, tags: '#护肤', privacy: 'PUBLIC_TO_EVERYONE', comments: true, duet: true, stitch: true, ai: false, commercial: false, cover: '首帧', photoMusic: false, scheduledAt: status === '已排期' ? new Date(Date.now()+86400000).toISOString() : '', status, createdAt: at(hours), submittedAt: status === '待配置' ? undefined : at(hours), updatedAt: at(hours), dueAt: Date.now()+86400000, attempt: status === '待配置' ? 0 : 1, simulateFailure: false, demoPreview: true, error: status === '发布失败' ? '平台暂时繁忙，请重新配置后重试（演示）' : undefined });
+    const add = (task: PublishTask, zero = false, uncollected = false) => {
+      if (task.status === '发布成功') {
+        task.publishedAt = task.submittedAt; task.platformId = `${task.id}-content`;
+        state.content.push({ id: task.platformId, accountId: account.id, filmId: id, projectIds: [projectId], title: film.title, type: film.type, publishedAt: task.publishedAt!, attributes: blankAttributes(), snapshots: uncollected ? [] : [{date: at(1).slice(0,10),views:zero?0:1462,likes:zero?0:64,comments:zero?0:6,shares:zero?0:8}], collection: uncollected ? '未采集' : '可用' });
+      }
+      state.tasks.push(task);
+    };
+    if ([8,9].includes(i)) add(makeTask('history','发布成功',36));
+    if (i === 10) add(makeTask('cancelled','已取消',36));
+    if (statuses[i]) add(makeTask('latest',statuses[i]!,24), i === 7, i === 10);
+    if (i === 7) add(makeTask('draft','待配置',1));
   }
-  let films = studio.value.films.filter(film => film.projectId === projectId);
-  if (!films.length) {
-    const examples: Film[] = [
-      { id: `demo-work-${projectId}-1`, projectId, title: '新品亮点短片 · 展示核心卖点与使用场景', type: '视频', source: '普通创作', createdAt: now(), duration: '15', ratio: '9:16', quality: '1080P', brief: '展示产品核心卖点与真实使用场景。', productIds: [], version: 1, mediaIds: [], inPublishing: true, attributes: blankAttributes() },
-      { id: `demo-work-${projectId}-2`, projectId, title: '产品细节图集 · 多角度呈现设计与质感', type: '图文', source: '本地上传', createdAt: now(), duration: '0', ratio: '1:1', quality: '原始', brief: '产品图片演示作品。', productIds: [], version: 1, mediaIds: [], inPublishing: true, attributes: blankAttributes() },
-      { id: `demo-work-${projectId}-3`, projectId, title: '品牌故事 · 专家模式脚本创作示例', type: '视频', source: '专家创作', createdAt: now(), duration: '30', ratio: '4:3', quality: '1080P', brief: '以品牌故事介绍产品价值。', productIds: [], version: 1, mediaIds: [], inPublishing: true, attributes: blankAttributes() },
-    ];
-    studio.value.films.push(...examples);
-    films = examples;
+  for (const [i,status] of (['生成中','等待中','生成失败'] as const).entries()) {
+    const film = state.films.find(f=>f.id===`video-v2-${i}`)!;
+    const {id: _id,createdAt: _createdAt,...fields} = film; void _id; void _createdAt;
+    state.jobs.push({id:`video-v2-job-${i}`,projectId,demoPreview:true,status,createdAt:at(1+i),dueAt:0,fail:status==='生成失败',film:{...fields,title:`${['护肤场景短片','品牌创意短片','产品测评短片'][i]}（演示）`}});
   }
-  const accountId = project.accountIds.find(id => studio.value.accounts.some(account => !account.deleted && account.id === id)) ?? studio.value.accounts.find(account => !account.deleted && account.status === '已授权')?.id;
-  if (!accountId || films.length < 2) return;
-  const publishedFilm = films[0]!;
-  const failedFilm = films[1]!;
-  const publishedAt = new Date(Date.now() - 86400000).toISOString();
-  const publishedTaskId = `demo-publish-${projectId}-1`;
-  const failedTaskId = `demo-publish-${projectId}-2`;
-  const makeTask = (id: string, film: Film, status: PublishTask['status'], title: string): PublishTask => ({
-    id, batchId: `demo-batch-${projectId}`, filmId: film.id, projectId, accountId, title, tags: '', privacy: 'PUBLIC_TO_EVERYONE', comments: true, duet: true, stitch: true, ai: false, commercial: false, cover: '', photoMusic: false, scheduledAt: '', status, createdAt: publishedAt, submittedAt: publishedAt, updatedAt: publishedAt, publishedAt: status === '发布成功' ? publishedAt : undefined, dueAt: 0, platformId: status === '发布成功' ? `demo-content-${projectId}-1` : undefined, error: status === '发布失败' ? '平台暂时繁忙，请重新配置后重试' : undefined, simulateFailure: false, attempt: 1,
-  });
-  if (!studio.value.tasks.some(task => task.id === publishedTaskId)) {
-    studio.value.tasks.unshift(
-      makeTask(publishedTaskId, publishedFilm, '发布成功', '新品亮点短片 · TikTok 发布记录'),
-      makeTask(failedTaskId, failedFilm, '发布失败', '产品细节图集 · 发布失败示例'),
-    );
-    studio.value.content.unshift({ id: `demo-content-${projectId}-1`, accountId, filmId: publishedFilm.id, projectIds: [projectId], title: '新品亮点短片 · TikTok 发布记录', type: publishedFilm.type, publishedAt, attributes: { ...publishedFilm.attributes }, snapshots: [{ date: publishedAt.slice(0, 10), views: 1462, likes: 64, comments: 6, shares: 8 }], collection: '可用' });
-  }
-
-  const projectTasks = studio.value.tasks.filter(task => task.projectId === projectId && task.status !== '待配置');
-  const representedContent = new Set(projectTasks.map(task => task.platformId).filter(Boolean));
-  const publishedRows = () => projectTasks.length + studio.value.content.filter(content => content.projectIds.includes(projectId) && !representedContent.has(content.id)).length;
-  const sampleStatuses: PublishTask['status'][] = ['已排期', '发布中', '待发布', '已取消'];
-  let sampleIndex = 0;
-  while (publishedRows() < 10) {
-    sampleIndex++;
-    const id = `demo-publish-${projectId}-${sampleIndex + 2}`;
-    if (studio.value.tasks.some(task => task.id === id)) continue;
-    const film = films[(sampleIndex + 1) % films.length]!;
-    const status = sampleStatuses[(sampleIndex - 1) % sampleStatuses.length]!;
-    const task = makeTask(id, film, status, `${film.title} · 发布示例 ${sampleIndex}`);
-    task.createdAt = new Date(Date.now() - (sampleIndex + 2) * 3600000).toISOString();
-    task.submittedAt = task.createdAt;
-    task.updatedAt = task.createdAt;
-    task.scheduledAt = status === '已排期' ? new Date(Date.now() + (sampleIndex + 2) * 3600000).toISOString() : '';
-    task.dueAt = status === '已排期' ? new Date(task.scheduledAt).getTime() : Date.now() + 86400000;
-    studio.value.tasks.unshift(task);
-    projectTasks.push(task);
-  }
+  state.videoExamplesVersion = 2;
+  // Store a real local gallery so the demo includes usable media as well as missing-media examples.
+  try {
+    const images = await Promise.all(['#e0f2fe', '#fce7f3'].map((color, i) => saveMedia('demo', new File([
+      `<svg xmlns="http://www.w3.org/2000/svg" width="540" height="720"><rect width="540" height="720" fill="${color}"/><rect x="200" y="210" width="140" height="280" rx="24" fill="#0284c7"/><text x="270" y="560" text-anchor="middle" font-size="28" fill="#0f172a">GlowUp ${i+1}</text></svg>`
+    ], `glowup-${i+1}.svg`, {type:'image/svg+xml'}))));
+    const gallery = state.films.find(f=>f.id==='video-v2-7');
+    if (gallery) gallery.mediaIds = images;
+    for (const task of state.tasks.filter(t=>t.filmId===gallery?.id)) task.imageMediaIds = images;
+  } catch { /* Browsers without IndexedDB retain the explicit missing-media state. */ }
 }
 export function authorize(handle: string, groupId: string, scenario: string) {
   if (scenario === '拒绝') throw new Error('用户拒绝授权，可重新发起');
@@ -170,8 +160,14 @@ export function startGeneration(film: GenerationJob['film'], fail = false) {
 }
 export function cancelGeneration(id: string) { const job = studio.value.jobs.find(j => j.id === id); if (job && ['生成中', '等待中'].includes(job.status)) job.status = '已取消'; }
 export function retryGeneration(id: string) { const job = studio.value.jobs.find(j => j.id === id); if (job && !['生成中', '等待中', '已完成'].includes(job.status)) { job.demoPreview = false; job.status = studio.value.jobs.some(j => !j.demoPreview && j.projectId === job.projectId && j.status === '生成中') ? '等待中' : '生成中'; job.dueAt = Date.now() + 5000; job.fail = false; } }
-export function ensurePublishTask(film: Film): PublishTask {
-  const existing = studio.value.tasks.find(t => t.filmId === film.id && ['待发布', '已排期', '发布中'].includes(t.status)) || studio.value.tasks.find(t => t.filmId === film.id && ['待配置', '发布失败'].includes(t.status)); if (existing) return existing;
+export function ensurePublishTask(film: Film, retryTaskId?: string): PublishTask {
+  const tasks = studio.value.tasks.filter(t => t.filmId === film.id);
+  const active = tasks.find(t => ['待发布','已排期','发布中'].includes(t.status));
+  if (active) return active;
+  const latest = tasks.filter(t=>t.status !== '待配置').sort((a,b)=>(b.submittedAt||b.createdAt).localeCompare(a.submittedAt||a.createdAt))[0];
+  const failed = retryTaskId ? tasks.find(t=>t.id===retryTaskId&&t.status==='发布失败') : retryTaskId === undefined && latest?.status === '发布失败' ? latest : undefined;
+  const existing = failed || tasks.find(t=>t.status==='待配置');
+  if (existing) return existing;
   const task: PublishTask = { id: uid(), batchId: '', filmId: film.id, projectId: film.projectId, accountId: '', title: film.title, tags: '', privacy: 'PUBLIC_TO_EVERYONE', comments: true, duet: true, stitch: true, ai: false, commercial: false, audienceControl: false, cover: '首帧', photoMusic: false, imageMediaIds: film.type === '图文' ? [...film.mediaIds] : undefined, scheduledAt: '', status: '待配置', createdAt: now(), dueAt: 0, simulateFailure: false, attempt: 0 };
   film.inPublishing = true; studio.value.tasks.unshift(task); return task;
 }
@@ -206,7 +202,7 @@ export async function submitPublish(tasks: PublishTask[]) {
     // Recheck the stored task after asynchronous media validation.
     if (!['待配置', '发布失败', '已取消'].includes(studio.value.tasks.find(t=>t.id===task.id)?.status ?? '')) throw new Error('任务已提交，请勿重复发布');
     if (studio.value.tasks.some(t => t.id !== task.id && t.filmId === task.filmId && ['待发布', '已排期', '发布中'].includes(t.status))) throw new Error('该视频已有执行中的发布任务');
-    task.submittedAt = now(); task.updatedAt = now(); task.publishedAt = undefined;
+    task.demoPreview = false; task.submittedAt = now(); task.updatedAt = now(); task.publishedAt = undefined;
     task.batchId = batchId; task.status = task.scheduledAt ? '已排期' : '待发布'; task.dueAt = task.scheduledAt ? new Date(task.scheduledAt).getTime() : Date.now() + 1000; task.error = ''; task.attempt++;
     const stored = studio.value.tasks.find(t=>t.id===task.id); if (stored && stored !== task) Object.assign(stored, task);
   }
@@ -221,7 +217,7 @@ export async function tickStudio(clock = Date.now()) {
     if (!job.demoPreview && job.status === '等待中' && !studio.value.jobs.some(j => !j.demoPreview && j.projectId === job.projectId && j.status === '生成中')) { job.status = '生成中'; job.dueAt = clock + 5000; }
   }
   for (const task of studio.value.tasks) {
-    if (!['已排期', '待发布', '发布中'].includes(task.status) || task.dueAt > clock) continue;
+    if (task.demoPreview || !['已排期', '待发布', '发布中'].includes(task.status) || task.dueAt > clock) continue;
     try {
       // Scheduled time has passed: validate the remaining conditions without the future-time check.
       validatePublish({ ...task, scheduledAt: '' });
@@ -254,13 +250,13 @@ export function saveProduct(id: string, fields: Partial<import('@/types/domain')
 export function cancelPublishTask(id: string) {
   const task = studio.value.tasks.find(t => t.id === id);
   if (!task || !['已排期', '待发布'].includes(task.status)) throw new Error('只能取消尚未执行的发布任务');
-  task.status = '已取消'; task.updatedAt = now();
+  task.demoPreview = false; task.status = '已取消'; task.updatedAt = now();
 }
 export function reschedulePublishTask(id: string, scheduledAt: string) {
   const task = studio.value.tasks.find(t => t.id === id);
   if (!task || task.status !== '已排期') throw new Error('仅已排期任务可以改期');
   validatePublish({ ...task, scheduledAt });
-  task.scheduledAt = scheduledAt; task.dueAt = new Date(scheduledAt).getTime(); task.updatedAt = now();
+  task.demoPreview = false; task.scheduledAt = scheduledAt; task.dueAt = new Date(scheduledAt).getTime(); task.updatedAt = now();
 }
 
 export function accountDeleteReason(id: string) {

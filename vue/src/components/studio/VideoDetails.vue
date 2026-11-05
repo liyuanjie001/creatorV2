@@ -4,7 +4,7 @@ import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/compone
 import { studio } from '@/services/studio';
 import { getMedia } from '@/services/media';
 import { currentUser } from '@/services/identity';
-import { dateTime, privacyName, sourceName, workPublishStatus, type VideoRow } from '@/services/videoManagement';
+import { isSubmittedTask, dateTime, privacyName, sourceName, workPublishStatus, type VideoRow } from '@/services/videoManagement';
 import VideoStatus from './VideoStatus.vue';
 
 const props = defineProps<{ row: VideoRow | null }>();
@@ -46,16 +46,13 @@ onBeforeUnmount(() => {
 const history = computed(() =>
   props.row?.film || props.row?.task
     ? studio.value.tasks
-        .filter((task) => task.filmId === (props.row?.film?.id || props.row?.task?.filmId) && task.status !== '待配置')
+        .filter((task) => task.filmId === (props.row?.film?.id || props.row?.task?.filmId) && isSubmittedTask(task))
         .sort((a, b) => (b.submittedAt || b.createdAt).localeCompare(a.submittedAt || a.createdAt))
     : [],
 );
 const film = computed(() => props.row?.film);
 const hasPublishInfo = computed(() => !!props.row && workPublishStatus(props.row) !== '未发布');
-const generationStatus = computed(() => {
-  const status = props.row?.generation || '未提供';
-  return status === '成功' ? '生成成功' : status === '失败' ? '生成失败' : status;
-});
+const generationStatus = computed(() => props.row?.generation || '未提供');
 const imageIds = computed(
   () => props.row?.content?.imageMediaIds ?? props.row?.task?.imageMediaIds ?? props.row?.film?.mediaIds ?? [],
 );
@@ -210,7 +207,7 @@ const products = computed(() =>
               </section>
             </div>
 
-            <footer v-if="!row.job" class="flex shrink-0 flex-wrap gap-2 border-t border-slate-200 bg-white px-5 py-3 md:px-6">
+            <footer class="flex shrink-0 flex-wrap gap-2 border-t border-slate-200 bg-white px-5 py-3 md:px-6">
               <slot name="actions" />
             </footer>
           </section>

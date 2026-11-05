@@ -318,7 +318,7 @@ onMounted(() => {
   window.addEventListener('resize', onResize);
   window.addEventListener('scroll', onResize, true);
   applyRemakeDraft();
-  const editingFilm = studio.value.films.find(f => f.id === creationRoute.query.editFilm && f.projectId === projectId);
+  const editingFilm = studio.value.films.find(f => f.id === creationRoute.query.editFilm && f.projectId === projectId) ?? studio.value.jobs.find(j => j.id === creationRoute.query.editFilm && j.projectId === projectId)?.film;
   if (editingFilm) {
     brief.value = editingFilm.brief;
     mode.value = editingFilm.type;

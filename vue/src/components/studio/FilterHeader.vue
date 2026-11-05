@@ -20,8 +20,8 @@ const emit = defineEmits<{
   <span class="relative inline-flex align-middle">
     <button
       type="button"
-      class="relative grid h-5 w-5 place-items-center rounded text-slate-400 hover:bg-sky-50 hover:text-sky-600"
-      :class="active.length ? 'text-sky-600' : ''"
+      class="relative grid h-5 w-5 place-items-center rounded hover:bg-sky-50 hover:text-sky-600"
+      :class="active.length ? 'bg-sky-100 text-sky-600' : 'text-slate-400'"
       :aria-label="`${props.filter.label}筛选`"
       :aria-expanded="open"
       :title="`${props.filter.label}筛选`"

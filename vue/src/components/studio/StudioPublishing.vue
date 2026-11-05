@@ -75,8 +75,8 @@ async function upload(event: Event, kind: 'video' | 'image') {
   } catch (e) { toast.error((e as Error).message); }
   finally { uploading.value = false; (event.target as HTMLInputElement).value = ''; }
 }
-function configure(ids: string[]) {
-  drafts.value = ids.map(id => studio.value.films.find(f => f.id === id)).filter((f): f is Film => !!f).map(ensurePublishTask).filter(mutable).map(t => { const copy = JSON.parse(JSON.stringify(t)) as PublishTask; const film = filmFor(copy); if (film?.type === '图文') copy.imageMediaIds ??= [...film.mediaIds]; return copy; });
+function configure(ids: string[], retryTaskId?: string) {
+  drafts.value = ids.map(id => studio.value.films.find(f => f.id === id)).filter((f): f is Film => !!f).map(film => ensurePublishTask(film, retryTaskId)).filter(mutable).map(t => { const copy = JSON.parse(JSON.stringify(t)) as PublishTask; const film = filmFor(copy); if (film?.type === '图文') copy.imageMediaIds ??= [...film.mediaIds]; return copy; });
   if (!drafts.value.length) { toast.info('所选成片已有执行中的任务'); return; }
   error.value = '';
   void router.push({ query: { ...route.query, tab: 'configure', from: tab.value, task: drafts.value.map(t => t.id) } });
