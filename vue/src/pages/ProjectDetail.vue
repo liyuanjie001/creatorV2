@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { Sparkles, CreditCard, Send, BarChart3, Settings, MessageSquare, ChevronDown, Check, FolderPlus } from 'lucide-vue-next';
+import { Sparkles, CreditCard, Send, BarChart3, Settings, MessageSquare, ChevronDown, Check, FolderPlus, ListVideo } from 'lucide-vue-next';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui';
 import { studio } from '@/services/studio';
 import { useProjectWorkspace } from '@/composables/useProjectWorkspace';
@@ -12,15 +12,17 @@ import StudioAnalytics from '@/components/studio/StudioAnalytics.vue';
 import StudioSettings from '@/components/studio/StudioSettings.vue';
 const route = useRoute(); const router = useRouter(); useProjectWorkspace();
 const project = computed(() => studio.value.projects.find(p=>p.id === route.params.id));
-const nav = [{key:'gen',label:'自由创作',icon:Sparkles},{key:'product',label:'产品卡',icon:CreditCard},{key:'publish',label:'我的作品',icon:Send},{key:'analytics',label:'数据采集',icon:BarChart3},{key:'settings',label:'项目设置',icon:Settings}];
+const nav = [{key:'gen',label:'自由创作',icon:Sparkles},{key:'product',label:'产品卡',icon:CreditCard},{key:'publish',label:'我的作品',icon:Send},{key:'analytics',label:'数据分析',icon:BarChart3},{key:'settings',label:'项目设置',icon:Settings}];
 const aliases: Record<string,string> = {attribution:'analytics',account:'settings',schedule:'publish',chat:'gen',director:'gen'};
 const section = computed(() => aliases[String(route.query.section)] ?? (nav.some(n=>n.key===route.query.section) ? String(route.query.section) : 'gen'));
+const isPublishRecords = computed(() => section.value === 'publish' && route.query.tab === 'records');
 watch(() => route.query.section, legacy => {
   if (legacy === 'chat' || legacy === 'director') void router.replace({query:{...route.query,section:'gen',mode:'expert'}});
 }, {immediate:true});
 const creationNav = [{ label: '自由创作', mode: 'normal', icon: Sparkles }, { label: '专家模式', mode: 'expert', icon: MessageSquare }];
 const managementNav = computed(() => nav.filter(n => ['product', 'publish', 'analytics'].includes(n.key)));
-function select(key: string, mode = 'normal') { void router.push({query:{...route.query, section:key, ...(key==='gen' ? {mode} : {mode:undefined})}}); }
+function select(key: string, mode = 'normal') { void router.push({query:{...route.query, section:key, ...(key==='gen' ? {mode} : {mode:undefined}), ...(key==='publish' ? {tab:'creations'} : {tab:undefined})}}); }
+function selectPublishRecords() { void router.push({query:{...route.query, section:'publish', tab:'records', mode:undefined}}); }
 </script>
 <template>
   <div v-if="project" class="flex h-full min-w-0">
@@ -55,13 +57,16 @@ function select(key: string, mode = 'normal') { void router.push({query:{...rout
           <component :is="n.icon" class="h-4 w-4" />{{n.label}}
         </button>
         <p class="mb-2 mt-7 px-3 text-[11px] font-medium text-slate-400">管理</p>
-        <button v-for="n in managementNav" :key="n.key" :data-video-management="n.key === 'publish' ? '' : undefined" class="mb-1 flex w-full items-center gap-3 rounded-xl px-3 py-3 text-[13px]" :class="section===n.key?'bg-sky-50 font-medium text-sky-600':'text-slate-500 hover:bg-slate-50'" :aria-current="section===n.key?'page':undefined" @click="select(n.key)">
-          <component :is="n.icon" class="h-4 w-4" />{{n.label}}
-        </button>
+        <template v-for="n in managementNav" :key="n.key">
+          <button :data-video-management="n.key === 'publish' ? '' : undefined" class="mb-1 flex w-full items-center gap-3 rounded-xl px-3 py-3 text-[13px]" :class="section===n.key && !isPublishRecords?'bg-sky-50 font-medium text-sky-600':'text-slate-500 hover:bg-slate-50'" :aria-current="section===n.key && !isPublishRecords?'page':undefined" @click="select(n.key)">
+            <component :is="n.icon" class="h-4 w-4" />{{n.label}}
+          </button>
+          <button v-if="n.key === 'publish'" class="mb-1 flex w-full items-center gap-3 rounded-xl px-3 py-3 text-[13px]" :class="isPublishRecords?'bg-sky-50 font-medium text-sky-600':'text-slate-500 hover:bg-slate-50'" :aria-current="isPublishRecords?'page':undefined" @click="selectPublishRecords"><ListVideo class="h-4 w-4" />发布记录</button>
+        </template>
       </nav>
       <button aria-label="项目设置" title="项目设置" class="mt-auto self-end rounded-lg p-2 text-slate-400 hover:bg-slate-50 hover:text-sky-600" @click="select('settings')"><Settings class="h-4 w-4" /></button>
     </aside>
-    <main class="min-w-0 flex-1 overflow-y-auto scroll-slim"><div v-if="project.archived" class="m-6 rounded-xl bg-amber-50 p-4 text-sm text-amber-700">该项目已归档，仅供查看。<button class="ml-4 underline" @click="project.archived=false">恢复项目</button></div><StudioCreation v-if="section==='gen'" :project-id="project.id" /><div v-else class="p-6"><header v-if="!(section === 'publish' && route.query.tab === 'configure')" class="mb-6"><h1 class="text-xl font-semibold text-slate-800">{{nav.find(n=>n.key===section)?.label}}</h1><p class="mt-2 text-xs text-slate-400">{{project.name}} · {{section==='publish'?'管理视频与图文作品，配置发布内容并追踪帐号任务':section==='analytics'?'用真实的数据边界，理解每一条内容':'让创作与管理保持有序'}}</p></header><ProductsPanel v-if="section==='product'" /><StudioPublishing v-if="section==='publish'" :project-id="project.id" /><StudioAnalytics v-if="section==='analytics'" :project-id="project.id" /><StudioSettings v-if="section==='settings'" :project-id="project.id" /></div></main>
+    <main class="min-w-0 flex-1 overflow-y-auto scroll-slim"><div v-if="project.archived" class="m-6 rounded-xl bg-amber-50 p-4 text-sm text-amber-700">该项目已归档，仅供查看。<button class="ml-4 underline" @click="project.archived=false">恢复项目</button></div><StudioCreation v-if="section==='gen'" :project-id="project.id" /><div v-else class="p-6"><header v-if="section !== 'publish' && !(section === 'publish' && route.query.tab === 'configure')" class="mb-6"><h1 class="text-xl font-semibold text-slate-800">{{nav.find(n=>n.key===section)?.label}}</h1><p class="mt-2 text-xs text-slate-400">{{project.name}} · {{section==='analytics'?'用真实的数据边界，理解每一条内容':'让创作与管理保持有序'}}</p></header><ProductsPanel v-if="section==='product'" /><StudioPublishing v-if="section==='publish'" :project-id="project.id" /><StudioAnalytics v-if="section==='analytics'" :project-id="project.id" /><StudioSettings v-if="section==='settings'" :project-id="project.id" /></div></main>
   </div>
   <div v-else class="p-16 text-center"><h1 class="text-xl">项目不存在</h1><p class="my-4 text-sm text-slate-400">项目可能已删除，或属于另一个工作空间。</p><button class="studio-primary" @click="router.push('/')">返回项目</button></div>
 </template>

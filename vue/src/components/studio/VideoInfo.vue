@@ -1,14 +1,16 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { currentUser } from '@/services/identity';
 import { getMedia } from '@/services/media';
 import type { VideoRow } from '@/services/videoManagement';
-import { cover, dateTime, duration } from '@/services/videoManagement';
+import { cover, dateTime, duration, scheduledDateTime } from '@/services/videoManagement';
 import { Clock3 } from 'lucide-vue-next';
 defineEmits<{ open: []; rename: [value: string] }>();
 const props = defineProps<{ row: VideoRow; published: boolean; rename: boolean; missing?: boolean }>();
 const imageUrl = ref('');
-watch(() => props.row.film?.mediaIds?.[0], async id => {
+const imageIds = computed(() => props.row.content?.imageMediaIds ?? props.row.task?.imageMediaIds ?? props.row.film?.mediaIds ?? []);
+const isImageWork = computed(() => props.row.film?.type === '图文' || props.row.content?.type === '图文');
+watch(() => imageIds.value[0], async id => {
   if (imageUrl.value) URL.revokeObjectURL(imageUrl.value);
   imageUrl.value = '';
   if (!id || !currentUser.value) return;
@@ -25,20 +27,20 @@ onBeforeUnmount(() => { if (imageUrl.value) URL.revokeObjectURL(imageUrl.value);
       @click="$emit('open')"
     >
       <img
-        v-if="!row.job && row.film?.type === '图文' && imageUrl"
+        v-if="!row.job && isImageWork && imageUrl"
         :src="imageUrl"
         alt="图文首图封面"
         class="h-full w-full object-cover"
         loading="lazy"
       />
       <img
-        v-else-if="!row.job && row.film?.type !== '图文' && !missing"
+        v-else-if="!row.job && !isImageWork && !missing"
         :src="cover(row.film?.id || row.content?.id || row.id)"
         alt="视频封面"
         class="h-full w-full object-cover"
         loading="lazy"
       />
-      <span v-else class="px-1 text-center text-[10px] text-slate-500">{{ missing || (row.film?.type === '图文' && !imageUrl) ? '媒体丢失' : row.generation }}</span>
+      <span v-else class="px-1 text-center text-[10px] text-slate-500">{{ missing || (isImageWork && !imageUrl) ? '媒体丢失' : row.generation }}</span>
       <span
         v-if="!row.job && row.film?.type === '视频'"
         class="absolute inset-x-0 bottom-0 bg-black/40 py-0.5 text-[9px] font-medium tabular-nums text-white"
@@ -73,12 +75,10 @@ onBeforeUnmount(() => { if (imageUrl.value) URL.revokeObjectURL(imageUrl.value);
         class="mt-1 inline-flex items-center gap-1 rounded bg-sky-50 px-1.5 py-1 text-[10px] text-sky-600"
       >
         <Clock3 class="h-3 w-3 shrink-0" />
-        {{ dateTime(row.task.scheduledAt) }}
-        <br />
-        北京时间 UTC+8
+        {{ scheduledDateTime(row.task.scheduledAt) }}
       </p>
       <p v-else class="mt-1 text-[10px] text-slate-400">{{ dateTime(row.date) }}</p>
-      <p v-if="row.film?.type === '图文'" class="mt-0.5 text-[10px] text-slate-400">{{ row.film.mediaIds.length }} 张图片</p>
+      <p v-if="isImageWork" class="mt-0.5 text-[10px] text-slate-400">{{ imageIds.length ? `${imageIds.length} 张图片` : '图文图片不可用' }}</p>
     </div>
   </div>
 </template>

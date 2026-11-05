@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { Search, LayoutGrid, List, Clock3, MoreHorizontal } from 'lucide-vue-next';
+import { Search, LayoutGrid, List, Clock3, Download, Eye, MoreHorizontal, Image as ImageIcon } from 'lucide-vue-next';
 import {
   Dialog,
   DialogContent,
@@ -18,20 +18,21 @@ import {
   cancelPublishTask,
   reschedulePublishTask,
   startGeneration,
+  ensureDemoProjectContent,
 } from '@/services/studio';
 import {
   videoRows,
   dateTime,
+  publishStatusLabel,
+  scheduledDateTime,
   duration,
   cover,
   privacyName,
   metrics,
   metricReason,
   publishReason,
-  videoActions,
-  workDeleteReason,
-  hideWorks,
-  type VideoAction,
+  mediaTypeName,
+  workPublishStatus,
   type VideoRow,
 } from '@/services/videoManagement';
 import { getMedia } from '@/services/media';
@@ -41,23 +42,73 @@ import { toast } from 'vue-sonner';
 import VideoInfo from './VideoInfo.vue';
 import VideoStatus from './VideoStatus.vue';
 import VideoDetails from './VideoDetails.vue';
+import FilterHeader from './FilterHeader.vue';
 const props = defineProps<{ projectId: string; published: boolean }>();
-const emit = defineEmits<{ publish: [ids: string[], taskIds?: string[]] }>();
+const emit = defineEmits<{ publish: [ids: string[]] }>();
 const route = useRoute();
 const router = useRouter();
 function param(key: string, fallback = '') {
-  const value = typeof route.query[key] === 'string' ? (route.query[key] as string) : fallback;
-  return key === 'publication' && value === '待配置' ? '未发布' : value;
+  return typeof route.query[key] === 'string' ? (route.query[key] as string) : fallback;
 }
 function setParam(key: string, value: string) {
   void router.replace({
     query: { ...route.query, [key]: value || undefined, page: key === 'view' ? route.query.page : undefined },
   });
 }
+function paramValues(key: string) { return param(key).split(',').filter(Boolean); }
+const openFilter = ref('');
+const filterDraft = ref<string[]>([]);
+const filterGroups = computed(() => {
+  const publication = (props.published
+    ? ['定时发布', '已发布', '发布成功', '发布失败']
+    : ['定时发布', '已发布', '未发布', '发布成功', '发布失败']).map(value => ({ value, label: value }));
+  const metricRanges = [
+    { value: '0-999', label: '<1K', min: 0, max: 999 },
+    { value: '1000-9999', label: '1K–10K', min: 1000, max: 9999 },
+    { value: '10000-99999', label: '10K–100K', min: 10000, max: 99999 },
+    { value: '100000-', label: '>100K', min: 100000, max: Infinity },
+  ];
+  return props.published
+    ? [
+        { key: 'type', label: '类型', options: [{ value: '视频', label: '视频' }, { value: '图集', label: '图集' }] },
+        { key: 'account', label: '帐号', options: studio.value.accounts.filter(a => studio.value.projects.find(p => p.id === props.projectId)?.accountIds.includes(a.id)).map(a => ({ value: a.id, label: a.handle })) },
+        { key: 'publication', label: '发布状态', options: publication },
+        { key: 'privacy', label: '可见范围', options: ['PUBLIC_TO_EVERYONE', 'MUTUAL_FOLLOW_FRIENDS', 'SELF_ONLY'].map(value => ({ value, label: privacyName(value) })) },
+        ...(['views', 'likes', 'comments'] as const).map(key => ({ key, label: ({ views: '播放量', likes: '点赞', comments: '评论' } as const)[key], options: metricRanges.map(({ value, label }) => ({ value, label })) })),
+      ]
+    : [
+        { key: 'type', label: '类型', options: [{ value: '视频', label: '视频' }, { value: '图集', label: '图集' }] },
+        { key: 'source', label: '创作方式', options: ['自由创作', '专家模式', '爆款复刻', '本地上传'].map(value => ({ value, label: value })) },
+        { key: 'generation', label: '生成状态', options: [{ value: '等待生成', label: '等待生成' }, { value: '生成中', label: '生成中' }, { value: '生成失败', label: '生成失败' }, { value: '生成成功', label: '生成成功' }] },
+        { key: 'publication', label: '发布状态', options: publication },
+      ];
+});
+function toggleFilter(key: string) {
+  if (openFilter.value === key) { openFilter.value = ''; return; }
+  openFilter.value = key;
+  filterDraft.value = paramValues(key);
+}
+function toggleFilterValue(value: string) {
+  filterDraft.value = filterDraft.value.includes(value)
+    ? filterDraft.value.filter(item => item !== value)
+    : [...filterDraft.value, value];
+}
+function applyFilter(key: string) {
+  setParam(key, filterDraft.value.join(','));
+  openFilter.value = '';
+}
+function clearFilter(key: string) {
+  filterDraft.value = [];
+  setParam(key, '');
+  openFilter.value = '';
+}
+function filterByKey(key: string) {
+  return filterGroups.value.find((filter) => filter.key === key);
+}
 const view = computed(() => (param('view', 'list') === 'grid' ? 'grid' : 'list'));
-const searchOpen = ref(true);
 const searchDraft = ref(param('q'));
 const searchInput = ref<HTMLInputElement | null>(null);
+const projectName = computed(() => studio.value.projects.find((p) => p.id === props.projectId)?.name ?? '当前项目');
 const selected = ref<string[]>([]);
 const details = ref<VideoRow | null>(null);
 const deleting = ref(false);
@@ -66,27 +117,55 @@ const busy = ref(false);
 const scheduleId = ref('');
 const schedule = ref('');
 const archived = computed(() => !!studio.value.projects.find((p) => p.id === props.projectId)?.archived);
+watch(() => props.projectId, ensureDemoProjectContent, { immediate: true });
 const rows = computed(() => videoRows(studio.value, props.projectId, props.published));
 watch(rows, (value) => {
   if (details.value) {
     const updated = value.find((r) => r.id === details.value?.id);
-    details.value = updated ?? null;
+    if (updated) details.value = updated;
   }
 });
 const filtered = computed(() =>
   rows.value
     .filter((row) => {
       const q = param('q').toLowerCase();
+      const sources = paramValues('source');
+      const generations = paramValues('generation').map(value => ({ 等待生成: '等待中', 生成中: '生成中', 生成失败: '失败', 生成成功: '成功' } as Record<string, string>)[value]);
+      const publications = paramValues('publication');
+      const types = paramValues('type');
+      const accounts = paramValues('account');
+      const privacy = paramValues('privacy');
+      const metricMatches = (key: 'views' | 'likes' | 'comments') => {
+        const selectedRanges = paramValues(key);
+        if (!selectedRanges.length) return true;
+        const value = metrics(row)?.[key];
+        if (value === undefined) return false;
+        return selectedRanges.some(range => {
+          const [minText, maxText] = range.split('-');
+          const min = Number(minText);
+          const max = maxText ? Number(maxText) : Infinity;
+          return value >= min && value <= max;
+        });
+      };
+      const publicationMatches = (value: string) => props.published
+        ? value === '定时发布'
+          ? row.publishStatus === '已排期'
+          : value === '已发布'
+            ? !!row.content
+            : row.publishStatus === value
+        : workPublishStatus(row) === value;
       return (
         (!q ||
           `${row.title} ${row.film?.brief || ''} ${studio.value.accounts.find((a) => a.id === (row.task?.accountId || row.content?.accountId))?.handle || ''}`
             .toLowerCase()
             .includes(q)) &&
-        (!param('source') || row.source === param('source')) &&
-        (!param('generation') || row.generation === param('generation')) &&
-        (!param('publication') || row.publishStatus === param('publication')) &&
-        (!param('account') || (row.task?.accountId || row.content?.accountId) === param('account')) &&
-        (!param('privacy') || row.task?.privacy === param('privacy'))
+        (!sources.length || sources.includes(row.source)) &&
+        (!types.length || types.includes(mediaTypeName(row))) &&
+        (!generations.length || generations.includes(row.generation)) &&
+        (!publications.length || publications.some(publicationMatches)) &&
+        (!accounts.length || accounts.includes(row.task?.accountId || row.content?.accountId || '')) &&
+        (!privacy.length || privacy.includes(row.task?.privacy || '')) &&
+        metricMatches('views') && metricMatches('likes') && metricMatches('comments')
       );
     })
     .sort((a, b) => {
@@ -115,33 +194,28 @@ watch(
     const revision = ++mediaRevision;
     const missing: Record<string, boolean> = {};
     const covers: Record<string, string> = {};
-    Object.values(imageCovers.value).forEach((url) => URL.revokeObjectURL(url));
+    Object.values(imageCovers.value).forEach(url => URL.revokeObjectURL(url));
     await Promise.all(
       rows.value
-        .filter((r) => r.film?.source === '本地上传' || r.film?.type === '图文')
+        .filter((r) => r.film?.source === '本地上传' || r.film?.type === '图文' || r.content?.type === '图文')
         .map(async (row) => {
           try {
-            const blobs = await Promise.all(
-              row.film!.mediaIds.map((id) => getMedia(currentUser.value!.id, id)),
-            );
-            missing[row.film!.id] = !row.film!.mediaIds.length || blobs.some((b) => !b);
-            if (row.film!.type === '图文' && blobs[0]) covers[row.film!.id] = URL.createObjectURL(blobs[0]);
+            const mediaIds = row.content?.imageMediaIds ?? row.task?.imageMediaIds ?? row.film?.mediaIds ?? [];
+            const key = row.film?.id || row.content?.id || row.id;
+            const blobs = await Promise.all(mediaIds.map((id) => getMedia(currentUser.value!.id, id)));
+            missing[key] = !mediaIds.length || blobs.some((b) => !b);
+            if ((row.film?.type === '图文' || row.content?.type === '图文') && blobs[0]) covers[key] = URL.createObjectURL(blobs[0]);
           } catch {
-            missing[row.film!.id] = true;
+            missing[row.film?.id || row.content?.id || row.id] = true;
           }
         }),
     );
-    if (revision === mediaRevision) {
-      missingMedia.value = missing;
-      imageCovers.value = covers;
-    } else Object.values(covers).forEach((url) => URL.revokeObjectURL(url));
+    if (revision === mediaRevision) { missingMedia.value = missing; imageCovers.value = covers; }
+    else Object.values(covers).forEach(url => URL.revokeObjectURL(url));
   },
   { immediate: true },
 );
-onBeforeUnmount(() => {
-  mediaRevision++;
-  Object.values(imageCovers.value).forEach((url) => URL.revokeObjectURL(url));
-});
+onBeforeUnmount(() => { mediaRevision++; Object.values(imageCovers.value).forEach(url => URL.revokeObjectURL(url)); });
 watch(
   () => [props.projectId, props.published],
   () => {
@@ -158,7 +232,7 @@ watch(
 watch(
   () =>
     JSON.stringify(
-      ['q', 'source', 'generation', 'publication', 'account', 'privacy', 'sort', 'page', 'size'].map(
+      ['q', 'type', 'source', 'generation', 'publication', 'account', 'privacy', 'sort', 'page', 'size'].map(
         (key) => route.query[key],
       ),
     ),
@@ -173,54 +247,35 @@ const downloadReason = (r: VideoRow) =>
       ? '本地媒体已丢失，请重新上传'
       : '';
 const canPublishReason = (r: VideoRow) =>
-  missingMedia.value[r.film?.id || '']
+  missingMedia.value[r.film?.id || ''] && r.film?.type !== '图文'
     ? '本地媒体已丢失，请重新上传'
     : publishReason(studio.value, r, archived.value);
-const deleteReason = (r: VideoRow) => workDeleteReason(studio.value, r, archived.value);
+const deleteReason = (r: VideoRow) =>
+  archived.value
+    ? '项目已归档'
+    : ['生成中', '等待中'].includes(r.generation)
+      ? '生成中的任务不可删除'
+      : r.film && studio.value.tasks.some((t) => t.filmId === r.film!.id && t.status === '发布中')
+        ? '正在发布，请等待平台确认'
+        : '';
 const publishBlocked = computed(() => chosen.value.map(canPublishReason).find(Boolean) || '');
 const downloadBlocked = computed(() => chosen.value.map(downloadReason).find(Boolean) || '');
 const deleteBlocked = computed(() => chosen.value.map(deleteReason).find(Boolean) || '');
 const cancelBlocked = computed(() =>
   archived.value
     ? '项目已归档'
-    : chosen.value.some((r) => !r.task || !['已排期', '待发布'].includes(r.task.status))
-      ? '只能取消待发布或已排期任务'
+    : chosen.value.some((r) => r.task?.status !== '已排期')
+      ? '只能批量取消已排期任务'
       : '',
 );
-async function toggleSearch() {
-  searchOpen.value = !searchOpen.value;
-  if (searchOpen.value) {
-    await nextTick();
-    searchInput.value?.focus();
-  } else setParam('q', '');
-}
-function reset() {
-  const query = { ...route.query };
-  for (const key of ['q', 'source', 'generation', 'publication', 'account', 'privacy', 'sort', 'page'])
-    delete query[key];
-  void router.replace({ query });
-  searchDraft.value = '';
-}
-function switchTab(published: boolean) {
-  const query: Record<
-    string,
-    import('vue-router').LocationQueryValue | import('vue-router').LocationQueryValue[] | undefined
-  > = { ...route.query, tab: published ? 'records' : 'creations' };
-  for (const key of [
-    'q',
-    'source',
-    'generation',
-    'publication',
-    'account',
-    'privacy',
-    'sort',
-    'page',
-    'task',
-    'from',
-  ])
-    delete query[key];
-  void router.replace({ query });
-}
+const affected = computed(
+  () =>
+    studio.value.tasks.filter(
+      (t) =>
+        chosen.value.some((r) => r.film?.id === t.filmId) &&
+        ['待配置', '待发布', '已排期'].includes(t.status),
+    ).length,
+);
 function rename(row: VideoRow, value: string) {
   if (archived.value) return;
   const name = value.trim();
@@ -237,7 +292,6 @@ function publish(rows: VideoRow[]) {
   emit(
     'publish',
     rows.map((r) => r.film!.id),
-    rows.map((r) => (r.task && ['发布失败', '已取消'].includes(r.task.status) ? r.task.id : '')),
   );
   details.value = null;
 }
@@ -273,76 +327,33 @@ async function download(rows: VideoRow[]) {
   }
 }
 function remove() {
-  try {
-    hideWorks(studio.value, props.projectId, chosen.value, archived.value);
-    selected.value = [];
-    deleting.value = false;
-    details.value = null;
-    toast.success('已从我的作品移除，媒体、发布历史与统计保留');
-  } catch (e) {
-    toast.error((e as Error).message);
-  }
-}
-function actions(row: VideoRow) {
-  return videoActions(studio.value, row, {
-    published: props.published,
-    archived: archived.value,
-    missing: missingMedia.value[row.film?.id || ''],
-    busy: busy.value,
-  });
-}
-function runAction(row: VideoRow, action: VideoAction) {
-  const current = actions(row).find((a) => a.key === action.key);
-  if (!current || current.reason) return;
-  switch (action.key) {
-    case 'publish':
-      publish([row]);
-      break;
-    case 'retry':
-      if (row.job) retryGeneration(row.job.id);
-      break;
-    case 'download':
-      void download([row]);
-      break;
-    case 'analytics':
-      analytics(row);
-      details.value = null;
-      break;
-    case 'regenerate':
-      regenerate(row);
-      break;
-    case 'modify':
-      modify(row);
-      break;
-    case 'refresh':
-      if (row.task) {
-        row.task.demoPreview = false;
-        row.task.dueAt = Date.now();
-        toast.info('正在查询模拟发布结果');
+  if (deleteBlocked.value) return;
+  for (const row of chosen.value) {
+    if (row.film) {
+      for (const task of studio.value.tasks.filter((t) => t.filmId === row.film!.id)) {
+        if (['待发布', '已排期'].includes(task.status)) cancelPublishTask(task.id);
+        if (task.status === '待配置') {
+          task.status = '已取消';
+          task.updatedAt = new Date().toISOString();
+        }
       }
-      break;
-    case 'schedule':
-      openSchedule(row);
-      details.value = null;
-      break;
-    case 'cancel':
-      selected.value = [row.id];
-      details.value = null;
-      cancelling.value = true;
-      break;
-    case 'delete':
-      selected.value = [row.id];
-      details.value = null;
-      deleting.value = true;
-      break;
+      for (const content of studio.value.content.filter((c) => c.filmId === row.film!.id))
+        content.projectIds = content.projectIds.filter((id) => id !== props.projectId);
+      studio.value.films = studio.value.films.filter((f) => f.id !== row.film!.id);
+      studio.value.jobs = studio.value.jobs.filter((j) => j.id !== row.film!.id);
+    } else if (row.content)
+      row.content.projectIds = row.content.projectIds.filter((id) => id !== props.projectId);
   }
+  selected.value = [];
+  deleting.value = false;
+  toast.success('已移除本地记录，平台内容与发布历史保留');
 }
 function cancelRows() {
   try {
     for (const row of chosen.value) if (row.task) cancelPublishTask(row.task.id);
     selected.value = [];
     cancelling.value = false;
-    toast.success('已取消发布任务');
+    toast.success('已取消定时发布');
   } catch (e) {
     toast.error((e as Error).message);
   }
@@ -364,7 +375,7 @@ function saveSchedule() {
   }
 }
 function analytics(row: VideoRow) {
-  void router.push({ query: { section: 'analytics', report: 'content', content: row.content?.id } });
+  void router.push({ query: { section: 'analytics', tab: 'content', content: row.content?.id } });
 }
 function regenerate(row: VideoRow) {
   if (!row.film || archived.value) return;
@@ -390,180 +401,68 @@ function togglePage() {
 </script>
 <template>
   <section class="space-y-4" aria-label="我的作品内容">
-    <div class="flex flex-wrap items-center justify-between gap-3">
-      <nav class="inline-flex h-10 items-center gap-1 rounded-xl bg-slate-100 p-1" aria-label="我的作品分类">
-        <button
-          v-for="item in [
-            { published: false, label: '全部' },
-            { published: true, label: '已发布' },
-          ]"
-          :key="item.label"
-          class="h-8 rounded-lg px-4 text-[13px] font-semibold"
-          :class="published === item.published ? 'bg-white text-sky-700 shadow-sm' : 'text-slate-500'"
-          :aria-pressed="published === item.published"
-          @click="switchTab(item.published)"
-        >
-          {{ item.label }}
-          <span class="ml-1 text-[11px] opacity-70">
-            {{ videoRows(studio, projectId, item.published).length }}
-          </span>
-        </button>
-      </nav>
-      <div class="flex w-full flex-wrap items-center gap-2">
+    <header class="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <h1 class="text-xl font-semibold text-slate-800">{{ published ? '发布记录' : '我的作品' }}</h1>
+        <p class="mt-2 text-xs text-slate-400">{{ projectName }} · {{ published ? '查看已提交的发布任务及平台状态' : '管理视频与图文作品，配置帐号、文案和发布时间' }}</p>
+      </div>
+      <slot name="upload" />
+    </header>
+    <div class="flex flex-wrap items-center gap-2 rounded-xl p-3">
+      <label class="relative order-first w-full sm:w-56">
+        <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
         <input
-          v-if="searchOpen"
           ref="searchInput"
           v-model="searchDraft"
-          class="studio-field !w-56"
+          class="studio-field !h-10 !w-full !rounded-lg !bg-white !pl-9 !text-xs"
           placeholder="搜索视频、文案或帐号"
           aria-label="搜索视频"
           @keydown.enter="setParam('q', searchDraft.trim())"
-          @keydown.esc="
-            searchOpen = false;
-            setParam('q', '');
-          "
+          @keydown.esc="searchDraft = ''; setParam('q', '')"
         />
-        <button v-else class="studio-btn" aria-label="搜索视频" @click="toggleSearch">
-          <Search class="h-4 w-4" />
-        </button>
-        <slot v-if="!published" name="upload" />
-        <template v-if="selected.length">
-          <span class="text-xs text-slate-500">已选 {{ selected.length }} 项</span>
-          <button class="text-xs text-slate-500" @click="selected = []">取消选择</button>
-          <span v-if="!published" :title="publishBlocked">
-            <button
-              class="studio-btn !border-sky-300 !text-sky-600"
-              :disabled="!!publishBlocked || busy"
-              @click="publish(chosen)"
-            >
-              发布
-            </button>
-          </span>
-          <span :title="downloadBlocked">
-            <button class="studio-btn" :disabled="!!downloadBlocked || busy" @click="download(chosen)">
-              下载
-            </button>
-          </span>
-          <span v-if="!published" :title="deleteBlocked">
-            <button class="studio-btn" :disabled="!!deleteBlocked || busy" @click="deleting = true">
-              删除
-            </button>
-          </span>
-          <span v-else :title="cancelBlocked">
-            <button class="studio-btn" :disabled="!!cancelBlocked || busy" @click="cancelling = true">
-              {{ chosen.every((r) => r.task?.status === '已排期') ? '取消排期' : '取消发布' }}
-            </button>
-          </span>
-        </template>
-
-        <div
-          class="ml-auto flex h-10 rounded-xl border border-slate-200 bg-slate-50 p-1"
-          aria-label="视频展示方式"
-        >
-          <button
-            v-for="item in [
-              { key: 'list', icon: List, label: '列表视图' },
-              { key: 'grid', icon: LayoutGrid, label: '缩略图视图' },
-            ]"
-            :key="item.key"
-            class="grid h-8 w-8 place-items-center rounded-lg"
-            :class="view === item.key ? 'bg-white text-sky-600 shadow-sm' : 'text-slate-400'"
-            :aria-label="item.label"
-            :aria-pressed="view === item.key"
-            @click="setParam('view', item.key)"
-          >
-            <component :is="item.icon" class="h-4 w-4" />
+      </label>
+      <div v-if="selected.length" class="flex h-10 shrink-0 items-center gap-2">
+        <span class="text-xs text-slate-500">已选 {{ selected.length }} 项</span>
+        <button type="button" class="whitespace-nowrap text-xs text-slate-500 hover:text-sky-600" @click="selected = []">取消选择</button>
+        <span v-if="!published" :title="publishBlocked || '发布所选作品'">
+          <button type="button" class="px-1 text-xs text-sky-600 hover:text-sky-700 disabled:cursor-not-allowed disabled:text-slate-300" aria-label="发布所选作品" :title="publishBlocked || '发布所选作品'" :disabled="!!publishBlocked || busy" @click="publish(chosen)">
+            发布
           </button>
-        </div>
+        </span>
+        <span :title="downloadBlocked || '下载所选作品'">
+          <button type="button" class="px-1 text-xs text-slate-600 hover:text-sky-600 disabled:cursor-not-allowed disabled:text-slate-300" aria-label="下载所选作品" :title="downloadBlocked || '下载所选作品'" :disabled="!!downloadBlocked || busy" @click="download(chosen)">
+            下载
+          </button>
+        </span>
+        <span v-if="!published" :title="deleteBlocked || '删除所选作品'">
+          <button type="button" class="px-1 text-xs text-slate-600 hover:text-sky-600 disabled:cursor-not-allowed disabled:text-slate-300" aria-label="删除所选作品" :title="deleteBlocked || '删除所选作品'" :disabled="!!deleteBlocked || busy" @click="deleting = true">
+            删除
+          </button>
+        </span>
+        <span v-else :title="cancelBlocked || '取消所选排期'">
+          <button type="button" class="px-1 text-xs text-slate-600 hover:text-sky-600 disabled:cursor-not-allowed disabled:text-slate-300" aria-label="取消所选排期" :title="cancelBlocked || '取消所选排期'" :disabled="!!cancelBlocked || busy" @click="cancelling = true">
+            取消排期
+          </button>
+        </span>
       </div>
-    </div>
-    <div class="flex flex-wrap items-center gap-2 rounded-xl bg-slate-50 p-3">
-      <template v-if="!published">
-        <select
-          :value="param('source')"
-          class="studio-field !h-8 !w-36 !bg-white !text-xs"
-          aria-label="创作方式筛选"
-          @change="setParam('source', ($event.target as HTMLSelectElement).value)"
+      <div class="flex flex-wrap items-center gap-2 sm:ml-auto">
+      <div class="flex h-10 rounded-lg border border-slate-200 bg-white p-1" aria-label="视频展示方式">
+        <button
+          v-for="item in [
+            { key: 'list', icon: List, label: '列表视图' },
+            { key: 'grid', icon: LayoutGrid, label: '缩略图视图' },
+          ]"
+          :key="item.key"
+          class="grid h-8 w-8 place-items-center rounded-md"
+          :class="view === item.key ? 'bg-sky-50 text-sky-600' : 'text-slate-400'"
+          :aria-label="item.label"
+          :aria-pressed="view === item.key"
+          @click="setParam('view', item.key)"
         >
-          <option value="">全部创作方式</option>
-          <option
-            v-for="source in ['自由创作', '专家模式', '爆款复刻', '本地上传', 'TK 历史内容']"
-            :key="source"
-          >
-            {{ source }}
-          </option>
-        </select>
-        <select
-          :value="param('generation')"
-          class="studio-field !h-8 !w-36 !bg-white !text-xs"
-          aria-label="生成状态筛选"
-          @change="setParam('generation', ($event.target as HTMLSelectElement).value)"
-        >
-          <option value="">全部生成状态</option>
-          <option v-for="status in ['生成中', '等待中', '成功', '失败', '已取消', '未提供']" :key="status">
-            {{ status }}
-          </option>
-        </select>
-      </template>
-      <select
-        v-else
-        :value="param('account')"
-        class="studio-field !h-8 !w-40 !bg-white !text-xs"
-        aria-label="发布帐号筛选"
-        @change="setParam('account', ($event.target as HTMLSelectElement).value)"
-      >
-        <option value="">全部帐号</option>
-        <option v-for="account in studio.accounts" :key="account.id" :value="account.id">
-          {{ account.handle }}
-        </option>
-      </select>
-      <select
-        :value="param('publication')"
-        class="studio-field !h-8 !w-36 !bg-white !text-xs"
-        aria-label="发布状态筛选"
-        @change="setParam('publication', ($event.target as HTMLSelectElement).value)"
-      >
-        <option value="">全部发布状态</option>
-        <option
-          v-for="status in published
-            ? ['已排期', '待发布', '发布中', '发布成功', '发布失败', '已取消']
-            : ['未发布', '已排期', '待发布', '发布中', '发布成功', '发布失败', '已取消']"
-          :key="status"
-        >
-          {{ status }}
-        </option>
-      </select>
-      <select
-        v-if="published"
-        :value="param('privacy')"
-        class="studio-field !h-8 !w-36 !bg-white !text-xs"
-        aria-label="可见范围筛选"
-        @change="setParam('privacy', ($event.target as HTMLSelectElement).value)"
-      >
-        <option value="">全部可见范围</option>
-        <option
-          v-for="value in ['PUBLIC_TO_EVERYONE', 'MUTUAL_FOLLOW_FRIENDS', 'SELF_ONLY']"
-          :key="value"
-          :value="value"
-        >
-          {{ privacyName(value) }}
-        </option>
-      </select>
-      <select
-        :value="param('sort', 'date')"
-        class="studio-field !h-8 !w-36 !bg-white !text-xs"
-        aria-label="排序方式"
-        @change="setParam('sort', ($event.target as HTMLSelectElement).value)"
-      >
-        <option value="date">最近时间</option>
-        <template v-if="published">
-          <option value="views">播放量从高到低</option>
-          <option value="likes">点赞从高到低</option>
-          <option value="comments">评论从高到低</option>
-        </template>
-      </select>
-      <button class="px-2 text-xs text-slate-500 hover:text-sky-600" @click="reset">重置</button>
-      <span class="ml-auto text-[11px] text-slate-400">{{ filtered.length }} 条 · 北京时间 UTC+8</span>
+          <component :is="item.icon" class="h-4 w-4" />
+        </button>
+      </div>
+      </div>
     </div>
     <div
       v-if="view === 'list'"
@@ -583,26 +482,58 @@ function togglePage() {
                 @change="togglePage"
               />
             </th>
-            <th>{{ published ? '视频与发布文案' : '视频' }}</th>
+            <th>
+              <span>{{ published ? '视频与发布文案' : '视频' }}</span>
+              <FilterHeader v-if="filterByKey('type')" :filter="filterByKey('type')!" :active="paramValues('type')" :open="openFilter === 'type'" @toggle="toggleFilter('type')" @toggle-value="toggleFilterValue" @clear="clearFilter('type')" @apply="applyFilter('type')" />
+            </th>
             <template v-if="!published">
-              <th>创作方式</th>
-              <th>视频参数</th>
-              <th>生成状态</th>
+              <th>
+                <span>创作方式</span>
+                <FilterHeader v-if="filterByKey('source')" :filter="filterByKey('source')!" :active="paramValues('source')" :open="openFilter === 'source'" @toggle="toggleFilter('source')" @toggle-value="toggleFilterValue" @clear="clearFilter('source')" @apply="applyFilter('source')" />
+              </th>
+              <th>参数</th>
+              <th>
+                <span>生成状态</span>
+                <FilterHeader v-if="filterByKey('generation')" :filter="filterByKey('generation')!" :active="paramValues('generation')" :open="openFilter === 'generation'" @toggle="toggleFilter('generation')" @toggle-value="toggleFilterValue" @clear="clearFilter('generation')" @apply="applyFilter('generation')" />
+              </th>
             </template>
             <template v-else>
-              <th>发布帐号</th>
-              <th>可见范围</th>
+              <th>
+                <span>发布帐号</span>
+                <FilterHeader v-if="filterByKey('account')" :filter="filterByKey('account')!" :active="paramValues('account')" :open="openFilter === 'account'" @toggle="toggleFilter('account')" @toggle-value="toggleFilterValue" @clear="clearFilter('account')" @apply="applyFilter('account')" />
+              </th>
+              <th>
+                <span>可见范围</span>
+                <FilterHeader v-if="filterByKey('privacy')" :filter="filterByKey('privacy')!" :active="paramValues('privacy')" :open="openFilter === 'privacy'" @toggle="toggleFilter('privacy')" @toggle-value="toggleFilterValue" @clear="clearFilter('privacy')" @apply="applyFilter('privacy')" />
+              </th>
             </template>
-            <th>发布状态</th>
+            <th>
+              <span>发布状态</span>
+              <FilterHeader v-if="filterByKey('publication')" :filter="filterByKey('publication')!" :active="paramValues('publication')" :open="openFilter === 'publication'" @toggle="toggleFilter('publication')" @toggle-value="toggleFilterValue" @clear="clearFilter('publication')" @apply="applyFilter('publication')" />
+            </th>
             <template v-if="published">
-              <th>播放量</th>
-              <th>点赞</th>
-              <th>评论</th>
+              <th>
+                <span>播放量</span>
+                <FilterHeader v-if="filterByKey('views')" :filter="filterByKey('views')!" :active="paramValues('views')" :open="openFilter === 'views'" @toggle="toggleFilter('views')" @toggle-value="toggleFilterValue" @clear="clearFilter('views')" @apply="applyFilter('views')" />
+              </th>
+              <th>
+                <span>点赞</span>
+                <FilterHeader v-if="filterByKey('likes')" :filter="filterByKey('likes')!" :active="paramValues('likes')" :open="openFilter === 'likes'" @toggle="toggleFilter('likes')" @toggle-value="toggleFilterValue" @clear="clearFilter('likes')" @apply="applyFilter('likes')" />
+              </th>
+              <th>
+                <span>评论</span>
+                <FilterHeader v-if="filterByKey('comments')" :filter="filterByKey('comments')!" :active="paramValues('comments')" :open="openFilter === 'comments'" @toggle="toggleFilter('comments')" @toggle-value="toggleFilterValue" @clear="clearFilter('comments')" @apply="applyFilter('comments')" />
+              </th>
             </template>
             <th>操作</th>
           </tr>
         </thead>
         <tbody>
+          <tr v-if="!pageRows.length">
+            <td :colspan="published ? 9 : 7" class="py-16 text-center text-sm text-slate-400">
+              {{ rows.length ? '暂无符合筛选条件的视频' : published ? '暂无发布任务或关联内容' : '还没有视频，可上传或前往自由创作' }}
+            </td>
+          </tr>
           <tr v-for="row in pageRows" :key="row.id">
             <td>
               <input
@@ -614,6 +545,7 @@ function togglePage() {
               />
             </td>
             <td>
+              <div class="relative w-fit">
               <VideoInfo
                 :row="row"
                 :published="published"
@@ -622,6 +554,10 @@ function togglePage() {
                 @open="details = row"
                 @rename="rename(row, $event)"
               />
+              <span v-if="mediaTypeName(row) === '图集'" class="pointer-events-none absolute left-[42px] top-1 grid h-5 w-5 place-items-center rounded bg-white/95 text-sky-600 shadow-sm" aria-label="图集" title="图集">
+                <ImageIcon class="h-3 w-3" />
+              </span>
+              </div>
               <p v-if="missingMedia[row.film?.id || '']" class="mt-1 text-[10px] text-amber-600">
                 本地媒体已丢失
               </p>
@@ -631,9 +567,7 @@ function togglePage() {
               <td class="whitespace-nowrap">
                 {{
                   row.film
-                    ? row.film.type === '图文'
-                      ? `图文 · ${row.film.mediaIds.length} 张图片`
-                      : `${row.film.type} · ${row.film.ratio} · ${duration(row.film.duration)}`
+                    ? row.film.type === '图文' ? `图文 · ${row.film.mediaIds.length} 张图片` : `${row.film.type} · ${row.film.ratio} · ${duration(row.film.duration)}`
                     : '未提供'
                 }}
                 <p class="mt-1 text-[10px] text-slate-400">{{ row.film?.quality }}</p>
@@ -650,13 +584,7 @@ function togglePage() {
               <td class="whitespace-nowrap">{{ privacyName(row.task?.privacy) }}</td>
             </template>
             <td>
-              <VideoStatus :value="row.publishStatus" />
-              <span
-                v-if="row.everPublished && ['发布失败', '已取消'].includes(row.publishStatus)"
-                class="ml-2 text-[10px] text-slate-400"
-              >
-                曾发布成功
-              </span>
+              <VideoStatus :value="published ? publishStatusLabel(row.publishStatus) : workPublishStatus(row)" />
               <p v-if="row.task?.error" class="mt-1 max-w-40 text-[10px] text-rose-500">
                 {{ row.task.error }}
               </p>
@@ -672,39 +600,102 @@ function togglePage() {
             </template>
             <td>
               <div class="flex items-center gap-2 whitespace-nowrap">
-                <span
-                  v-for="action in actions(row).filter((a) => a.primary)"
-                  :key="action.key"
-                  :title="action.reason"
+                <button
+                  v-if="row.job && row.generation === '失败'"
+                  class="text-xs text-sky-600"
+                  :disabled="archived"
+                  @click="retryGeneration(row.job.id)"
                 >
+                  重试生成
+                </button>
+                <span v-else-if="!published && row.film && !row.job" :title="canPublishReason(row)">
                   <button
-                    class="studio-btn !h-8 !px-3 !text-xs !text-sky-600"
-                    :disabled="!!action.reason"
-                    @click="runAction(row, action)"
+                    class="studio-btn !h-8 !border-sky-300 !px-3 !text-xs !text-sky-600"
+                    :disabled="!!canPublishReason(row)"
+                    @click="publish([row])"
                   >
-                    {{ action.label }}
+                    {{
+                      studio.tasks.some((t) => t.filmId === row.film?.id && t.status === '发布成功')
+                        ? '再次发布'
+                        : '去发布'
+                    }}
                   </button>
                 </span>
+                <button
+                  v-if="published && row.publishStatus === '发布失败'"
+                  class="text-xs text-sky-600"
+                  :disabled="!!canPublishReason(row)"
+                  :title="canPublishReason(row)"
+                  @click="publish([row])"
+                >
+                  重新配置
+                </button>
+                <button
+                  v-if="published && row.publishStatus === '已排期'"
+                  class="text-xs text-sky-600"
+                  :disabled="archived"
+                  @click="openSchedule(row)"
+                >
+                  改期
+                </button>
+                <button
+                  class="grid h-8 w-8 place-items-center rounded-full border border-slate-200 text-slate-500"
+                  aria-label="查看视频详情"
+                  @click="details = row"
+                >
+                  <Eye class="h-3.5 w-3.5" />
+                </button>
                 <DropdownMenu>
                   <DropdownMenuTrigger as-child>
                     <button
-                      class="grid h-8 w-8 place-items-center rounded-full border border-slate-200"
+                      type="button"
+                      class="grid h-8 w-8 cursor-pointer list-none place-items-center rounded-full border border-slate-200"
                       aria-label="更多操作"
                     >
                       <MoreHorizontal class="h-3.5 w-3.5" />
                     </button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" class="w-44 rounded-xl bg-white p-1 shadow-lg">
+                  <DropdownMenuContent
+                    align="end"
+                    class="w-40 rounded-xl border-slate-200 bg-white p-1 shadow-lg"
+                  >
                     <DropdownMenuItem
-                      v-for="action in actions(row)"
-                      :key="action.key"
-                      class="px-3 py-2 text-xs"
-                      :class="action.key === 'delete' && 'text-rose-500'"
-                      :disabled="!!action.reason"
-                      :title="action.reason"
-                      @select="runAction(row, action)"
+                      class="w-full px-3 py-2 text-left text-xs disabled:text-slate-300"
+                      :disabled="!!downloadReason(row) || busy"
+                      :title="downloadReason(row)"
+                      @select="download([row])"
                     >
-                      {{ action.label }}
+                      下载
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      v-if="published && row.content"
+                      class="w-full px-3 py-2 text-left text-xs"
+                      @select="analytics(row)"
+                    >
+                      查看数据
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      v-if="row.task?.status === '已排期'"
+                      class="w-full px-3 py-2 text-left text-xs"
+                      :disabled="archived"
+                      @select="
+                        selected = [row.id];
+                        cancelling = true;
+                      "
+                    >
+                      取消排期
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      v-if="!published"
+                      class="w-full px-3 py-2 text-left text-xs disabled:text-slate-300"
+                      :disabled="!!deleteReason(row)"
+                      :title="deleteReason(row)"
+                      @select="
+                        selected = [row.id];
+                        deleting = true;
+                      "
+                    >
+                      删除本地记录
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -722,49 +713,38 @@ function togglePage() {
       >
         <button class="absolute inset-0 w-full" :aria-label="`查看 ${row.title}`" @click="details = row">
           <img
-            v-if="!row.job && row.film?.type === '图文' && imageCovers[row.film.id]"
-            :src="imageCovers[row.film.id]"
+            v-if="!row.job && (row.film?.type === '图文' || row.content?.type === '图文') && imageCovers[row.film?.id || row.content?.id || row.id]"
+            :src="imageCovers[row.film?.id || row.content?.id || row.id]"
             alt="图文首图封面"
             class="h-full w-full object-cover"
           />
           <img
-            v-else-if="
-              !row.job &&
-              row.film?.type !== '图文' &&
-              row.content?.type !== '图文' &&
-              !missingMedia[row.film?.id || '']
-            "
+            v-else-if="!row.job && row.film?.type !== '图文' && row.content?.type !== '图文' && !missingMedia[row.film?.id || '']"
             :src="cover(row.film?.id || row.content?.id || row.id)"
             alt="视频封面"
             class="h-full w-full object-cover"
           />
           <span v-else class="text-base text-slate-500">
-            {{
-              missingMedia[row.film?.id || ''] || row.content?.type === '图文' || row.film?.type === '图文'
-                ? '图文图片不可用'
-                : row.generation
-            }}
+            {{ missingMedia[row.film?.id || row.content?.id || ''] || row.content?.type === '图文' || row.film?.type === '图文' ? '图文图片不可用' : row.generation }}
           </span>
         </button>
         <input
           v-model="selected"
           type="checkbox"
           :value="row.id"
-          class="absolute right-3 top-3 h-5 w-5 accent-sky-500"
+          class="absolute right-12 top-3 h-5 w-5 accent-sky-500"
           :aria-label="`选择 ${row.title}`"
         />
+        <span v-if="mediaTypeName(row) === '图集'" class="absolute right-3 top-3 grid h-7 w-7 place-items-center rounded-md bg-white/95 text-sky-600 shadow-sm" aria-label="图集" title="图集">
+          <ImageIcon class="h-4 w-4" />
+        </span>
         <span
           v-if="!row.job && row.film?.type === '视频'"
           class="absolute left-3 top-3 rounded bg-black/40 px-1.5 py-0.5 text-[10px] text-white"
         >
           {{ duration(row.film.duration) }}
         </span>
-        <span
-          v-if="!row.job && row.film?.type === '图文'"
-          class="absolute left-3 top-3 rounded bg-black/50 px-1.5 py-0.5 text-[10px] text-white"
-        >
-          {{ row.film.mediaIds.length }} 张图片
-        </span>
+        <span v-if="!row.job && (row.film?.type === '图文' || row.content?.type === '图文')" class="absolute left-3 top-3 rounded bg-black/50 px-1.5 py-0.5 text-[10px] text-white">{{ row.content?.imageMediaIds?.length ?? row.task?.imageMediaIds?.length ?? row.film?.mediaIds.length ?? 0 }} 张图片</span>
         <div
           class="absolute inset-x-0 bottom-0 space-y-2 px-4 pb-4 pt-12"
           :class="
@@ -788,49 +768,52 @@ function togglePage() {
           <p class="text-[10px] opacity-75">{{ dateTime(row.date) }}</p>
           <p v-if="row.task?.status === '已排期'" class="flex items-center gap-1 text-[10px] text-sky-300">
             <Clock3 class="h-3 w-3" />
-            {{ dateTime(row.task.scheduledAt) }} 北京时间 UTC+8
+            {{ scheduledDateTime(row.task.scheduledAt) }}
           </p>
           <div class="flex flex-wrap items-center gap-2">
-            <VideoStatus :value="row.publishStatus" />
-            <span
-              v-if="row.everPublished && ['发布失败', '已取消'].includes(row.publishStatus)"
-              class="ml-2 text-[10px] text-slate-400"
-            >
-              曾发布成功
-            </span>
+            <VideoStatus :value="published ? publishStatusLabel(row.publishStatus) : workPublishStatus(row)" />
             <span v-if="published" class="text-[10px]">
               {{
                 studio.accounts.find((a) => a.id === (row.task?.accountId || row.content?.accountId))?.handle
               }}
             </span>
             <button
-              v-for="action in actions(row).filter((a) => a.primary)"
-              :key="action.key"
+              v-if="!published && row.film && !row.job"
               class="rounded-lg border border-current px-2 py-1 text-xs disabled:opacity-40"
-              :disabled="!!action.reason"
-              :title="action.reason"
-              @click="runAction(row, action)"
+              :disabled="!!canPublishReason(row)"
+              :title="canPublishReason(row)"
+              @click="publish([row])"
             >
-              {{ action.label }}
+              {{
+                studio.tasks.some((t) => t.filmId === row.film?.id && t.status === '发布成功')
+                  ? '再次发布'
+                  : '去发布'
+              }}
             </button>
-            <DropdownMenu>
-              <DropdownMenuTrigger as-child>
-                <button class="rounded-full border border-current p-1.5" aria-label="更多操作">
-                  <MoreHorizontal class="h-4 w-4" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent class="w-44 bg-white p-1">
-                <DropdownMenuItem
-                  v-for="action in actions(row)"
-                  :key="action.key"
-                  :disabled="!!action.reason"
-                  :title="action.reason"
-                  @select="runAction(row, action)"
-                >
-                  {{ action.label }}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <button
+              v-if="row.job && row.generation === '失败'"
+              class="text-xs text-sky-600"
+              :disabled="archived"
+              @click="retryGeneration(row.job.id)"
+            >
+              重试生成
+            </button>
+            <button
+              v-if="published && row.publishStatus === '已排期'"
+              class="text-xs"
+              :disabled="archived"
+              @click="openSchedule(row)"
+            >
+              改期
+            </button>
+            <button
+              v-if="published && row.publishStatus === '发布失败'"
+              class="text-xs"
+              :disabled="!!canPublishReason(row)"
+              @click="publish([row])"
+            >
+              重新配置
+            </button>
           </div>
           <p v-if="published" class="text-[10px] opacity-80">
             播放 {{ metrics(row)?.views ?? '—' }} · 点赞 {{ metrics(row)?.likes ?? '—' }} · 评论
@@ -840,7 +823,7 @@ function togglePage() {
       </article>
     </div>
     <div
-      v-if="!pageRows.length"
+      v-if="view === 'grid' && !pageRows.length"
       class="rounded-xl border border-dashed border-slate-200 py-16 text-center text-sm text-slate-400"
     >
       {{
@@ -850,7 +833,6 @@ function togglePage() {
             ? '暂无发布任务或关联内容'
             : '还没有视频，可上传或前往自由创作'
       }}
-      <button v-if="rows.length" class="ml-3 text-sky-600" @click="reset">重置筛选</button>
     </div>
     <div class="flex items-center justify-end gap-3 text-xs text-slate-500">
       <span>共 {{ filtered.length }} 条</span>
@@ -882,25 +864,58 @@ function togglePage() {
     <VideoDetails :row="details" @close="details = null">
       <template #actions>
         <template v-if="details">
-          <span v-for="action in actions(details)" :key="action.key" :title="action.reason">
-            <button
-              class="studio-btn"
-              :class="action.key === 'delete' && '!text-rose-500'"
-              :disabled="!!action.reason"
-              @click="runAction(details, action)"
-            >
-              {{ action.label }}
-            </button>
-          </span>
+          <button
+            v-if="details.task?.status === '已排期'"
+            class="studio-btn"
+            :disabled="archived"
+            @click="openSchedule(details)"
+          >
+            改期
+          </button>
+          <button
+            v-if="details.task?.status === '已排期'"
+            class="studio-btn"
+            :disabled="archived"
+            @click="
+              selected = [details.id];
+              cancelling = true;
+            "
+          >
+            取消排期
+          </button>
+          <button v-if="details.content" class="studio-btn" @click="analytics(details)">查看数据</button>
+          <button
+            class="studio-btn"
+            :disabled="!!downloadReason(details) || busy"
+            :title="downloadReason(details)"
+            @click="download([details])"
+          >
+            <Download class="h-3.5 w-3.5" />
+            下载
+          </button>
+          <button
+            class="studio-btn !border-sky-300 !text-sky-600"
+            :disabled="!!canPublishReason(details)"
+            :title="canPublishReason(details)"
+            @click="publish([details])"
+          >
+            去发布
+          </button>
+          <button class="studio-btn" :disabled="archived || !details.film" @click="regenerate(details)">
+            重新生成
+          </button>
+          <button class="studio-btn" :disabled="archived || !details.film" @click="modify(details)">
+            修改视频
+          </button>
         </template>
       </template>
     </VideoDetails>
     <Dialog :open="deleting" @update:open="deleting = $event">
       <DialogContent class="max-w-md bg-white">
-        <DialogTitle>从我的作品删除？</DialogTitle>
+        <DialogTitle>删除所选本地记录？</DialogTitle>
         <DialogDescription>
-          将从当前项目的作品列表移除
-          {{ chosen.length }} 条作品。媒体文件、发布记录、完整历史与数据分析仍保留。
+          将移除 {{ chosen.length }} 条记录，并取消 {{ affected }} 条尚未执行的发布配置或任务。TK
+          内容和已有发布历史保留；外部内容仅解除项目关联。
         </DialogDescription>
         <div class="flex justify-end gap-2">
           <button class="studio-btn" @click="deleting = false">返回</button>
@@ -910,8 +925,8 @@ function togglePage() {
     </Dialog>
     <Dialog :open="cancelling" @update:open="cancelling = $event">
       <DialogContent class="max-w-md bg-white">
-        <DialogTitle>取消发布任务？</DialogTitle>
-        <DialogDescription>将取消 {{ chosen.length }} 条待执行任务，作品和任务历史保留。</DialogDescription>
+        <DialogTitle>取消定时发布？</DialogTitle>
+        <DialogDescription>将取消 {{ chosen.length }} 条排期任务，视频和任务历史保留。</DialogDescription>
         <div class="flex justify-end gap-2">
           <button class="studio-btn" @click="cancelling = false">返回</button>
           <button class="studio-primary" :disabled="!!cancelBlocked" @click="cancelRows">确认取消</button>

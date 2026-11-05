@@ -13,7 +13,7 @@ import {
   startGeneration,
   validatePublish,
 } from '@/services/studio';
-import { videoRows, metrics, duration, publishReason } from '@/services/videoManagement';
+import { videoRows, metrics, duration, publishReason, mediaTypeName, workPublishStatus } from '@/services/videoManagement';
 import type { Film, PlatformContent } from '@/types/studio';
 beforeEach(() => {
   localStorage.clear();
@@ -88,6 +88,26 @@ test('图文发布必须保留至少一张图片，且可选 BGM 不影响发布
   task.imageMediaIds = ['image-id'];
   task.bgm = undefined;
   expect(() => validatePublish(task)).not.toThrow();
+});
+test('作品类型区分视频与图集', () => {
+  const { p, film } = setup();
+  const rows = videoRows(studio.value, p.id, false);
+  expect(mediaTypeName(rows[0]!)).toBe('视频');
+  film.type = '图文';
+  expect(mediaTypeName(videoRows(studio.value, p.id, false)[0]!)).toBe('图集');
+});
+test('作品发布状态映射到筛选项，发布任务状态不泄漏待配置与已取消', () => {
+  const { p, task } = setup();
+  const row = videoRows(studio.value, p.id, false)[0]!;
+  expect(workPublishStatus(row)).toBe('未发布');
+  task.status = '已排期';
+  expect(workPublishStatus({ ...row, publishStatus: task.status })).toBe('定时发布');
+  task.status = '发布失败';
+  expect(workPublishStatus({ ...row, publishStatus: task.status })).toBe('发布失败');
+  task.status = '发布成功';
+  expect(workPublishStatus({ ...row, publishStatus: task.status })).toBe('发布成功');
+  const publishedRow = { ...row, task: undefined, content: external(p.id), publishStatus: '发布成功' };
+  expect(workPublishStatus(publishedRow)).toBe('已发布');
 });
 test('真实零指标与未发布、无权限指标区分，时长统一格式', () => {
   const { p, task } = setup();
@@ -168,6 +188,6 @@ test('失败重试保留任务，旧成功任务不被新草稿借用实际发�
   const draft = ensurePublishTask(film);
   expect(draft.publishedAt).toBeUndefined();
   const row = videoRows(studio.value, p.id, false).find((r) => r.film?.id === film.id)!;
-  expect(row.content?.filmId).toBe(film.id);
-  expect(row.publishStatus).toBe('发布成功');
+  expect(row.content).toBeUndefined();
+  expect(row.publishStatus).toBe('待配置');
 });

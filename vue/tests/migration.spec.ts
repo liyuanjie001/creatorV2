@@ -104,8 +104,30 @@ test('项目导航和创作模式可切换并恢复到地址', async ({ page }) 
   await navigation.getByRole('button', { name: '专家模式' }).click();
   await expect(navigation.getByRole('button', { name: '专家模式' })).toHaveAttribute('aria-current', 'page');
   await expect(page).toHaveURL(/section=gen.*mode=expert|mode=expert.*section=gen/);
-  await page.reload();
+  await expect(page.getByRole('textbox', { name: '专家对话' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '解锁专业创意，打造高质量营销视频' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '放大输入框' })).toHaveCount(0);
+  const expertTitle = await page.getByRole('heading', { name: '解锁专业创意，打造高质量营销视频' }).boundingBox();
+  const expertInput = await page.getByRole('textbox', { name: '专家对话' }).boundingBox();
+  expect(expertTitle!.y + expertTitle!.height).toBeLessThan(expertInput!.y);
+  await expect(page).toHaveURL(/session=/);
+  const initialSessionId = await page.evaluate(() => new URLSearchParams(location.hash.split('?')[1]).get('session'));
+  const initialSessionCount = await page.evaluate(() => JSON.parse(localStorage.getItem('chuhai-studio-v1:demo') || '{}').sessions?.filter((item: { projectId: string }) => item.projectId === 'P1').length);
+  expect(initialSessionCount).toBe(1);
+  await expect(page.getByText('历史会话 · 当前项目')).toBeHidden();
+  await page.getByRole('textbox', { name: '专家对话' }).fill('推广 GlowUp 精华，面向通勤女性，突出快速吸收');
+  await page.getByRole('button', { name: '发送消息' }).click();
   await expect(page.getByText('历史会话 · 当前项目')).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole('textbox', { name: '专家对话' })).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`session=${initialSessionId}`));
+  await expect(page.getByText('历史会话 · 当前项目')).toBeHidden();
+  await page.getByRole('button', { name: '展开历史会话' }).click();
+  await expect(page.getByText('历史会话 · 当前项目')).toBeVisible();
+  await page.getByRole('button', { name: '新建会话', exact: true }).click();
+  const newestSessionId = await page.evaluate(() => new URLSearchParams(location.hash.split('?')[1]).get('session'));
+  await page.goto('/#/projects/P1?section=gen&mode=expert');
+  await expect(page).toHaveURL(new RegExp(`session=${newestSessionId}`));
   await page.screenshot({ path: `/tmp/roxy-navigation-${test.info().project.name}.png` });
   await page.getByRole('button', { name: '项目设置', exact: true }).click();
   await expect(page).toHaveURL(/section=settings/);
@@ -241,17 +263,17 @@ test('TK 帐号可走通模拟授权并保留 Roxy 入口', async ({ page }) => 
   await expect(page.getByText('@playwright.brand')).toBeVisible();
   await page.getByRole('button', { name: '返回帐号列表' }).click();
   await page.getByRole('button', { name: '更多' }).click();
-  await page.getByRole('menuitem', { name: 'Roxy 窗口管理 ↗' }).click();
+  await page.getByRole('button', { name: 'Roxy 窗口管理 ↗' }).click();
   await expect(page).toHaveURL(/#\/roxy$/);
   await expect(page.getByRole('heading', { name: '窗口管理' })).toBeVisible();
 });
 
 test('发布单条成片并在项目分析中区分尚未采集的数据', async ({ page }) => {
   await page.goto('/#/projects/P1?section=publish');
-  await page.getByRole('row').filter({ has: page.getByRole('textbox', { name: '修改视频名称 GlowUp 晨间护肤日记 · 三分钟打造自然透亮的日常好气色', exact: true }) }).getByRole('button', { name: '去发布', exact: true }).click();
+  await page.getByRole('button', { name: '去发布', exact: true }).first().click();
   await page.locator('select').first().selectOption('tk-glow');
   await page.getByRole('button', { name: '立即发布', exact: true }).click();
-  await expect(page.getByRole('table').locator('tbody tr').filter({ hasText: 'GlowUp 晨间护肤日记' }).filter({ hasText: '发布中' })).toHaveCount(1, {
+  await expect(page.getByRole('table').locator('tbody tr').filter({ hasText: '发布中' })).toHaveCount(1, {
     timeout: 10000,
   });
   await expect(
@@ -357,6 +379,12 @@ test('创作页隐藏标题并展示爆款视频瀑布流', async ({ page }) => 
   await page.goto('/#/projects/P1?section=gen&mode=expert');
   await expect(page.getByRole('heading', { name: '专家模式', exact: true })).toHaveCount(0);
   await expect(page.getByRole('region', { name: '爆款视频推荐' })).toHaveCount(0);
+  await expect(page.getByText('历史会话 · 当前项目')).toBeHidden();
+  await page.getByRole('button', { name: '展开历史会话' }).click();
+  await expect(page.getByText('历史会话 · 当前项目')).toBeVisible();
+  await page.getByRole('button', { name: '收起历史会话' }).click();
+  await expect(page.getByText('历史会话 · 当前项目')).toBeHidden();
+  await page.getByRole('button', { name: '展开历史会话' }).click();
   await expect(page.getByText('历史会话 · 当前项目')).toBeVisible();
 });
 
@@ -376,7 +404,7 @@ test('创作记录视图切换共用选择并直接配置发布', async ({ page 
 });
 
 test('创作记录按选择展示批量操作与完整时间', async ({ page }) => {
-  await page.goto('/#/projects/P1?section=publish&view=list&size=50');
+  await page.goto('/#/projects/P1?section=publish&view=list');
   const table = page.getByRole('table', { name: '全部视频列表' });
   await expect(table).toBeVisible();
   const count = await table.locator('tbody tr').count();
@@ -394,14 +422,24 @@ test('创作记录按选择展示批量操作与完整时间', async ({ page }) 
 });
 
 test('创作记录查看为左右分栏详情弹窗', async ({ page }) => {
-  await page.goto('/#/projects/P1?section=publish&view=list&size=50');
+  await page.goto('/#/projects/P1?section=publish&view=list');
   const table = page.getByRole('table', { name: '全部视频列表' });
   await expect(table.getByRole('button', { name: '重新生成', exact: true })).toHaveCount(0);
-  await table.getByRole('button', { name: /^查看 / }).first().click();
+  await table
+    .getByRole('button', { name: /^查看 GlowUp 晨间护肤日记/ })
+    .click();
   const dialog = page.getByRole('dialog');
   await expect(dialog.getByText('提示词', { exact: true })).toBeVisible();
+  await expect(dialog.getByRole('region', { name: '生成信息' })).toBeVisible();
+  await expect(dialog.getByRole('region', { name: '发布信息' })).toBeVisible();
   await expect(dialog.getByRole('button', { name: '下载', exact: true })).toBeVisible();
+  const detailsPanel = dialog.getByRole('region', { name: '创作详情' });
+  const scrollBody = detailsPanel.locator('.overflow-y-auto').first();
+  expect(await scrollBody.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
   expect((await dialog.boundingBox())!.width).toBeLessThanOrEqual(1120);
+  const dialogBox = (await dialog.boundingBox())!;
+  const footerBox = (await detailsPanel.locator('footer').boundingBox())!;
+  expect(footerBox.y + footerBox.height).toBeCloseTo(dialogBox.y + dialogBox.height, 0);
   const media = (await dialog.getByRole('region', { name: '媒体预览' }).boundingBox())!;
   const details = (await dialog.getByRole('region', { name: '创作详情' }).boundingBox())!;
   expect(media.x + media.width).toBeLessThanOrEqual(details.x + 1);
@@ -411,13 +449,22 @@ test('创作记录查看为左右分栏详情弹窗', async ({ page }) => {
   await expect(page.getByRole('textbox', { name: '创作提示词' })).toHaveValue(prompt);
 });
 
+test('未发布作品详情隐藏发布信息', async ({ page }) => {
+  await page.goto('/#/projects/P1?section=publish&view=list');
+  const unpublished = page.getByRole('table', { name: '全部视频列表' }).locator('tbody tr').filter({ hasText: '未发布' }).first();
+  await unpublished.getByRole('button', { name: '查看视频详情' }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByRole('region', { name: '生成信息' })).toBeVisible();
+  await expect(dialog.getByRole('region', { name: '发布信息' })).toHaveCount(0);
+});
+
 test('创作记录展示排队生成成功和失败状态', async ({ page }) => {
   await page.goto('/#/projects/P1?section=publish');
   const table = page.getByRole('table', { name: '全部视频列表' });
   for (const status of ['生成中', '等待中', '成功', '失败'])
     await expect(table.getByText(status, { exact: true }).first()).toBeVisible();
   await expect(page.getByRole('button', { name: '取消生成', exact: true })).toHaveCount(0);
-  await table.getByRole('row').filter({has:page.getByRole('textbox',{name:'修改视频名称 好物测评视频 · 失败（演示）',exact:true})}).getByRole('button', { name: '重试生成', exact: true }).click();
+  await table.getByRole('button', { name: '重试生成', exact: true }).click();
   await expect(table.getByText('失败', { exact: true })).toHaveCount(0);
   await expect(table.getByText('生成中', { exact: true })).toHaveCount(2);
 });

@@ -112,9 +112,9 @@ function openRecharge(pack: RechargePack) {
 <template>
   <div class="space-y-6">
     <PageHeader title="个人中心" desc="查看积分余额并充值，按档位获取更多 AI 积分" />
-    <UserSettings />
 
     <div class="mx-auto max-w-[1180px] space-y-8">
+      <UserSettings />
       <!-- 顶部：我的积分 + 低调定制化 -->
       <div class="grid grid-cols-1 items-stretch gap-3 md:grid-cols-[minmax(0,1.65fr)_minmax(0,1fr)]">
         <Card class="overflow-hidden border-slate-200 bg-white p-5 shadow-sm shadow-slate-200/40">
