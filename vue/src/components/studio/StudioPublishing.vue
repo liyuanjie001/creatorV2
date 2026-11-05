@@ -51,7 +51,7 @@ const bgmTracks = [
 ];
 
 const project = computed(() => studio.value.projects.find(p => p.id === props.projectId)!);
-const accounts = computed(() => studio.value.accounts.filter(a => project.value.accountIds.includes(a.id) && a.status === '已授权'));
+const accounts = computed(() => studio.value.accounts.filter(a => !a.deleted && project.value.accountIds.includes(a.id) && a.status === '已授权'));
 const mutable = (task?: PublishTask) => !task || ['待配置', '发布失败', '已取消'].includes(task.status);
 async function upload(event: Event) {
   const files = Array.from((event.target as HTMLInputElement).files ?? []);
@@ -73,8 +73,8 @@ async function upload(event: Event) {
   } catch (e) { toast.error((e as Error).message); }
   finally { uploading.value = false; (event.target as HTMLInputElement).value = ''; }
 }
-function configure(ids: string[]) {
-  drafts.value = ids.map(id => studio.value.films.find(f => f.id === id)).filter((f): f is Film => !!f).map(ensurePublishTask).filter(mutable).map(t => { const copy = JSON.parse(JSON.stringify(t)) as PublishTask; const film = filmFor(copy); if (film?.type === '图文') copy.imageMediaIds ??= [...film.mediaIds]; return copy; });
+function configure(ids: string[], taskIds: string[] = []) {
+  drafts.value = ids.map(id => studio.value.films.find(f => f.id === id)).filter((f): f is Film => !!f).map(f => { const task = studio.value.tasks.find(t => t.filmId === f.id && taskIds.includes(t.id) && mutable(t)); return task ?? ensurePublishTask(f); }).filter(mutable).map(t => { const copy = JSON.parse(JSON.stringify(t)) as PublishTask; const film = filmFor(copy); if (film?.type === '图文') copy.imageMediaIds ??= [...film.mediaIds]; return copy; });
   if (!drafts.value.length) { toast.info('所选成片已有执行中的任务'); return; }
   error.value = '';
   void router.push({ query: { ...route.query, tab: 'configure', from: tab.value, task: drafts.value.map(t => t.id) } });

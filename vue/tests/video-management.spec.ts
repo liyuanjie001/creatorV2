@@ -33,17 +33,20 @@ test('统一列表、筛选地址恢复、缩略图及视频详情', async ({ pa
   await page.reload();
   await expect(page.getByLabel('创作方式筛选')).toHaveValue('专家模式');
   await manager.getByRole('button', { name: '重置', exact: true }).click();
-  await page.getByRole('button', { name: '搜索视频', exact: true }).click();
   await page.getByRole('textbox', { name: '搜索视频' }).fill('晨间');
   await page.getByRole('textbox', { name: '搜索视频' }).press('Enter');
   await expect(page).toHaveURL(/q=/);
   await manager.getByRole('button', { name: '重置', exact: true }).click();
   await page.getByRole('button', { name: '缩略图视图' }).click();
-  await expect(manager.locator('article')).toHaveCount(12);
+  await expect(manager.locator('article')).toHaveCount(20);
   await expect(manager.locator('article').filter({ hasText: '生成中' }).first()).toBeVisible();
   await page.screenshot({ path: `/tmp/video-management-${info.project.name}-grid.png`, fullPage: true });
   await page.getByRole('button', { name: '列表视图' }).click();
-  await page.getByRole('button', { name: '查看视频详情', exact: true }).first().click();
+  await page
+    .getByRole('table')
+    .getByRole('button', { name: /^查看 / })
+    .first()
+    .click();
   await expect(page.getByRole('dialog')).toContainText('参考产品卡');
   await expect(page.getByRole('dialog')).toContainText('实际发布时间');
   await page.keyboard.press('Escape');
@@ -62,14 +65,14 @@ test('独立配置发布、排期调整取消与刷新恢复', async ({ page }) 
   await page.getByRole('radio', { name: '定时发布', exact: true }).check();
   await page.getByRole('button', { name: '定时发布', exact: true }).click();
   await expect(page.getByRole('table', { name: '已发布视频列表' })).toBeVisible();
-  await expect(page.getByRole('button', { name: '改期', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '改期', exact: true }).first()).toBeVisible();
   await page.reload();
-  await page.getByRole('button', { name: '改期', exact: true }).click();
+  await page.getByRole('button', { name: '改期', exact: true }).first().click();
   await page.getByLabel('调整排期时间').fill('2099-11-04T18:00');
   await page.getByRole('button', { name: '保存排期' }).click();
   await expect(page.getByRole('table')).toContainText('2099/11/04');
   await page.getByLabel('选择当前页').check();
-  await expect(page.getByRole('button', { name: '取消排期', exact: true }).first()).toBeDisabled();
+  await expect(page.getByRole('button', { name: '取消发布', exact: true }).first()).toBeDisabled();
   await page.getByRole('button', { name: '取消选择', exact: true }).click();
   await page.getByLabel('发布状态筛选').selectOption('已排期');
   await page.getByLabel('选择当前页').check();
@@ -131,7 +134,7 @@ test('分页、批量部分失败重试和再次发布保留原记录', async ({
   await page.reload();
   await expect(page.getByRole('button', { name: '上一页' })).toBeEnabled();
   await page.getByLabel('每页条数').selectOption('50');
-  await expect(page.getByRole('table').locator('tbody tr')).toHaveCount(37);
+  await expect(page.getByRole('table').locator('tbody tr')).toHaveCount(50);
   for (const title of titles)
     await page.getByRole('checkbox', { name: `选择 ${title}`, exact: true }).check();
   await page.getByRole('button', { name: '发布', exact: true }).click();
@@ -139,9 +142,19 @@ test('分页、批量部分失败重试和再次发布保留原记录', async ({
   await page.getByRole('button', { name: '立即发布', exact: true }).click();
   await expect(page.getByRole('table')).toContainText('发布失败', { timeout: 12000 });
   await expect(page.getByRole('table')).toContainText('发布成功');
-  await page.getByRole('button', { name: '重新配置', exact: true }).click();
+  await page
+    .getByRole('row')
+    .filter({ hasText: titles[0] })
+    .getByRole('button', { name: '重新配置', exact: true })
+    .click();
   await page.getByRole('button', { name: '立即发布', exact: true }).click();
-  await expect(page.getByRole('table').locator('tbody tr').filter({ hasText: '发布失败' })).toHaveCount(0, {
+  await expect(
+    page
+      .getByRole('table')
+      .locator('tbody tr')
+      .filter({ hasText: titles[0] })
+      .filter({ hasText: '发布失败' }),
+  ).toHaveCount(0, {
     timeout: 12000,
   });
   await expect(page.getByRole('table').locator('tbody tr').filter({ hasText: titles[0] })).toContainText(
@@ -161,7 +174,7 @@ test('分页、批量部分失败重试和再次发布保留原记录', async ({
   await expect(page.locator('article').filter({ hasText: titles[1] })).toHaveCount(2);
 });
 
-test('生成任务重命名、批量禁用原因与外部内容解除关联', async ({ page }) => {
+test('生成任务重命名、批量禁用原因与外部作品隐藏', async ({ page }) => {
   await page.goto('/#/projects/P1?section=publish');
   const name = page.getByRole('textbox', { name: '修改视频名称 产品展示短片 · 生成中（演示）', exact: true });
   await name.fill('生成任务的新名称');
@@ -179,13 +192,13 @@ test('生成任务重命名、批量禁用原因与外部内容解除关联', as
   await first.getByRole('checkbox').check();
   await expect(page.getByRole('button', { name: '下载', exact: true })).toBeDisabled();
   await page.getByRole('button', { name: '删除', exact: true }).click();
-  await expect(page.getByRole('dialog')).toContainText('外部内容仅解除项目关联');
+  await expect(page.getByRole('dialog')).toContainText('完整历史与数据分析仍保留');
   await page.getByRole('button', { name: '确认删除' }).click();
-  await expect(page.getByRole('table').locator('tbody tr')).toHaveCount(3);
+  await expect(page.getByRole('table').locator('tbody tr')).toHaveCount(5);
   const contents = await page.evaluate(
     () => JSON.parse(localStorage.getItem('chuhai-studio-v1:demo')!).content,
   );
-  expect(contents).toHaveLength(8);
+  expect(contents).toHaveLength(14);
   await page.getByRole('button', { name: /^已发布/ }).click();
-  await expect(page.getByRole('table').locator('tbody tr')).toHaveCount(3);
+  await expect(page.getByRole('table').locator('tbody tr')).toHaveCount(17);
 });

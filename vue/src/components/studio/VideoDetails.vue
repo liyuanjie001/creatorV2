@@ -53,10 +53,21 @@ const fields = computed(() => {
   return [
     ['创作方式', sourceName(f)],
     ['视频名称', f?.title || row.title],
-    ['视频参数', f ? f.type === '图文' ? `图文 · ${f.mediaIds.length} 张图片` : `${f.type} · ${f.ratio} · ${f.duration}s · ${f.quality}` : '未提供'],
+    [
+      '视频参数',
+      f
+        ? f.type === '图文'
+          ? `图文 · ${f.mediaIds.length} 张图片`
+          : `${f.type} · ${f.ratio} · ${f.duration}s · ${f.quality}`
+        : '未提供',
+    ],
     ['生成时间', f ? dateTime(row.job?.createdAt || f.createdAt) : '未提供'],
     ['生成状态', row.generation],
-    ['发布状态', row.publishStatus],
+    [
+      '发布状态',
+      row.publishStatus +
+        (row.everPublished && ['发布失败', '已取消'].includes(row.publishStatus) ? ' · 曾发布成功' : ''),
+    ],
     ['计划发布时间', row.task?.scheduledAt ? dateTime(row.task.scheduledAt) : '—'],
     ['实际发布时间', dateTime(row.task?.publishedAt || content?.publishedAt)],
     [
@@ -107,11 +118,20 @@ const fields = computed(() => {
                       ? 'TK 历史内容'
                       : film.source === '本地上传'
                         ? '本地媒体不可用'
-                      : film.type === '图文' ? '图文图片不可用' : '生成效果演示'
+                        : film.type === '图文'
+                          ? '图文图片不可用'
+                          : '生成效果演示'
                 }}
               </p>
               <p class="text-xs">
-                {{ error || (!film ? '本机未保存此内容的媒体文件' : film.type === '图文' ? '图片已丢失，请重新上传后再发布' : '尚未接入真实视频生成服务') }}
+                {{
+                  error ||
+                  (!film
+                    ? '本机未保存此内容的媒体文件'
+                    : film.type === '图文'
+                      ? '图片已丢失，请重新上传后再发布'
+                      : '尚未接入真实视频生成服务')
+                }}
               </p>
             </div>
           </div>
@@ -171,7 +191,7 @@ const fields = computed(() => {
               <p v-if="task.error" class="w-full text-rose-500">{{ task.error }}</p>
             </div>
             <p v-if="!history.length" class="text-xs text-slate-400">暂无本地发布历史</p>
-            <div v-if="!row.job" class="mt-5 flex flex-wrap gap-2"><slot name="actions" /></div>
+            <div class="mt-5 flex flex-wrap gap-2"><slot name="actions" /></div>
           </div>
         </div>
       </template>

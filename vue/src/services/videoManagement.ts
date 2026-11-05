@@ -10,6 +10,7 @@ export type VideoRow = {
   generation: string;
   source: string;
   publishStatus: string;
+  everPublished: boolean;
 };
 export const activePublish = ['待发布', '已排期', '发布中'];
 export function sourceName(film?: Film) {
@@ -111,7 +112,13 @@ export function videoRows(state: StudioState, projectId: string, published: bool
         ? '成功'
         : '未提供',
     source: sourceName(film),
-    publishStatus: task?.status || (content ? '发布成功' : '未发布'),
+    publishStatus:
+      task?.status === '待配置'
+        ? content
+          ? '发布成功'
+          : '未发布'
+        : task?.status || (content ? '发布成功' : '未发布'),
+    everPublished: !!content || tasks.some((t) => t.filmId === film?.id && t.status === '发布成功'),
   });
   if (published) {
     const rows = tasks
@@ -138,12 +145,8 @@ export function videoRows(state: StudioState, projectId: string, published: bool
   }
   const rows = local.map((f) => {
     const task = tasks
-      .filter((t) => t.filmId === f.id)
-      .sort((a, b) =>
-        (b.updatedAt || b.submittedAt || b.createdAt).localeCompare(
-          a.updatedAt || a.submittedAt || a.createdAt,
-        ),
-      )[0];
+      .filter((t) => t.filmId === f.id && t.status !== '待配置')
+      .sort((a, b) => (b.submittedAt || b.createdAt).localeCompare(a.submittedAt || a.createdAt))[0];
     return rowFor(
       f,
       undefined,
@@ -161,13 +164,90 @@ export function videoRows(state: StudioState, projectId: string, published: bool
       !rows.some((r) => (!!content.filmId && r.film?.id === content.filmId) || r.content?.id === content.id)
     )
       rows.push(rowFor(undefined, undefined, undefined, content));
-  return rows;
+  return rows.filter((row) => !(state.hiddenWorkIds?.[projectId] ?? []).includes(row.id));
 }
 export function publishReason(state: StudioState, row: VideoRow, archived: boolean) {
   if (archived) return '项目已归档';
   if (!row.film || row.job) return '需要可用的本地成片';
-  if (row.film.source === '本地上传' && row.film.type === '视频' && !row.film.mediaIds.length) return '本机没有可用媒体，请重新上传';
+  if (row.film.source === '本地上传' && row.film.type === '视频' && !row.film.mediaIds.length)
+    return '本机没有可用媒体，请重新上传';
   return state.tasks.some((t) => t.filmId === row.film!.id && activePublish.includes(t.status))
     ? '已有执行中的发布任务'
     : '';
+}
+
+export type VideoAction = {
+  key:
+    | 'refresh'
+    | 'publish'
+    | 'retry'
+    | 'schedule'
+    | 'cancel'
+    | 'download'
+    | 'analytics'
+    | 'regenerate'
+    | 'modify'
+    | 'delete';
+  label: string;
+  reason: string;
+  primary?: boolean;
+};
+export function workDeleteReason(state: StudioState, row: VideoRow, archived: boolean) {
+  if (archived) return '项目已归档';
+  if (row.job && ['生成中', '等待中'].includes(row.generation)) return '生成中的任务不可删除';
+  if (row.film && state.tasks.some((t) => t.filmId === row.film!.id && activePublish.includes(t.status)))
+    return '有执行中的发布任务，请先取消或等待完成';
+  return '';
+}
+export function hideWorks(state: StudioState, projectId: string, rows: VideoRow[], archived = false) {
+  const reason = rows.map((row) => workDeleteReason(state, row, archived)).find(Boolean);
+  if (reason) throw new Error(reason);
+  state.hiddenWorkIds ??= {};
+  state.hiddenWorkIds[projectId] = [
+    ...new Set([...(state.hiddenWorkIds[projectId] ?? []), ...rows.map((row) => row.id)]),
+  ];
+}
+export function videoActions(
+  state: StudioState,
+  row: VideoRow,
+  options: { published: boolean; archived: boolean; missing?: boolean; busy?: boolean },
+): VideoAction[] {
+  const actions: VideoAction[] = [];
+  const readOnly = options.archived ? '项目已归档' : '';
+  const mediaReason = options.missing ? '本地媒体已丢失，请重新上传' : '';
+  if (row.job) {
+    if (['失败', '已取消'].includes(row.generation))
+      actions.push({ key: 'retry', label: '重试生成', reason: readOnly, primary: true });
+  } else {
+    if (row.film && !activePublish.includes(row.publishStatus))
+      actions.push({
+        key: 'publish',
+        label: row.publishStatus === '发布失败' ? '重新配置' : row.everPublished ? '再次发布' : '去发布',
+        reason: mediaReason || publishReason(state, row, options.archived),
+        primary: true,
+      });
+    if (row.task?.status === '已排期')
+      actions.push({ key: 'schedule', label: '改期', reason: readOnly, primary: true });
+    if (row.task && ['待发布', '已排期'].includes(row.task.status))
+      actions.push({
+        key: 'cancel',
+        label: row.task.status === '已排期' ? '取消排期' : '取消发布',
+        reason: readOnly,
+        primary: row.task.status === '待发布',
+      });
+    if (row.task?.status === '发布中') actions.push({ key: 'refresh', label: '刷新状态', reason: readOnly });
+    actions.push({
+      key: 'download',
+      label: '下载',
+      reason: !row.film ? '没有可下载的本地成片' : mediaReason || (options.busy ? '正在下载' : ''),
+    });
+    if (row.content) actions.push({ key: 'analytics', label: '查看数据', reason: '' });
+    if (row.film && row.film.source !== '本地上传') {
+      actions.push({ key: 'regenerate', label: '重新生成', reason: readOnly });
+      actions.push({ key: 'modify', label: '修改视频', reason: readOnly });
+    }
+  }
+  if (!options.published)
+    actions.push({ key: 'delete', label: '删除', reason: workDeleteReason(state, row, options.archived) });
+  return actions;
 }

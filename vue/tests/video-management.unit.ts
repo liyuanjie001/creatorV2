@@ -168,6 +168,6 @@ test('失败重试保留任务，旧成功任务不被新草稿借用实际发�
   const draft = ensurePublishTask(film);
   expect(draft.publishedAt).toBeUndefined();
   const row = videoRows(studio.value, p.id, false).find((r) => r.film?.id === film.id)!;
-  expect(row.content).toBeUndefined();
-  expect(row.publishStatus).toBe('待配置');
+  expect(row.content?.filmId).toBe(film.id);
+  expect(row.publishStatus).toBe('发布成功');
 });
