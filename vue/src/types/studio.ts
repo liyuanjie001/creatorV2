@@ -1,5 +1,5 @@
 export type AuthUser = { id: string; name: string; identity: string; method: 'email' | 'phone' | 'google'; bindings: string[] };
-export type TKAccount = { id: string; name: string; handle: string; region: string; groupId: string; note: string; status: '已授权' | '授权过期' | '权限不足' | '已解绑'; authorizedAt: string };
+export type TKAccount = { deleted?: boolean; id: string; name: string; handle: string; region: string; groupId: string; note: string; status: '已授权' | '授权过期' | '权限不足' | '已解绑'; authorizedAt: string };
 export type StudioProject = { id: string; name: string; desc: string; color: string; accountIds: string[]; archived: boolean };
 export type ContentAttributes = { theme: string; product: string; hook: string; scene: string; format: string; confirmed: boolean };
 export type Reference = { id: string; url: string; title: string; author: string; duration: string; source: string };

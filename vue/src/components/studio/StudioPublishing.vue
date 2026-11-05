@@ -49,7 +49,7 @@ const imagePickerSelection = ref<string[]>([]);
 const imagePickerSearch = ref('');
 
 const project = computed(() => studio.value.projects.find(p => p.id === props.projectId)!);
-const accounts = computed(() => studio.value.accounts.filter(a => project.value.accountIds.includes(a.id) && a.status === '已授权'));
+const accounts = computed(() => studio.value.accounts.filter(a => !a.deleted && project.value.accountIds.includes(a.id) && a.status === '已授权'));
 const mutable = (task?: PublishTask) => !task || ['待配置', '发布失败', '已取消'].includes(task.status);
 async function upload(event: Event, kind: 'video' | 'image') {
   const files = Array.from((event.target as HTMLInputElement).files ?? []);

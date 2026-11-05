@@ -96,7 +96,7 @@ export function ensureDemoProjectContent(projectId: string) {
     studio.value.films.push(...examples);
     films = examples;
   }
-  const accountId = project.accountIds.find(id => studio.value.accounts.some(account => account.id === id)) ?? studio.value.accounts.find(account => account.status === '已授权')?.id;
+  const accountId = project.accountIds.find(id => studio.value.accounts.some(account => !account.deleted && account.id === id)) ?? studio.value.accounts.find(account => !account.deleted && account.status === '已授权')?.id;
   if (!accountId || films.length < 2) return;
   const publishedFilm = films[0]!;
   const failedFilm = films[1]!;
@@ -141,7 +141,7 @@ export function authorize(handle: string, groupId: string, scenario: string) {
   const normalized = '@' + handle.trim().replace(/^@/, '').toLowerCase();
   if (!/^@[a-z0-9_.]{2,24}$/.test(normalized)) throw new Error('用户名需为 2–24 位字母、数字、下划线或点');
   const existing = studio.value.accounts.find(a => a.handle === normalized);
-  const account = { id: existing?.id ?? uid(), name: normalized.slice(1), handle: normalized, region: existing?.region ?? '未提供', groupId, note: existing?.note ?? '', status: (scenario === '权限不足' ? '权限不足' : scenario === '过期' ? '授权过期' : '已授权') as '已授权' | '授权过期' | '权限不足', authorizedAt: now() };
+  const account = { id: existing?.id ?? uid(), name: normalized.slice(1), handle: normalized, region: existing?.region ?? '未提供', groupId, note: existing?.note ?? '', status: (scenario === '权限不足' ? '权限不足' : scenario === '过期' ? '授权过期' : '已授权') as '已授权' | '授权过期' | '权限不足', authorizedAt: now(), deleted: false };
   if (existing) Object.assign(existing, account); else studio.value.accounts.unshift(account);
   return account;
 }
@@ -180,7 +180,7 @@ export function validatePublish(task: PublishTask) {
   const project = studio.value.projects.find(p => p.id === task.projectId);
   const film = studio.value.films.find(f => f.id === task.filmId);
   if (!project || project.archived) throw new Error('项目不存在或已归档');
-  if (!account || account.status !== '已授权' || !project.accountIds.includes(account.id)) throw new Error('请选择项目关联且授权有效的帐号');
+  if (!account || account.deleted || account.status !== '已授权' || !project.accountIds.includes(account.id)) throw new Error('请选择项目关联且授权有效的帐号');
   if (!film) throw new Error('成片已不存在');
   if (film.source === '本地上传' && film.type === '视频' && !film.mediaIds.length) throw new Error('本地媒体已丢失，请重新上传');
   if (film.type === '图文' && !(task.imageMediaIds ?? film.mediaIds).length) throw new Error('图文作品至少需要一张图片');
@@ -261,4 +261,31 @@ export function reschedulePublishTask(id: string, scheduledAt: string) {
   if (!task || task.status !== '已排期') throw new Error('仅已排期任务可以改期');
   validatePublish({ ...task, scheduledAt });
   task.scheduledAt = scheduledAt; task.dueAt = new Date(scheduledAt).getTime(); task.updatedAt = now();
+}
+
+export function accountDeleteReason(id: string) {
+  return studio.value.tasks.some((t) => t.accountId === id && t.status === '发布中')
+    ? '该帐号正在发布，请等待发布完成'
+    : '';
+}
+export function deleteAccount(id: string) {
+  const reason = accountDeleteReason(id);
+  if (reason) throw new Error(reason);
+  const account = studio.value.accounts.find((a) => a.id === id);
+  if (!account || account.deleted) return;
+  for (const task of studio.value.tasks.filter(
+    (t) => t.accountId === id && ['待发布', '已排期'].includes(t.status),
+  ))
+    cancelPublishTask(task.id);
+  account.deleted = true;
+  for (const project of studio.value.projects)
+    project.accountIds = project.accountIds.filter((accountId) => accountId !== id);
+}
+export function reorderGroup(id: string, targetId: string) {
+  const groups = [...studio.value.groups];
+  const from = groups.findIndex((g) => g.id === id),
+    to = groups.findIndex((g) => g.id === targetId);
+  if (from < 0 || to < 0 || from === to) return;
+  groups.splice(to, 0, groups.splice(from, 1)[0]!);
+  studio.value.groups = groups;
 }
