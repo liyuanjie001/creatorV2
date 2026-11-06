@@ -93,6 +93,8 @@ export interface Generation {
 }
 
 export interface Product {
+  imageMediaId?: string;
+  targetMarket?: string;
   id: string;
   projectId: string;
   name: string;

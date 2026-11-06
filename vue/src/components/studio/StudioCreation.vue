@@ -20,9 +20,9 @@ const coverAspects = ['3/4', '9/16', '4/5', '9/16', '3/4'];
       <div class="rounded-2xl px-2 pb-8 pt-10 xl:px-6 xl:pt-12">
         <h2 class="mb-2 text-center text-2xl font-semibold brand-text">让你的品牌故事鲜活起来</h2>
         <p class="mb-8 text-center text-sm text-slate-400">写下提示词，添加参考素材，选择模型开始创作</p>
-        <CreationConsole :project-id="projectId" spacious class-name="mx-auto max-w-[1200px]" />
+        <CreationConsole :project-id="projectId" quick-actions spacious class-name="mx-auto max-w-[1200px]" />
       </div>
-      <section aria-label="爆款视频推荐" class="mt-4 border-t border-slate-100 pt-6">
+      <section aria-label="爆款视频推荐" class="mt-4 pt-6">
         <div class="mb-5 flex items-center justify-between gap-4">
           <div>
             <h2 class="text-base font-semibold text-slate-800">爆款视频</h2>

@@ -191,7 +191,7 @@ test('项目灵感库按源码展示推荐爆款与翻拍操作', async () => {
   (projectChoice as HTMLButtonElement).click();
   await flushPromises();
   expect(app.text()).toContain('自由创作');
-  expect(app.find('button[title="移除参考视频"]').exists()).toBe(true);
+  expect(app.find('button[aria-label="移除目标视频"]').exists()).toBe(true);
   expect(app.text()).toContain('ASMR 开箱');
   const textarea = app.find('textarea');
   expect(textarea.exists()).toBe(true);

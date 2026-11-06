@@ -105,9 +105,9 @@ test('项目导航和创作模式可切换并恢复到地址', async ({ page }) 
   await expect(navigation.getByRole('button', { name: '专家模式' })).toHaveAttribute('aria-current', 'page');
   await expect(page).toHaveURL(/section=gen.*mode=expert|mode=expert.*section=gen/);
   await expect(page.getByRole('textbox', { name: '专家对话' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: '解锁专业创意，打造高质量营销视频' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '让每一条视频，都更懂用户' })).toBeVisible();
   await expect(page.getByRole('button', { name: '放大输入框' })).toHaveCount(0);
-  const expertTitle = await page.getByRole('heading', { name: '解锁专业创意，打造高质量营销视频' }).boundingBox();
+  const expertTitle = await page.getByRole('heading', { name: '让每一条视频，都更懂用户' }).boundingBox();
   const expertInput = await page.getByRole('textbox', { name: '专家对话' }).boundingBox();
   expect(expertTitle!.y + expertTitle!.height).toBeLessThan(expertInput!.y);
   await expect(page).toHaveURL(/session=/);

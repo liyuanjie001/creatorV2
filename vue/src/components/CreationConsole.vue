@@ -25,6 +25,9 @@ import {
   Play,
 } from 'lucide-vue-next';
 import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
   Textarea,
   DropdownMenu,
   DropdownMenuContent,
@@ -68,11 +71,12 @@ const qualityOptions = ['480', '720', '1080P', '4K'] as const;
 const ratioOptions = ['9:16', '16:9', '4:3', '1:1', '4:5'] as const;
 
 const { delay } = useDemoTimers();
-const { placeholder, className, projectId, spacious } = defineProps<{
+const { placeholder, className, projectId, spacious, quickActions } = defineProps<{
   placeholder?: string;
   className?: string;
   projectId?: string;
   spacious?: boolean;
+  quickActions?: boolean;
 }>();
 const emit = defineEmits<{
   start: [];
@@ -112,8 +116,73 @@ const referenceVideo = remakeRef;
 const selectedAssets = ref<Asset[]>([]);
 const selectedLocalImageRefs = ref<{ id: string; name: string; type: string; mediaId: string }[]>([]);
 const selectedProducts = ref<Product[]>([]);
+type QuickAction = '拆解视频脚本' | '修改视频' | '爆款视频复刻';
+const selectedQuickAction = ref<QuickAction | null>(null);
+const videoSourceOpen = ref(false);
+const videoLink = ref('');
+const videoSourceError = ref('');
+const videoUploading = ref(false);
+const editingVideoMedia = ref<{ id: string; name: string; type: string; mediaId: string }[]>([]);
+const localVideo = ref<{ id: string; name: string; type: string; mediaId: string } | null>(null);
+const quickPrompts: Record<QuickAction, string> = {
+  '拆解视频脚本': '请拆解参考视频的脚本，整理镜头时间、画面、口播、字幕和视频钩子。',
+  '修改视频': '',
+  '爆款视频复刻': '参考该视频的 Hook、叙事结构与节奏，结合我的产品创作新视频。',
+};
+function selectQuickAction(action: QuickAction) {
+  const previous = selectedQuickAction.value;
+  if (previous && brief.value === quickPrompts[previous]) brief.value = quickPrompts[action];
+  selectedQuickAction.value = action;
+  mode.value = '视频';
+  videoSourceError.value = '';
+  videoSourceOpen.value = true;
+}
+function clearVideoReference() {
+  clearReference();
+  localVideo.value = null;
+  editingVideoMedia.value = [];
+}
+function attachQuickVideo(reference: { id: string; title: string; author: string }) {
+  referenceVideo.value = reference;
+  if (!brief.value.trim() && selectedQuickAction.value) brief.value = quickPrompts[selectedQuickAction.value];
+  videoSourceOpen.value = false;
+  void nextTick(() => consoleRoot.value?.querySelector('textarea')?.focus());
+}
+function attachVideoLink() {
+  if (isArchived.value) { videoSourceError.value = '归档项目仅可查看'; return; }
+  try {
+    const url = new URL(videoLink.value.trim());
+    if (!['https:', 'http:'].includes(url.protocol)) throw new Error();
+    const reference = { id: uid(), title: url.hostname + url.pathname, author: '视频链接', url: url.href, source: '粘贴链接', duration: '待分析' };
+    studio.value.references.unshift(reference);
+    localVideo.value = null;
+    editingVideoMedia.value = [];
+    attachQuickVideo(reference);
+    videoLink.value = '';
+  } catch { videoSourceError.value = '请输入有效的 http 或 https 视频链接'; }
+}
+async function uploadQuickVideo(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  if (!file || videoUploading.value) return;
+  videoSourceError.value = '';
+  try {
+    if (isArchived.value) throw new Error('归档项目仅可查看');
+    if (!file.type.startsWith('video/')) throw new Error('请选择视频文件');
+    if (!currentUser.value) throw new Error('请先登录后上传');
+    videoUploading.value = true;
+    const mediaId = await saveMedia(currentUser.value.id, file);
+    const reference = { id: uid(), title: file.name, author: '本地视频', url: '', source: '本地上传', duration: '待分析' };
+    studio.value.references.unshift(reference);
+    editingVideoMedia.value = [];
+    localVideo.value = { id: reference.id, name: file.name, type: '视频', mediaId };
+    attachQuickVideo(reference);
+  } catch (error) { videoSourceError.value = (error as Error).message; }
+  finally { videoUploading.value = false; input.value = ''; }
+}
 const MAX_ASSETS = 3;
 const currentProject = computed(() => studio.value.projects.find((item) => item.id === projectId) ?? projects.find((item) => item.id === projectId));
+const isArchived = computed(() => !!studio.value.projects.find(item => item.id === projectId)?.archived);
 const projectLabel = computed(() => currentProject.value?.name ?? '新建项目');
 const productOptions = computed<Product[]>(
   () => workspace?.projectProducts.value ?? products.filter((item) => !projectId || item.projectId === projectId),
@@ -129,6 +198,8 @@ const assetChipLabel = computed(() =>
 );
 
 function applyRemakeDraft() {
+  localVideo.value = null;
+  if (remakeRef.value && quickActions) selectedQuickAction.value = '爆款视频复刻';
   if (!remakeRef.value && remakeBrief.value == null) return;
   const nextBrief = takeBrief();
   brief.value = nextBrief ?? (remakeRef.value ? REMAKE_PROMPT : brief.value);
@@ -320,13 +391,22 @@ onMounted(() => {
   applyRemakeDraft();
   const editingFilm = studio.value.films.find(f => f.id === creationRoute.query.editFilm && f.projectId === projectId) ?? studio.value.jobs.find(j => j.id === creationRoute.query.editFilm && j.projectId === projectId)?.film;
   if (editingFilm) {
-    brief.value = editingFilm.brief;
+    brief.value = editingFilm.type === '视频' ? '' : editingFilm.brief;
+    if (editingFilm.type === '视频') selectedQuickAction.value = '修改视频';
     mode.value = editingFilm.type;
     duration.value = editingFilm.duration;
     if (ratioOptions.includes(editingFilm.ratio as typeof ratioOptions[number])) ratio.value = editingFilm.ratio as typeof ratioOptions[number];
     if (qualityOptions.includes(editingFilm.quality as typeof qualityOptions[number])) quality.value = editingFilm.quality as typeof qualityOptions[number];
     selectedProducts.value = productOptions.value.filter(p => editingFilm.productIds.includes(p.id));
-    referenceVideo.value = editingFilm.reference ? { id: editingFilm.reference.id, title: editingFilm.reference.title, author: editingFilm.reference.author } : null;
+    if (editingFilm.type === '视频') {
+      const sourceId = `film-reference-${creationRoute.query.editFilm}`;
+      const sourceReference = { id: sourceId, title: editingFilm.title, author: '我的作品', url: '', source: '当前视频', duration: editingFilm.duration };
+      if (!studio.value.references.some(reference => reference.id === sourceId)) studio.value.references.unshift(sourceReference);
+      referenceVideo.value = { id: sourceId, title: editingFilm.title, author: '我的作品' };
+      editingVideoMedia.value = editingFilm.mediaIds.map(mediaId => ({ id: mediaId, name: editingFilm.title, type: '视频', mediaId }));
+    } else {
+      referenceVideo.value = editingFilm.reference ? { id: editingFilm.reference.id, title: editingFilm.reference.title, author: editingFilm.reference.author } : null;
+    }
     void nextTick(() => consoleRoot.value?.querySelector('textarea')?.focus());
   }
   if (reference) void nextTick(() => consoleRoot.value?.querySelector('textarea')?.focus());
@@ -340,10 +420,11 @@ onBeforeUnmount(() => {
 
 function generate() {
   if (generating.value) return;
+  if (selectedQuickAction.value && !referenceVideo.value) { videoSourceOpen.value = true; videoSourceError.value = '请先上传视频或添加视频链接'; return; }
   if (!brief.value.trim()) { toast.error('请描述你的创作需求'); return; }
   if (projectId && studio.value.projects.find(p=>p.id===projectId)?.archived) { toast.error('归档项目无法生成'); return; }
   if (projectId) {
-    for (let i = 0; i < batch.value; i++) startGeneration({ projectId, title: `${brief.value}${batch.value > 1 ? ` #${i+1}` : ''}`, type: mode.value, source: '普通创作', duration: duration.value || '15', ratio: ratio.value, quality: quality.value, brief: brief.value, productIds: selectedProducts.value.map(p=>p.id), referenceAssets: [...selectedAssets.value.map(({id,name,type}) => ({id,name,type})), ...selectedLocalImageRefs.value.map(({id,name,type,mediaId}) => ({id,name,type,mediaId}))], reference: studio.value.references.find(r=>r.id===referenceVideo.value?.id), version: 1, mediaIds: [], inPublishing: false, attributes: { ...blankAttributes(), product: selectedProducts.value[0]?.name ?? '未分类', format: mode.value === '图文' ? '图文轮播' : '产品展示' } });
+    for (let i = 0; i < batch.value; i++) startGeneration({ projectId, title: `${brief.value}${batch.value > 1 ? ` #${i+1}` : ''}`, type: mode.value, source: '普通创作', duration: duration.value || '15', ratio: ratio.value, quality: quality.value, brief: selectedQuickAction.value ? `【${selectedQuickAction.value}】${brief.value}` : brief.value, productIds: selectedProducts.value.map(p=>p.id), referenceAssets: [...selectedAssets.value.map(({id,name,type}) => ({id,name,type})), ...selectedLocalImageRefs.value.map(({id,name,type,mediaId}) => ({id,name,type,mediaId})), ...(localVideo.value ? [localVideo.value] : []), ...editingVideoMedia.value], reference: studio.value.references.find(r=>r.id===referenceVideo.value?.id), version: 1, mediaIds: [], inPublishing: false, attributes: { ...blankAttributes(), product: selectedProducts.value[0]?.name ?? '未分类', format: mode.value === '图文' ? '图文轮播' : '产品展示' } });
     const target = document.querySelector<HTMLElement>('[data-video-management]');
     if (generateButton.value && target) {
       stopTaskTransfer?.();
@@ -379,12 +460,13 @@ const chipClass =
 </script>
 
 <template>
+  <div class="w-full">
   <div
     ref="consoleRoot"
     :class="cn('w-full rounded-2xl border border-slate-200 bg-white p-3 shadow-sm', spacious && 'p-4 xl:p-5', className)"
   >
     <div class="flex gap-3">
-      <div class="flex flex-col gap-1">
+      <div v-if="!selectedQuickAction" class="flex flex-col gap-1">
         <button
           v-for="[m, Icon] in [
             ['视频', Clapperboard],
@@ -408,7 +490,7 @@ const chipClass =
       </div>
 
       <div class="min-w-0 flex-1">
-        <div class="mb-3 flex flex-wrap items-center gap-2">
+        <div v-if="selectedQuickAction !== '拆解视频脚本'" class="mb-3 flex flex-wrap items-center gap-2">
           <button
             ref="assetBtn"
             type="button"
@@ -497,6 +579,18 @@ const chipClass =
           class="relative overflow-hidden rounded-xl border border-slate-200 bg-white"
           :class="hasAttachments && 'border-sky-200 bg-slate-50/40'"
         >
+          <div :class="selectedQuickAction ? 'flex flex-col gap-3 p-3 sm:flex-row sm:items-start' : ''">
+            <aside v-if="selectedQuickAction" aria-label="目标视频" class="relative w-full shrink-0 rounded-xl border border-dashed border-sky-200 bg-sky-50/50 p-3 sm:w-44 xl:w-48">
+              <button v-if="referenceVideo" type="button" aria-label="移除目标视频" class="absolute right-2 top-2 rounded-md bg-white p-1 text-slate-400 hover:text-rose-500" @click="clearVideoReference"><X class="h-3.5 w-3.5" /></button>
+              <button type="button" aria-label="选择或替换目标视频" class="flex min-h-36 w-full flex-col items-center justify-center gap-3 rounded-lg px-2 py-4 text-center text-sky-600 transition hover:bg-sky-100/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-500" @click="videoSourceOpen = true">
+                <span class="grid h-12 w-12 place-items-center rounded-xl bg-white shadow-sm"><Play v-if="referenceVideo" class="h-6 w-6" /><Plus v-else class="h-6 w-6" /></span>
+                <span class="text-xs font-medium">{{ selectedQuickAction === '爆款视频复刻' ? '要复刻的视频' : selectedQuickAction === '修改视频' ? '要修改的视频' : '要拆解的视频' }}</span>
+                <span v-if="referenceVideo" class="w-full truncate text-xs text-slate-600" :title="referenceVideo.title">{{ referenceVideo.title }}</span>
+                <span v-else class="text-xs text-slate-400">上传视频或粘贴链接</span>
+                <span v-if="referenceVideo" class="text-[11px] text-slate-400">{{ studio.references.find(r => r.id === referenceVideo?.id)?.source || '爆款视频' }}</span>
+              </button>
+            </aside>
+            <div class="relative min-w-0 flex-1">
           <button
             v-if="spacious"
             type="button"
@@ -509,28 +603,28 @@ const chipClass =
             <component :is="inputExpanded ? Minimize2 : Maximize2" class="h-4 w-4" />
           </button>
           <div
-            v-if="referenceVideo || selectedAssets.length > 0 || selectedLocalImageRefs.length > 0"
+            v-if="(!selectedQuickAction && referenceVideo) || selectedAssets.length > 0 || selectedLocalImageRefs.length > 0"
             class="flex flex-wrap gap-2 px-3 pt-3"
             :class="spacious && 'pr-12'"
           >
             <div
-              v-if="referenceVideo"
+              v-if="referenceVideo && !selectedQuickAction"
               class="inline-flex w-full max-w-[380px] items-center gap-2.5 rounded-xl border border-sky-100 bg-sky-50/60 px-3 py-2"
             >
               <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-sky-100 text-sky-600">
                 <Play class="h-3.5 w-3.5 translate-x-px" fill="currentColor" />
               </span>
               <div class="min-w-0 flex-1">
-                <p class="text-[11px] font-semibold text-sky-600">爆款复刻参考 · {{ studio.references.find(r => r.id === referenceVideo?.id)?.source || '爆款视频' }}</p>
+                <p class="text-[11px] font-semibold text-sky-600">{{ selectedQuickAction || '爆款复刻' }}参考 · {{ studio.references.find(r => r.id === referenceVideo?.id)?.source || '爆款视频' }}</p>
                 <p class="mt-0.5 truncate text-[12px] font-medium text-slate-700" :title="referenceVideo.title || referenceVideo.author">{{ referenceVideo.title || referenceVideo.author }}</p>
                 <p v-if="studio.references.find(r => r.id === referenceVideo?.id)?.url" class="mt-0.5 truncate text-[11px] text-slate-400" :title="studio.references.find(r => r.id === referenceVideo?.id)?.url">{{ studio.references.find(r => r.id === referenceVideo?.id)?.url }}</p>
-                <p class="mt-0.5 text-[11px] leading-5 text-slate-500">参考脚本与节奏，创作品牌新视频。</p>
+                <p class="mt-0.5 text-[11px] leading-5 text-slate-500">{{ selectedQuickAction === '修改视频' ? '已引用当前视频，请描述需要修改的内容。' : '参考脚本与节奏，创作品牌新视频。' }}</p>
               </div>
               <button
                 type="button"
                 title="移除参考视频"
                 class="shrink-0 rounded p-0.5 text-slate-400 transition hover:bg-sky-100 hover:text-sky-600"
-                @click="clearReference"
+                @click="clearVideoReference"
               >
                 <X class="h-3.5 w-3.5" />
               </button>
@@ -568,11 +662,17 @@ const chipClass =
               <button type="button" title="移除参考图片" class="rounded p-0.5 text-slate-400 hover:text-slate-700" @click="selectedLocalImageRefs = selectedLocalImageRefs.filter(item => item.id !== asset.id)"><X class="h-3.5 w-3.5" /></button>
             </div>
           </div>
+          <div v-if="selectedQuickAction" class="flex items-center gap-2 px-4 pt-3">
+            <span class="inline-flex items-center gap-1.5 rounded-lg bg-sky-50 px-2.5 py-1.5 text-xs font-medium text-sky-600">
+              <Clapperboard class="h-3.5 w-3.5" />{{ selectedQuickAction }}
+              <button type="button" aria-label="移除快捷入口标签" class="rounded hover:bg-sky-100" @click="selectedQuickAction = null"><X class="h-3 w-3" /></button>
+            </span>
+          </div>
           <Textarea
             v-model="brief"
             aria-label="创作提示词"
             @keydown.esc="inputExpanded = false"
-            :placeholder="placeholder ?? '描述你的场景，使用 @ 添加产品卡信息'"
+            :placeholder="selectedQuickAction === '修改视频' ? '告诉我你要修改的内容，如：修改第5-6秒人物表情......' : placeholder ?? '描述你的场景，使用 @ 添加产品卡信息'"
             :class="
               cn(
                 'resize-none border-0 bg-transparent text-[13.5px] leading-relaxed placeholder:text-slate-400 focus-visible:ring-0',
@@ -582,10 +682,12 @@ const chipClass =
               )
             "
           />
+            </div>
+          </div>
         </div>
 
-        <div class="relative mt-2 flex items-center gap-2">
-          <div class="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+        <div class="relative mt-2 flex items-center justify-end gap-2">
+          <div v-if="selectedQuickAction !== '拆解视频脚本'" class="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
             <button
               ref="engineBtn"
               type="button"
@@ -792,5 +894,28 @@ const chipClass =
         <ConsoleProductPicker :products="productOptions" @pick="onPickProduct" />
       </div>
     </Teleport>
+  </div>
+  <div v-if="quickActions" :class="cn('mx-auto mt-5 flex flex-wrap justify-center gap-3', className)" aria-label="视频快捷入口">
+    <button v-for="action in (['拆解视频脚本', '修改视频', '爆款视频复刻'] as const)" :key="action" type="button" :aria-pressed="selectedQuickAction === action" :disabled="isArchived" class="inline-flex items-center gap-2 rounded-xl border px-5 py-3 text-sm transition hover:border-sky-300 hover:bg-sky-50 disabled:opacity-50" :class="selectedQuickAction === action ? 'border-sky-200 bg-sky-50 text-sky-600' : 'border-slate-200 bg-white text-slate-600'" @click="selectQuickAction(action)">
+      <component :is="action === '拆解视频脚本' ? Clapperboard : action === '修改视频' ? Wand2 : Sparkles" class="h-4 w-4" />{{ action }}
+    </button>
+  </div>
+  <Dialog :open="videoSourceOpen" @update:open="!videoUploading && (videoSourceOpen = $event)">
+    <DialogContent class="max-w-lg bg-white">
+      <DialogTitle>{{ selectedQuickAction || '添加参考视频' }}</DialogTitle>
+      <p class="text-sm text-slate-500">上传本地视频，或粘贴视频链接作为参考素材。</p>
+      <label class="flex cursor-pointer flex-col items-center gap-2 rounded-xl border border-dashed border-sky-200 bg-sky-50/50 px-5 py-7 text-sm text-sky-600" :class="videoUploading && 'pointer-events-none opacity-50'">
+        <Clapperboard class="h-7 w-7" />{{ videoUploading ? '正在上传…' : '上传本地视频' }}
+        <input type="file" accept="video/*" aria-label="上传快捷入口视频" class="sr-only" :disabled="videoUploading" @change="uploadQuickVideo" />
+      </label>
+      <div class="flex gap-2">
+        <input v-model="videoLink" aria-label="视频链接" class="studio-field min-w-0 flex-1" placeholder="粘贴视频链接（https://…）" :disabled="videoUploading" @keydown.enter.prevent="attachVideoLink" />
+        <button class="studio-primary shrink-0" :disabled="videoUploading || !videoLink.trim()" @click="attachVideoLink">使用链接</button>
+      </div>
+      <p class="text-xs text-slate-400">本地演示仅保存参考素材，不会真实解析远程视频。</p>
+      <p v-if="videoSourceError" role="alert" class="text-xs text-rose-600">{{ videoSourceError }}</p>
+      <RouterLink v-if="selectedQuickAction === '爆款视频复刻'" to="/inspiration" class="inline-flex items-center gap-1 text-sm text-sky-600" @click="videoSourceOpen = false">查看更多爆款视频 <ChevronRight class="h-4 w-4" /></RouterLink>
+    </DialogContent>
+  </Dialog>
   </div>
 </template>

@@ -7,12 +7,16 @@ import { cn } from '@/lib/utils';
 import { toast } from 'vue-sonner';
 import { eventValue } from '@/lib/events';
 import { useAssetFavorites } from '@/composables/useAssetFavorites';
+import { saveMedia } from '@/services/media';
+import { currentUser } from '@/services/identity';
+import { uid } from '@/services/storage';
 
 const { projectName } = defineProps<{
   projectName?: string;
 }>();
 const emit = defineEmits<{
   pick: [asset: Asset];
+  upload: [asset: Asset, mediaId: string];
 }>();
 
 const { allAssets } = useAssetFavorites();
@@ -53,10 +57,35 @@ function pick(asset: Asset) {
 function chooseLocal() {
   fileInput.value?.click();
 }
+async function addFiles(files: FileList | File[]) {
+  const accepted = Array.from(files).filter((file) => file.type.startsWith('image/') || file.type.startsWith('video/'));
+  if (!accepted.length) return;
+  if (!currentUser.value) {
+    toast.error('请先登录后再上传素材');
+    return;
+  }
+  try {
+    for (const file of accepted) {
+      const mediaId = await saveMedia(currentUser.value.id, file);
+      emit('upload', {
+        id: uid(),
+        name: file.name,
+        type: file.type.startsWith('video/') ? '视频' : '图片',
+        size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
+        updatedAt: new Date().toISOString(),
+        project: projectName ?? '当前项目',
+        day: '今天',
+      }, mediaId);
+    }
+    toast.success(`已上传 ${accepted.length} 个素材`);
+  } catch (error) {
+    toast.error((error as Error).message || '上传失败，请重试');
+  }
+}
 function onFiles(event: Event) {
   const input = event.target;
   if (!(input instanceof HTMLInputElement) || !input.files?.length) return;
-  toast.success(`已添加 ${input.files.length} 个本地文件`);
+  void addFiles(input.files);
   input.value = '';
 }
 function onDrop(event: DragEvent) {
@@ -64,7 +93,7 @@ function onDrop(event: DragEvent) {
   dragging.value = false;
   const files = event.dataTransfer?.files;
   if (!files?.length) return;
-  toast.success(`已添加 ${files.length} 个本地文件`);
+  void addFiles(files);
 }
 </script>
 
