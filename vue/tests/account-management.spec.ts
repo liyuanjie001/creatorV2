@@ -34,8 +34,8 @@ test('帐号表头筛选、分组和备注编辑，刷新恢复', async ({ page 
   await page.getByRole('button', { name: '保存', exact: true }).click();
   await page.getByLabel('帐号分组筛选').click();
   await page.getByRole('menuitem', { name: '未分组', exact: true }).click();
-  await page.getByLabel('授权状态筛选').click();
-  await page.getByRole('menuitem', { name: '已授权', exact: true }).click();
+  await page.getByLabel('登录状态筛选').click();
+  await page.getByRole('menuitem', { name: '在线', exact: true }).click();
   await page.getByLabel('搜索帐号', { exact: true }).fill('重点');
   await expect(page.getByRole('table').locator('tbody tr')).toHaveCount(1);
   await page.reload();

@@ -42,10 +42,11 @@ import { cn } from '@/lib/utils';
 import { animateTaskTransfer } from '@/lib/animateTaskTransfer';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import { studio, startGeneration, blankAttributes } from '@/services/studio';
+import { studio, startGeneration, startBreakdown, blankAttributes } from '@/services/studio';
 import { currentUser } from '@/services/identity';
-import { saveMedia } from '@/services/media';
+import { saveMedia, getMedia } from '@/services/media';
 import { uid } from '@/services/storage';
+import { mockBreakdown, breakdownText } from '@/services/breakdown';
 import { products, projects, type Asset, type Product } from '@/data/mock';
 import { useOptionalProjectWorkspace } from '@/composables/useProjectWorkspace';
 import { REMAKE_PROMPT, useRemakeDraft } from '@/composables/useRemakeDraft';
@@ -124,8 +125,20 @@ const videoSourceError = ref('');
 const videoUploading = ref(false);
 const editingVideoMedia = ref<{ id: string; name: string; type: string; mediaId: string }[]>([]);
 const localVideo = ref<{ id: string; name: string; type: string; mediaId: string } | null>(null);
+const targetPreview = ref('');
+const targetPreviewFailed = ref(false);
+let previewRevision = 0;
+watch(() => localVideo.value?.mediaId || editingVideoMedia.value[0]?.mediaId, async id => {
+ const revision = ++previewRevision;
+ targetPreviewFailed.value = false;
+ if (targetPreview.value) URL.revokeObjectURL(targetPreview.value);
+ targetPreview.value = '';
+ if (!id || !currentUser.value) return;
+ try { const blob = await getMedia(currentUser.value.id, id); if (blob && revision === previewRevision) targetPreview.value = URL.createObjectURL(blob); } catch { /* Replace unavailable media through the source picker. */ }
+});
+onBeforeUnmount(() => { previewRevision++; if (targetPreview.value) URL.revokeObjectURL(targetPreview.value); });
 const quickPrompts: Record<QuickAction, string> = {
-  '拆解视频脚本': '请拆解参考视频的脚本，整理镜头时间、画面、口播、字幕和视频钩子。',
+  '拆解视频脚本': '',
   '修改视频': '',
   '爆款视频复刻': '参考该视频的 Hook、叙事结构与节奏，结合我的产品创作新视频。',
 };
@@ -389,6 +402,13 @@ onMounted(() => {
   window.addEventListener('resize', onResize);
   window.addEventListener('scroll', onResize, true);
   applyRemakeDraft();
+  const scriptSource = studio.value.films.find(f => f.id === creationRoute.query.scriptSource && f.projectId === projectId && f.resultKind === 'script-breakdown');
+  if (scriptSource) {
+    selectedQuickAction.value = null;
+    brief.value = breakdownText(scriptSource);
+    referenceVideo.value = scriptSource.reference ?? null;
+    editingVideoMedia.value = (scriptSource.referenceAssets ?? []).filter(a => a.mediaId).map(a => ({ ...a, mediaId: a.mediaId! }));
+  }
   const editingFilm = studio.value.films.find(f => f.id === creationRoute.query.editFilm && f.projectId === projectId) ?? studio.value.jobs.find(j => j.id === creationRoute.query.editFilm && j.projectId === projectId)?.film;
   if (editingFilm) {
     brief.value = editingFilm.type === '视频' ? '' : editingFilm.brief;
@@ -400,9 +420,9 @@ onMounted(() => {
     selectedProducts.value = productOptions.value.filter(p => editingFilm.productIds.includes(p.id));
     if (editingFilm.type === '视频') {
       const sourceId = `film-reference-${creationRoute.query.editFilm}`;
-      const sourceReference = { id: sourceId, title: editingFilm.title, author: '我的作品', url: '', source: '当前视频', duration: editingFilm.duration };
+      const sourceReference = { id: sourceId, title: editingFilm.title, author: '任务列表', url: '', source: '当前视频', duration: editingFilm.duration };
       if (!studio.value.references.some(reference => reference.id === sourceId)) studio.value.references.unshift(sourceReference);
-      referenceVideo.value = { id: sourceId, title: editingFilm.title, author: '我的作品' };
+      referenceVideo.value = { id: sourceId, title: editingFilm.title, author: '任务列表' };
       editingVideoMedia.value = editingFilm.mediaIds.map(mediaId => ({ id: mediaId, name: editingFilm.title, type: '视频', mediaId }));
     } else {
       referenceVideo.value = editingFilm.reference ? { id: editingFilm.reference.id, title: editingFilm.reference.title, author: editingFilm.reference.author } : null;
@@ -421,6 +441,16 @@ onBeforeUnmount(() => {
 function generate() {
   if (generating.value) return;
   if (selectedQuickAction.value && !referenceVideo.value) { videoSourceOpen.value = true; videoSourceError.value = '请先上传视频或添加视频链接'; return; }
+  if (selectedQuickAction.value === '拆解视频脚本' && projectId) {
+    try {
+      generating.value = true;
+      const script = mockBreakdown();
+      startBreakdown({ projectId, title: '脚本拆解 · ' + referenceVideo.value!.title, type: '视频', source: '普通创作', duration: '', ratio: '', quality: '', brief: breakdownText({ breakdownScript: script }), resultKind: 'script-breakdown', breakdownScript: script, productIds: [], version: 1, mediaIds: [], inPublishing: false, attributes: blankAttributes(), reference: studio.value.references.find(r => r.id === referenceVideo.value?.id), referenceAssets: [...(localVideo.value ? [localVideo.value] : []), ...editingVideoMedia.value] });
+      toast.success('拆解任务已提交');
+      delay(() => { generating.value = false; }, 5000);
+    } catch (error) { generating.value = false; toast.error((error as Error).message); }
+    return;
+  }
   if (!brief.value.trim()) { toast.error('请描述你的创作需求'); return; }
   if (projectId && studio.value.projects.find(p=>p.id===projectId)?.archived) { toast.error('归档项目无法生成'); return; }
   if (projectId) {
@@ -580,19 +610,20 @@ const chipClass =
           :class="hasAttachments && 'border-sky-200 bg-slate-50/40'"
         >
           <div :class="selectedQuickAction ? 'flex flex-col gap-3 p-3 sm:flex-row sm:items-start' : ''">
-            <aside v-if="selectedQuickAction" aria-label="目标视频" class="relative w-full shrink-0 rounded-xl border border-dashed border-sky-200 bg-sky-50/50 p-3 sm:w-44 xl:w-48">
+            <aside v-if="selectedQuickAction" aria-label="目标视频" class="relative w-full shrink-0 rounded-xl border border-sky-100 bg-sky-50/60 p-3 sm:w-44 xl:w-48">
               <button v-if="referenceVideo" type="button" aria-label="移除目标视频" class="absolute right-2 top-2 rounded-md bg-white p-1 text-slate-400 hover:text-rose-500" @click="clearVideoReference"><X class="h-3.5 w-3.5" /></button>
-              <button type="button" aria-label="选择或替换目标视频" class="flex min-h-36 w-full flex-col items-center justify-center gap-3 rounded-lg px-2 py-4 text-center text-sky-600 transition hover:bg-sky-100/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-500" @click="videoSourceOpen = true">
-                <span class="grid h-12 w-12 place-items-center rounded-xl bg-white shadow-sm"><Play v-if="referenceVideo" class="h-6 w-6" /><Plus v-else class="h-6 w-6" /></span>
+              <video v-if="targetPreview && !targetPreviewFailed" :src="targetPreview" @error="targetPreviewFailed = true" controls preload="metadata" class="mb-2 aspect-video w-full rounded-lg bg-slate-900" />
+              <button type="button" aria-label="选择或替换目标视频" :class="targetPreview && !targetPreviewFailed ? 'min-h-16' : 'min-h-36'" class="flex w-full flex-col items-center justify-center gap-3 rounded-lg px-2 py-4 text-center text-sky-600 transition hover:bg-sky-100/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-500" @click="videoSourceOpen = true">
+                <span v-if="!targetPreview || targetPreviewFailed" class="grid h-12 w-12 place-items-center rounded-xl bg-white shadow-sm"><Clapperboard v-if="!targetPreview || targetPreviewFailed" class="h-6 w-6" /><Plus v-else class="h-6 w-6" /></span>
                 <span class="text-xs font-medium">{{ selectedQuickAction === '爆款视频复刻' ? '要复刻的视频' : selectedQuickAction === '修改视频' ? '要修改的视频' : '要拆解的视频' }}</span>
                 <span v-if="referenceVideo" class="w-full truncate text-xs text-slate-600" :title="referenceVideo.title">{{ referenceVideo.title }}</span>
                 <span v-else class="text-xs text-slate-400">上传视频或粘贴链接</span>
-                <span v-if="referenceVideo" class="text-[11px] text-slate-400">{{ studio.references.find(r => r.id === referenceVideo?.id)?.source || '爆款视频' }}</span>
+                <span v-if="referenceVideo" class="text-[11px] text-slate-400">替换视频 · {{ studio.references.find(r => r.id === referenceVideo?.id)?.source || '爆款视频' }}</span>
               </button>
             </aside>
             <div class="relative min-w-0 flex-1">
           <button
-            v-if="spacious"
+            v-if="spacious && selectedQuickAction !== '拆解视频脚本'"
             type="button"
             :aria-label="inputExpanded ? '收起输入框' : '放大输入框'"
             :title="inputExpanded ? '收起输入框（Esc）' : '放大输入框'"
@@ -669,6 +700,7 @@ const chipClass =
             </span>
           </div>
           <Textarea
+            v-if="selectedQuickAction !== '拆解视频脚本'"
             v-model="brief"
             aria-label="创作提示词"
             @keydown.esc="inputExpanded = false"
@@ -788,9 +820,9 @@ const chipClass =
             <span class="flex items-center gap-1 text-[14px] font-semibold">
               <Wand2 v-if="generating" class="h-4 w-4 animate-spin" />
               <Sparkles v-else class="h-4 w-4" />
-              生成
+              {{ selectedQuickAction === '拆解视频脚本' ? '拆解视频' : '生成' }}
             </span>
-            <span class="text-[10px] text-white/80">消耗 20 积分</span>
+            <span v-if="selectedQuickAction !== '拆解视频脚本'" class="text-[10px] text-white/80">消耗 20 积分</span>
           </button>
         </div>
       </div>
@@ -896,8 +928,8 @@ const chipClass =
     </Teleport>
   </div>
   <div v-if="quickActions" :class="cn('mx-auto mt-5 flex flex-wrap justify-center gap-3', className)" aria-label="视频快捷入口">
-    <button v-for="action in (['拆解视频脚本', '修改视频', '爆款视频复刻'] as const)" :key="action" type="button" :aria-pressed="selectedQuickAction === action" :disabled="isArchived" class="inline-flex items-center gap-2 rounded-xl border px-5 py-3 text-sm transition hover:border-sky-300 hover:bg-sky-50 disabled:opacity-50" :class="selectedQuickAction === action ? 'border-sky-200 bg-sky-50 text-sky-600' : 'border-slate-200 bg-white text-slate-600'" @click="selectQuickAction(action)">
-      <component :is="action === '拆解视频脚本' ? Clapperboard : action === '修改视频' ? Wand2 : Sparkles" class="h-4 w-4" />{{ action }}
+    <button v-for="action in (['拆解视频脚本', '爆款视频复刻'] as const)" :key="action" type="button" :aria-pressed="selectedQuickAction === action" :disabled="isArchived" class="inline-flex items-center gap-2 rounded-xl border px-5 py-3 text-sm transition hover:border-sky-300 hover:bg-sky-50 disabled:opacity-50" :class="selectedQuickAction === action ? 'border-sky-200 bg-sky-50 text-sky-600' : 'border-slate-200 bg-white text-slate-600'" @click="selectQuickAction(action)">
+      <component :is="action === '拆解视频脚本' ? Clapperboard : Sparkles" class="h-4 w-4" />{{ action }}
     </button>
   </div>
   <Dialog :open="videoSourceOpen" @update:open="!videoUploading && (videoSourceOpen = $event)">

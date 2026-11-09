@@ -187,7 +187,7 @@ function confirmDelete() {
               </div>
               <div>
                 <p class="text-[14px] font-medium text-slate-700">GlowUp 美妆出海</p>
-                <p class="mt-1 text-[11px] text-slate-400">自由创作 · 产品卡 · 我的作品</p>
+                <p class="mt-1 text-[11px] text-slate-400">自由创作 · 产品卡 · 任务列表</p>
               </div>
             </div>
             <div class="mt-5 space-y-2">
@@ -195,7 +195,7 @@ function confirmDelete() {
                 v-for="item in [
                   { icon: Sparkles, label: '自由创作' },
                   { icon: CreditCard, label: '产品卡' },
-                  { icon: Clapperboard, label: '我的作品' },
+                  { icon: Clapperboard, label: '任务列表' },
                 ]"
                 :key="item.label"
                 class="flex items-center gap-2 rounded-xl border border-white bg-white/90 px-4 py-3 shadow-sm"

@@ -12,7 +12,7 @@ import StudioAnalytics from '@/components/studio/StudioAnalytics.vue';
 import StudioSettings from '@/components/studio/StudioSettings.vue';
 const route = useRoute(); const router = useRouter(); useProjectWorkspace();
 const project = computed(() => studio.value.projects.find(p=>p.id === route.params.id));
-const nav = [{key:'gen',label:'自由创作',icon:Sparkles},{key:'product',label:'产品卡',icon:CreditCard},{key:'publish',label:'我的作品',icon:Send},{key:'analytics',label:'数据分析',icon:BarChart3},{key:'settings',label:'项目设置',icon:Settings}];
+const nav = [{key:'gen',label:'自由创作',icon:Sparkles},{key:'product',label:'产品卡',icon:CreditCard},{key:'publish',label:'任务列表',icon:Send},{key:'analytics',label:'数据分析',icon:BarChart3},{key:'settings',label:'项目设置',icon:Settings}];
 const aliases: Record<string,string> = {attribution:'analytics',account:'settings',schedule:'publish',chat:'gen',director:'gen'};
 const section = computed(() => aliases[String(route.query.section)] ?? (nav.some(n=>n.key===route.query.section) ? String(route.query.section) : 'gen'));
 const isPublishRecords = computed(() => section.value === 'publish' && route.query.tab === 'records');
@@ -20,7 +20,7 @@ watch(() => route.query.section, legacy => {
   if (legacy === 'chat' || legacy === 'director') void router.replace({query:{...route.query,section:'gen',mode:'expert'}});
 }, {immediate:true});
 const creationNav = [{ label: '自由创作', mode: 'normal', icon: Sparkles }, { label: '专家模式', mode: 'expert', icon: MessageSquare }];
-const managementNav = computed(() => nav.filter(n => ['product', 'publish', 'analytics'].includes(n.key)));
+const managementNav = computed(() => nav.filter(n => ['product', 'publish'].includes(n.key)));
 function select(key: string, mode = 'normal') { void router.push({query:{...route.query, section:key, ...(key==='gen' ? {mode} : {mode:undefined}), ...(key==='publish' ? {tab:'creations'} : {tab:undefined})}}); }
 function selectPublishRecords() { void router.push({query:{...route.query, section:'publish', tab:'records', mode:undefined}}); }
 </script>

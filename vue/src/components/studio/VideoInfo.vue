@@ -4,7 +4,7 @@ import { currentUser } from '@/services/identity';
 import { getMedia } from '@/services/media';
 import type { VideoRow } from '@/services/videoManagement';
 import { cover, dateTime, duration, scheduledDateTime } from '@/services/videoManagement';
-import { Clock3 } from 'lucide-vue-next';
+import { Clock3, FileText } from 'lucide-vue-next';
 defineEmits<{ open: []; rename: [value: string] }>();
 const props = defineProps<{ row: VideoRow; published: boolean; rename: boolean; missing?: boolean }>();
 const imageUrl = ref('');
@@ -26,8 +26,9 @@ onBeforeUnmount(() => { if (imageUrl.value) URL.revokeObjectURL(imageUrl.value);
       :aria-label="`查看 ${row.title}`"
       @click="$emit('open')"
     >
+      <FileText v-if="row.film?.resultKind === 'script-breakdown'" class="h-7 w-7 text-sky-500" />
       <img
-        v-if="!row.job && isImageWork && imageUrl"
+        v-else-if="!row.job && isImageWork && imageUrl"
         :src="imageUrl"
         alt="图文首图封面"
         class="h-full w-full object-cover"
@@ -42,7 +43,7 @@ onBeforeUnmount(() => { if (imageUrl.value) URL.revokeObjectURL(imageUrl.value);
       />
       <span v-else class="px-1 text-center text-[10px] text-slate-500">{{ missing || (isImageWork && !imageUrl) ? '媒体丢失' : row.generation }}</span>
       <span
-        v-if="!row.job && row.film?.type === '视频'"
+        v-if="!row.job && row.film?.type === '视频' && row.film.resultKind !== 'script-breakdown'"
         class="absolute inset-x-0 bottom-0 bg-black/40 py-0.5 text-[9px] font-medium tabular-nums text-white"
       >
         {{ duration(row.film.duration) }}

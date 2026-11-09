@@ -45,14 +45,18 @@ test('默认状态、筛选、历史草稿与刷新保持一致', async ({page},
   await page.getByLabel('发布状态筛选').click();await expect(page.getByRole('checkbox',{name:'已发布',exact:true})).toHaveCount(0);
   expect(errors).toEqual([]);
 });
-test('菜单、卡片与详情操作一致，只有我的作品支持删除', async ({page})=>{
+test('菜单、卡片与详情操作一致，只有任务列表支持删除', async ({page})=>{
   await open(page);const row=work(page,'晨间护肤故事');
   await row.getByRole('button',{name:'更多操作'}).click();
   const menu=await page.getByRole('menuitem').allTextContents();
   expect(menu).toEqual(['去发布','下载','重新生成','修改视频','删除']);
   await page.keyboard.press('Escape');await row.getByRole('button',{name:/^查看 /}).click();
-  expect(await page.getByRole('dialog').locator('footer button').allTextContents()).toEqual(menu);
-  await page.getByRole('dialog').getByRole('button',{name:'删除',exact:true}).click();
+  const footer = page.getByRole('dialog').locator('footer');
+  expect(await footer.getByRole('button').evaluateAll(buttons => buttons.map(b => b.getAttribute('aria-label')))).toEqual(['去发布','下载','重新生成','更多操作']);
+  expect((await footer.textContent())?.trim()).toBe('');
+  await footer.getByRole('button', { name: '更多操作', exact: true }).click();
+  expect(await page.getByRole('menuitem').allTextContents()).toEqual(['修改视频','删除']);
+  await page.getByRole('menuitem',{name:'删除',exact:true}).click();
   await expect(page.getByRole('dialog')).toContainText('已有发布历史保留');
   await page.getByRole('button',{name:'确认删除'}).click();await page.reload();
   await expect(work(page,'晨间护肤故事')).toHaveCount(0);
@@ -65,11 +69,14 @@ test('生成失败可重试和修改，排队不可发布删除，媒体丢失�
   await open(page);const queued=work(page,'品牌创意短片');
   await queued.getByRole('button',{name:/^查看 /}).click();
   await expect(page.getByRole('dialog')).toContainText('生成中');
-  await expect(page.getByRole('dialog').getByRole('button',{name:'删除',exact:true})).toBeDisabled();
+  await page.getByRole('dialog').getByRole('button',{name:'更多操作',exact:true}).click();
+  await expect(page.getByRole('menuitem',{name:'删除',exact:true})).toBeDisabled();
+  await page.keyboard.press('Escape');
   await page.keyboard.press('Escape');
   const failed=work(page,'产品测评短片');await failed.getByRole('button',{name:/^查看 /}).click();
-  await expect(page.getByRole('dialog').getByRole('button',{name:'修改后生成'})).toBeEnabled();
-  await page.getByRole('dialog').getByRole('button',{name:'重试生成'}).click();
+  await page.getByRole('dialog').getByRole('button',{name:'更多操作',exact:true}).click();
+  await expect(page.getByRole('menuitem',{name:'修改后生成'})).toBeEnabled();
+  await page.getByRole('menuitem',{name:'重试生成'}).click();
   await expect(page.getByRole('dialog')).toContainText('生成中');await page.keyboard.press('Escape');
   const missing=work(page,'自然光产品实拍');await missing.getByRole('button',{name:/^查看 /}).click();
   await expect(page.getByRole('dialog').getByRole('button',{name:'去发布',exact:true})).toBeDisabled();
@@ -78,7 +85,7 @@ test('生成失败可重试和修改，排队不可发布删除，媒体丢失�
 test('独立发布、改期、取消与再次发布保持历史',async({page})=>{
   test.setTimeout(60000);await open(page);
   await work(page,'晨间护肤故事').getByRole('button',{name:'去发布',exact:true}).click();
-  await page.locator('select[required]').selectOption('tk-glow');
+  await page.getByRole('button', { name: '选择发布帐号', exact: true }).click(); await page.getByRole('button', { name: '选择 @glowup.official', exact: true }).click();
   await page.getByRole('radio',{name:'定时发布',exact:true}).check();
   await page.getByRole('button',{name:'定时发布',exact:true}).click();
   await search(page,'晨间护肤故事');
@@ -88,11 +95,11 @@ test('独立发布、改期、取消与再次发布保持历史',async({page})=>
   await page.getByRole('menuitem',{name:'取消排期',exact:true}).click();await page.getByRole('button',{name:'确认取消'}).click();
   await expect(page.getByRole('table')).toContainText('已取消');
   await open(page);await work(page,'晨间护肤故事').getByRole('button',{name:'去发布',exact:true}).click();
-  await page.locator('select[required]').selectOption('tk-glow');await page.getByRole('button',{name:'立即发布',exact:true}).click();
+  await page.getByRole('button', { name: '选择发布帐号', exact: true }).click(); await page.getByRole('button', { name: '选择 @glowup.official', exact: true }).click();await page.getByRole('button',{name:'立即发布',exact:true}).click();
   await search(page,'晨间护肤故事');await expect(page.getByRole('table')).toContainText('发布成功',{timeout:12000});
   await expect(page.getByRole('table').locator('tbody tr')).toHaveCount(2);
   await open(page);await work(page,'晨间护肤故事').getByRole('button',{name:'再次发布',exact:true}).click();
-  await page.locator('select[required]').selectOption('tk-glow');await page.getByRole('button',{name:'立即发布',exact:true}).click();
+  await page.getByRole('button', { name: '选择发布帐号', exact: true }).click(); await page.getByRole('button', { name: '选择 @glowup.official', exact: true }).click();await page.getByRole('button',{name:'立即发布',exact:true}).click();
   await search(page,'晨间护肤故事');await expect(page.getByRole('table').locator('tbody tr')).toHaveCount(3);
 });
 test('失败记录重新配置重试，卡片操作及上传入口位置',async({page},info)=>{
@@ -111,7 +118,7 @@ test('失败记录重新配置重试，卡片操作及上传入口位置',async(
 
 test('多个本地图文上传合成一个作品，BGM 与图片顺序刷新恢复并可发布', async ({ page }) => {
   await page.goto('/#/projects/P1?section=publish');
-  const manager = page.getByRole('region', { name: '我的作品内容' });
+  const manager = page.getByRole('region', { name: '任务列表内容' });
   const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jDuoAAAAASUVORK5CYII=', 'base64');
   await page.getByRole('button', { name: '上传本地作品' }).click();
   await page.getByRole('menuitem', { name: '图集', exact: true }).locator('input').setInputFiles([
@@ -148,7 +155,7 @@ test('多个本地图文上传合成一个作品，BGM 与图片顺序刷新恢�
   await thumbs.nth(2).dragTo(thumbs.nth(0));
   const after = await thumbs.evaluateAll(items => items.map(item => item.getAttribute('data-media-id')));
   expect(after).toEqual([before[2], before[0], before[1]]);
-  await page.locator('select[required]').selectOption('tk-glow');
+  await page.getByRole('button', { name: '选择发布帐号', exact: true }).click(); await page.getByRole('button', { name: '选择 @glowup.official', exact: true }).click();
   const bgmSection = page.getByRole('region', { name: '图文图片与背景音乐' });
   await expect(bgmSection.getByRole('button', { name: '选择音乐' })).toBeVisible();
   await page.reload();
@@ -204,4 +211,122 @@ test('上传紧随搜索且已选筛选高亮，操作列移除查看按钮', as
     await expect(page.getByRole('dialog')).toBeVisible();
     await page.keyboard.press('Escape');
   }
+});
+
+test('操作列仅图标，更多菜单按发布、定时、视频、删除分组', async ({ page }, info) => {
+  await open(page);
+  const row = work(page, '精华使用日记');
+  const actionCell = row.getByRole('cell').last();
+  await expect(actionCell.getByRole('button', { name: '改期', exact: true })).toBeVisible();
+  expect((await actionCell.textContent())?.trim()).toBe('');
+  await actionCell.getByRole('button', { name: '更多操作' }).click();
+  const menu = page.getByRole('menu');
+  expect(await menu.getByRole('menuitem').allTextContents()).toEqual(['去发布', '改期', '取消排期', '下载', '重新生成', '修改视频', '删除']);
+  await expect(menu.getByRole('separator')).toHaveCount(3);
+  expect(await menu.getByRole('menuitem').evaluateAll(items => items.every(item => item.querySelector('svg')))).toBe(true);
+  await page.screenshot({ path: `/tmp/grouped-video-actions-${info.project.name}.png` });
+});
+
+
+test('发布帐号列表完整展示、搜索、过期授权与刷新恢复', async ({ page }, info) => {
+  await open(page);
+  await work(page, '晨间护肤故事').getByRole('button', { name: '去发布', exact: true }).click();
+  await page.evaluate(() => {
+    const key = 'chuhai-studio-v1:demo';
+    const state = JSON.parse(localStorage.getItem(key)!);
+    const project = state.projects.find((p: { id: string }) => p.id === 'P1');
+    state.accounts.push({ id: 'expired-picker', name: 'Expired Brand', handle: '@expired.brand', status: '授权过期', groupId: 'ungrouped', note: '重点复登帐号', region: 'US', authorizedAt: '2026-11-01T00:00:00Z' });
+    state.accounts.push({ id: 'other-project', name: 'Other Project', handle: '@other.project', status: '已授权', groupId: 'ungrouped', note: '', region: 'US', authorizedAt: '2026-11-01T00:00:00Z' });
+    project.accountIds.push('expired-picker');
+    for (let i = 0; i < 8; i++) {
+      const id = `long-account-${i}`;
+      state.accounts.push({ id, name: '用于检查完整展示的较长帐号名称'.repeat(3), handle: `@long.account.${i}`, status: '已授权', groupId: 'ungrouped', note: '长备注内容'.repeat(20), region: 'US', authorizedAt: '2026-11-01T00:00:00Z' });
+      project.accountIds.push(id);
+    }
+    localStorage.setItem(key, JSON.stringify(state));
+  });
+  await page.reload();
+  const trigger = page.getByRole('button', { name: '选择发布帐号', exact: true });
+  await trigger.click();
+  const list = page.getByRole('dialog', { name: '选择发布帐号' });
+  await expect(list).toContainText('授权时间：');
+  await expect(list).toContainText('分组：');
+  expect(await list.locator('.overflow-y-auto').evaluate(el => el.scrollHeight > el.clientHeight)).toBe(true);
+  expect((await list.boundingBox())!.width).toBeLessThanOrEqual((await trigger.boundingBox())!.width + 1);
+  await expect(list.getByRole('button', { name: '选择 @other.project', exact: true })).toHaveCount(0);
+  const search = page.getByRole('textbox', { name: '搜索发布帐号', exact: true });
+  await search.fill('  重点复登  ');
+  await expect(list.getByRole('button', { name: '选择 @expired.brand', exact: true })).toBeDisabled();
+  await expect(list).toContainText('登录过期');
+  await search.fill('no-match');
+  await expect(list).toContainText('没有匹配的帐号');
+  await search.fill('GLOWUP');
+  await expect(list.getByRole('button', { name: '选择 @glowup.official', exact: true })).toBeVisible();
+  await search.fill('');
+  await page.screenshot({ path: `/tmp/publish-account-picker-${info.project.name}.png` });
+  await list.getByRole('button', { name: '立即登录授权 @expired.brand', exact: true }).click();
+  const auth = page.getByRole('dialog', { name: '连接 TikTok 帐号' });
+  await auth.getByRole('button', { name: '前往 TikTok 授权（演示）' }).click();
+  await expect(auth.getByRole('textbox', { name: 'TikTok 用户名' })).toHaveValue('@expired.brand');
+  await auth.getByRole('button', { name: '完成授权', exact: true }).click();
+  await auth.getByRole('button', { name: '完成', exact: true }).click();
+  await trigger.click();
+  await expect(search).toHaveValue('');
+  await search.fill('expired');
+  await search.press('ArrowDown');
+  await page.keyboard.press('Enter');
+  await expect(trigger).toContainText('Expired Brand · @expired.brand');
+  await expect(trigger).toContainText('在线');
+  await page.reload();
+  await expect(trigger).toContainText('@expired.brand');
+  await trigger.click();
+  await page.keyboard.press('Escape');
+  await expect(list).toHaveCount(0);
+});
+
+test('多条发布独立选帐号，失效帐号保留提示并拦截发布', async ({ page }) => {
+  await open(page);
+  await page.evaluate(() => {
+    const key = 'chuhai-studio-v1:demo';
+    const state = JSON.parse(localStorage.getItem(key)!);
+    const project = state.projects.find((p: { id: string }) => p.id === 'P1');
+    const original = state.accounts.find((a: { id: string }) => a.id === 'tk-glow');
+    state.accounts.push({ ...original, id: 'second-picker', name: 'Second Brand', handle: '@second.brand' });
+    project.accountIds.push('second-picker');
+    const films = state.films.filter((f: { projectId: string }) => f.projectId === 'P1').slice(0, 2);
+    const template = state.tasks.find((t: { projectId: string }) => t.projectId === 'P1');
+    films.forEach((f: { id: string; title: string }, i: number) => state.tasks.push({ ...template, id: `picker-task-${i}`, filmId: f.id, title: f.title, status: '待配置', accountId: '', demoPreview: false }));
+    localStorage.setItem(key, JSON.stringify(state));
+  });
+  await page.goto('/#/projects/P1?section=publish&tab=configure&task=picker-task-0&task=picker-task-1');
+  await page.reload();
+  const triggers = page.getByRole('button', { name: '选择发布帐号', exact: true });
+  await triggers.nth(0).click();
+  await page.getByRole('button', { name: '选择 @glowup.official', exact: true }).click();
+  await triggers.nth(1).click();
+  await page.getByRole('button', { name: '选择 @second.brand', exact: true }).click();
+  await page.reload();
+  await expect(triggers.nth(0)).toContainText('@glowup.official');
+  await expect(triggers.nth(1)).toContainText('@second.brand');
+  await page.evaluate(() => {
+    const key = 'chuhai-studio-v1:demo';
+    const state = JSON.parse(localStorage.getItem(key)!);
+    state.accounts.find((a: { id: string }) => a.id === 'second-picker').status = '授权过期';
+    localStorage.setItem(key, JSON.stringify(state));
+  });
+  await page.reload();
+  await expect(triggers.nth(1)).toContainText('登录过期');
+  await expect(page.getByText('登录过期，请立即登录授权后再发布。', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '立即发布', exact: true }).click();
+  await expect(page.getByText('请选择项目关联且授权有效的帐号', { exact: true })).toBeVisible();
+  await page.evaluate(() => {
+    const key = 'chuhai-studio-v1:demo';
+    const state = JSON.parse(localStorage.getItem(key)!);
+    const project = state.projects.find((p: { id: string }) => p.id === 'P1');
+    project.accountIds = project.accountIds.filter((id: string) => id !== 'second-picker');
+    localStorage.setItem(key, JSON.stringify(state));
+  });
+  await page.reload();
+  await expect(triggers.nth(1)).toContainText('@second.brand');
+  await expect(triggers.nth(1)).toContainText('不可用');
 });

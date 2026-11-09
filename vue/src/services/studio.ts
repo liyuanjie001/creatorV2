@@ -159,8 +159,9 @@ export function startGeneration(film: GenerationJob['film'], fail = false) {
   studio.value.jobs.unshift(job); return job;
 }
 export function cancelGeneration(id: string) { const job = studio.value.jobs.find(j => j.id === id); if (job && ['生成中', '等待中'].includes(job.status)) job.status = '已取消'; }
-export function retryGeneration(id: string) { const job = studio.value.jobs.find(j => j.id === id); if (job && !['生成中', '等待中', '已完成'].includes(job.status)) { job.demoPreview = false; job.status = studio.value.jobs.some(j => !j.demoPreview && j.projectId === job.projectId && j.status === '生成中') ? '等待中' : '生成中'; job.dueAt = Date.now() + 5000; job.fail = false; } }
+export function retryGeneration(id: string) { const job = studio.value.jobs.find(j => j.id === id); if (job && !studio.value.projects.find(p => p.id === job.projectId)?.archived && !['生成中', '等待中', '已完成'].includes(job.status)) { job.demoPreview = false; job.status = studio.value.jobs.some(j => !j.demoPreview && j.projectId === job.projectId && j.status === '生成中') ? '等待中' : '生成中'; job.dueAt = Date.now() + 5000; job.fail = false; } }
 export function ensurePublishTask(film: Film, retryTaskId?: string): PublishTask {
+  if (film.resultKind === 'script-breakdown') throw new Error('脚本拆解不能发布');
   const tasks = studio.value.tasks.filter(t => t.filmId === film.id);
   const active = tasks.find(t => ['待发布','已排期','发布中'].includes(t.status));
   if (active) return active;
@@ -178,6 +179,7 @@ export function validatePublish(task: PublishTask) {
   if (!project || project.archived) throw new Error('项目不存在或已归档');
   if (!account || account.deleted || account.status !== '已授权' || !project.accountIds.includes(account.id)) throw new Error('请选择项目关联且授权有效的帐号');
   if (!film) throw new Error('成片已不存在');
+  if (film.resultKind === 'script-breakdown') throw new Error('脚本拆解不能发布');
   if (film.source === '本地上传' && film.type === '视频' && !film.mediaIds.length) throw new Error('本地媒体已丢失，请重新上传');
   if (film.type === '图文' && !(task.imageMediaIds ?? film.mediaIds).length) throw new Error('图文作品至少需要一张图片');
   if (!['PUBLIC_TO_EVERYONE', 'MUTUAL_FOLLOW_FRIENDS', 'SELF_ONLY'].includes(task.privacy)) throw new Error('请主动选择可见范围');
@@ -211,6 +213,7 @@ export async function tickStudio(clock = Date.now()) {
   for (const job of studio.value.jobs) {
     if (job.demoPreview || job.status !== '生成中' || job.dueAt > clock) continue;
     if (job.fail) { job.status = '生成失败'; continue; }
+    if (job.film.resultKind === 'script-breakdown' && !writeJSON(`chuhai-studio-v1:${currentUser.value?.id ?? 'guest'}`, { ...studio.value, jobs: studio.value.jobs.map(j => j.id === job.id ? { ...j, status: '已完成' } : j), films: [{ ...structuredClonePlain(job.film), id: job.id, createdAt: now() }, ...studio.value.films] })) { storageError.value = '拆解结果保存失败，请重试'; continue; }
     job.status = '已完成'; studio.value.films.unshift({ ...structuredClonePlain(job.film), id: job.id, createdAt: now() });
   }
   for (const job of [...studio.value.jobs].reverse()) {
@@ -284,4 +287,15 @@ export function reorderGroup(id: string, targetId: string) {
   if (from < 0 || to < 0 || from === to) return;
   groups.splice(to, 0, groups.splice(from, 1)[0]!);
   studio.value.groups = groups;
+}
+
+export function startBreakdown(film: GenerationJob['film']) {
+ const project = studio.value.projects.find(p => p.id === film.projectId);
+ if (!project || project.archived) throw new Error('项目不存在或已归档');
+ if (!film.reference && !film.referenceAssets?.some(a => a.type === '视频' && a.mediaId)) throw new Error('请先上传视频或添加视频链接');
+ if (film.resultKind !== 'script-breakdown') throw new Error('无效的拆解任务');
+ const job: GenerationJob = { id: uid(), projectId: film.projectId, createdAt: now(), status: '生成中', dueAt: Date.now() + 5000, fail: false, film };
+ if (!writeJSON(`chuhai-studio-v1:${currentUser.value?.id ?? 'guest'}`, { ...studio.value, jobs: [job, ...studio.value.jobs] })) throw new Error('保存失败，请重试');
+ studio.value.jobs.unshift(job);
+ return job;
 }

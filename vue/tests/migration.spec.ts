@@ -88,14 +88,12 @@ test('项目导航和创作模式可切换并恢复到地址', async ({ page }) 
     '素材库',
     '爆款视频',
     '帐号管理',
-    '数据分析',
   ]);
   const navigation = page.locator('nav[aria-label="项目导航"]');
   for (const [label, section] of [
     ['自由创作', 'gen'],
     ['产品卡', 'product'],
-    ['我的作品', 'publish'],
-    ['数据分析', 'analytics'],
+    ['任务列表', 'publish'],
   ]) {
     await navigation.getByRole('button', { name: new RegExp(label) }).click();
     await expect(page).toHaveURL(new RegExp(`section=${section}`));
@@ -272,10 +270,10 @@ test('发布单条成片并在项目分析中区分尚未采集的数据', async
   await page.goto('/#/projects/P1?section=publish');
   const row=page.getByRole('row').filter({has:page.getByRole('textbox',{name:'修改视频名称 晨间护肤故事（演示）',exact:true})});
   await row.getByRole('button',{name:'去发布',exact:true}).click();
-  await page.locator('select[required]').selectOption('tk-glow');
+  await page.getByRole('button', { name: '选择发布帐号', exact: true }).click(); await page.getByRole('button', { name: '选择 @glowup.official', exact: true }).click();
   await page.getByRole('button',{name:'立即发布',exact:true}).click();
   await expect(page.getByRole('table').locator('tbody tr').filter({hasText:'晨间护肤故事（演示）'})).toContainText('发布成功',{timeout:12000});
-  await page.locator('aside').getByRole('button',{name:'数据分析',exact:true}).click();
+  await page.goto('/#/projects/P1?section=analytics');
   await page.getByRole('button',{name:'内容明细',exact:true}).click();
   await expect(page.getByRole('cell',{name:'未采集',exact:true}).first()).toBeVisible();
 });
@@ -318,7 +316,7 @@ test('爆款视频品类国家与关键词组合筛选', async ({ page }) => {
   await expect(cards).toHaveCount(9);
 });
 
-test('我的作品统一展示创作记录', async ({ page }) => {
+test('任务列表统一展示创作记录', async ({ page }) => {
   await page.goto('/#/projects/P1?section=gen&mode=normal');
   await expect(page.getByRole('heading', { name: /创作记录/ })).toHaveCount(0);
   const expand = page.getByRole('button', { name: '放大输入框' });
@@ -327,8 +325,8 @@ test('我的作品统一展示创作记录', async ({ page }) => {
   const inputBox = (await input.boundingBox())!;
   expect(buttonBox.y).toBeGreaterThanOrEqual(inputBox.y);
   expect(buttonBox.x + buttonBox.width).toBeLessThanOrEqual(inputBox.x + inputBox.width);
-  await page.getByRole('button', { name: '我的作品', exact: true }).click();
-  await expect(page.getByRole('heading', { name: '我的作品', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '任务列表', exact: true }).click();
+  await expect(page.getByRole('heading', { name: '任务列表', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: '成片列表', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: '列表视图', exact: true }).click();
   await page.reload();
@@ -338,7 +336,7 @@ test('我的作品统一展示创作记录', async ({ page }) => {
   );
 });
 
-test('生成任务沿轨迹加入我的作品并可查看记录', async ({ page }) => {
+test('生成任务沿轨迹加入任务列表并可查看记录', async ({ page }) => {
   await page.goto('/#/projects/P1?section=gen&mode=normal');
   await page.getByRole('textbox', { name: '创作提示词' }).fill('动画回归：清晨护肤视频');
   await page.getByRole('button', { name: /生成.*消耗 20 积分/ }).click();
@@ -347,7 +345,7 @@ test('生成任务沿轨迹加入我的作品并可查看记录', async ({ page 
   await expect(page.locator('[data-task-transfer]')).toHaveCount(0);
   await page.getByRole('button', { name: '查看', exact: true }).click();
   await expect(page).toHaveURL(/section=publish&tab=creations/);
-  await expect(page.getByRole('heading', { name: '我的作品', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '任务列表', exact: true })).toBeVisible();
 });
 
 test('创作提示词自动增高到220像素后滚动', async ({ page }) => {
@@ -442,7 +440,8 @@ test('创作记录查看为左右分栏详情弹窗', async ({ page }) => {
   const details = (await dialog.getByRole('region', { name: '创作详情' }).boundingBox())!;
   expect(media.x + media.width).toBeLessThanOrEqual(details.x + 1);
   const prompt = await dialog.getByRole('region', { name: '创作提示词', exact: true }).locator('p').innerText();
-  await dialog.getByRole('button', { name: '修改视频', exact: true }).click();
+  await dialog.getByRole('button', { name: '更多操作', exact: true }).click();
+  await page.getByRole('menuitem', { name: '修改视频', exact: true }).click();
   await expect(page).toHaveURL(/editFilm=/);
   await expect(page.getByRole('textbox', { name: '创作提示词' })).toHaveValue(prompt);
 });

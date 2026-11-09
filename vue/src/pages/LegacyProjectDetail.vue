@@ -47,7 +47,7 @@ const sectionTitles: Record<SectionKey, string> = {
   chat: 'AI 聊天',
   director: 'AI 导演',
   account: '账号管理',
-  publish: '我的作品',
+  publish: '任务列表',
   attribution: '数据归因',
   schedule: '任务调度',
   trash: '回收站',
@@ -59,7 +59,7 @@ const primaryNav: { key: SectionKey; label: string; icon: typeof Sparkles }[] = 
 ];
 const manageNav: { key: SectionKey; label: string; icon: typeof Sparkles }[] = [
   { key: 'account', label: '账号管理', icon: Users },
-  { key: 'publish', label: '我的作品', icon: Rocket },
+  { key: 'publish', label: '任务列表', icon: Rocket },
   { key: 'attribution', label: '数据归因', icon: MousePointerClick },
   { key: 'schedule', label: '任务调度', icon: CalendarClock },
 ];

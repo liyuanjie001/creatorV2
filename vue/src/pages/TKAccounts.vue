@@ -6,8 +6,6 @@ import {
   Search,
   MoreHorizontal,
   Users,
-  ShieldCheck,
-  ExternalLink,
   List,
   LayoutGrid,
   Layers,
@@ -25,10 +23,13 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from '@/components/ui';
-import { studio, authorize, accountDeleteReason, deleteAccount, reorderGroup } from '@/services/studio';
+import { studio, accountDeleteReason, deleteAccount, reorderGroup } from '@/services/studio';
 import { uid } from '@/services/storage';
 import { dateTime } from '@/services/videoManagement';
 import { toast } from 'vue-sonner';
+import AccountAuthorization from '@/components/studio/AccountAuthorization.vue';
+import { loginStatus } from '@/services/accounts';
+import type { TKAccount } from '@/types/studio';
 const route = useRoute(),
   router = useRouter();
 const tab = computed(() => (route.query.tab === 'groups' ? 'groups' : 'accounts'));
@@ -42,14 +43,15 @@ const query = computed({ get: () => parameter('q'), set: (value) => setParameter
 const group = computed(() =>
   studio.value.groups.some((g) => g.id === parameter('group')) ? parameter('group') : '',
 );
-const status = computed(() => parameter('status'));
+
+const status = computed(() => parameter('status') ? loginStatus(parameter('status')) : '');
 const view = computed(() => (parameter('view') === 'grid' ? 'grid' : 'list'));
 const liveAccounts = computed(() => studio.value.accounts.filter((a) => !a.deleted));
 const accounts = computed(() =>
   liveAccounts.value.filter(
     (a) =>
       (!group.value || a.groupId === group.value) &&
-      (!status.value || a.status === status.value) &&
+      (!status.value || loginStatus(a.status) === status.value) &&
       `${a.name} ${a.handle} ${a.note}`.toLowerCase().includes(query.value.toLowerCase()),
   ),
 );
@@ -61,12 +63,8 @@ watch(
     selected.value = [];
   },
 );
-const authOpen = ref(false),
-  authStep = ref(0),
-  handle = ref(''),
-  authGroup = ref('ungrouped'),
-  scenario = ref('成功'),
-  error = ref('');
+const authOpen = ref(false);
+const authAccount = ref<TKAccount | null>(null);
 const deleteId = ref(''),
   groupName = ref(''),
   groupEditId = ref(''),
@@ -80,23 +78,7 @@ const affected = computed(
     ).length,
 );
 const deletingAccount = computed(() => studio.value.accounts.find((a) => a.id === deleteId.value));
-function openAuth() {
-  handle.value = '';
-  authGroup.value = 'ungrouped';
-  authStep.value = 0;
-  error.value = '';
-  scenario.value = '成功';
-  authOpen.value = true;
-}
-function complete() {
-  try {
-    const a = authorize(handle.value, authGroup.value, scenario.value);
-    authStep.value = 2;
-    toast.success(`${a.name} 授权状态已更新`);
-  } catch (e) {
-    error.value = (e as Error).message;
-  }
-}
+function openAuth(account: TKAccount | null = null) { authAccount.value = account; authOpen.value = true; }
 function groupSave() {
   const name = groupName.value.trim();
   if (!name) {
@@ -234,7 +216,7 @@ function toggleAll() {
             placeholder="搜索帐号、用户名、备注"
           />
         </div>
-        <button class="studio-primary" @click="openAuth">
+        <button class="studio-primary" @click="openAuth()">
           <Plus class="h-4 w-4" />
           添加 TK 帐号
         </button>
@@ -301,20 +283,20 @@ function toggleAll() {
               </th>
               <th>
                 <div class="flex items-center gap-1">
-                  授权状态
+                  登录状态
                   <DropdownMenu>
                     <DropdownMenuTrigger as-child>
-                      <button aria-label="授权状态筛选" :class="status ? 'text-sky-600' : 'text-slate-400'">
+                      <button aria-label="登录状态筛选" :class="status ? 'text-sky-600' : 'text-slate-400'">
                         <ListFilter class="h-4 w-4" />
                       </button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent class="bg-white p-1">
                       <DropdownMenuItem @select="setParameter('status', '')">
                         <Check v-if="!status" class="mr-2 h-3 w-3" />
-                        全部授权状态
+                        全部登录状态
                       </DropdownMenuItem>
                       <DropdownMenuItem
-                        v-for="s in ['已授权', '授权过期', '权限不足', '已解绑']"
+                        v-for="s in ['在线', '登录过期']"
                         :key="s"
                         @select="setParameter('status', s)"
                       >
@@ -373,8 +355,9 @@ function toggleAll() {
                       : '!bg-amber-50 !text-amber-600'
                   "
                 >
-                  {{ a.status }}
+                  {{ loginStatus(a.status) }}
                 </span>
+                <button v-if="a.status !== '已授权'" type="button" class="ml-2 whitespace-nowrap text-xs font-medium text-sky-600 hover:text-sky-700" @click="openAuth(a)">立即登录授权</button>
               </td>
               <td>
                 <button
@@ -542,49 +525,7 @@ function toggleAll() {
     </template>
     <p class="text-[11px] text-slate-400">官方授权流程演示 · 本页面不会调用 TikTok 或保存真实令牌</p>
   </div>
-  <Dialog :open="authOpen" @update:open="authOpen = $event">
-    <DialogContent class="max-w-lg rounded-2xl bg-white p-7">
-      <DialogTitle>连接 TikTok 帐号</DialogTitle>
-      <DialogDescription>通过官方授权连接帐号，发布前由你确认每条内容。</DialogDescription>
-      <div v-if="authStep === 0" class="space-y-5">
-        <div class="rounded-xl bg-sky-50 p-4 text-sm leading-7 text-sky-800">
-          <ShieldCheck class="mb-2" />
-          授权用于读取基本资料、发布内容及在独立授权允许的范围内读取内容数据。你可以随时解除绑定。
-        </div>
-        <button class="studio-primary w-full" @click="authStep = 1">
-          前往 TikTok 授权（演示）
-          <ExternalLink class="h-4 w-4" />
-        </button>
-      </div>
-      <div v-else-if="authStep === 1" class="space-y-4">
-        <p class="text-xs text-slate-400">模拟 TikTok 授权回调</p>
-        <label class="block">
-          <span class="studio-label">TikTok 用户名</span>
-          <input v-model="handle" class="studio-field" placeholder="@your.brand" />
-        </label>
-        <label class="block">
-          <span class="studio-label">所属分组</span>
-          <select v-model="authGroup" class="studio-field">
-            <option v-for="g in studio.groups" :key="g.id" :value="g.id">{{ g.name }}</option>
-          </select>
-        </label>
-        <label class="block">
-          <span class="studio-label">演示结果</span>
-          <select v-model="scenario" class="studio-field">
-            <option v-for="s in ['成功', '拒绝', '取消', '过期', '权限不足']" :key="s">{{ s }}</option>
-          </select>
-        </label>
-        <p v-if="error" role="alert" class="text-xs text-rose-600">{{ error }}</p>
-        <button class="studio-primary w-full" @click="complete">完成授权</button>
-      </div>
-      <div v-else class="py-6 text-center">
-        <ShieldCheck class="mx-auto mb-4 h-12 w-12 text-emerald-500" />
-        <h3 class="font-semibold">授权结果已保存</h3>
-        <p class="my-4 text-sm text-slate-400">下一步：在项目设置中关联帐号，开始发布。</p>
-        <button class="studio-primary" @click="authOpen = false">返回帐号列表</button>
-      </div>
-    </DialogContent>
-  </Dialog>
+  <AccountAuthorization :open="authOpen" :account="authAccount" @update:open="authOpen = $event" />
   <Dialog :open="!!editor" @update:open="!$event && (editor = null)">
     <DialogContent class="max-w-md bg-white p-6">
       <DialogTitle>{{ editor?.field === 'group' ? '修改帐号分组' : '修改备注' }}</DialogTitle>

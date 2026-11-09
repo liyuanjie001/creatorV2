@@ -1,16 +1,12 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { Search, LayoutGrid, List, Clock3, MoreHorizontal, Image as ImageIcon } from 'lucide-vue-next';
+import { Search, LayoutGrid, List, Clock3, FileText, Send, Download, RotateCcw, Pencil, Trash2, ChartNoAxesCombined, CalendarClock, CalendarX, Image as ImageIcon } from 'lucide-vue-next';
 import {
   Dialog,
   DialogContent,
   DialogTitle,
   DialogDescription,
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
 } from '@/components/ui';
 import {
   studio,
@@ -43,6 +39,7 @@ import { toast } from 'vue-sonner';
 import VideoInfo from './VideoInfo.vue';
 import VideoStatus from './VideoStatus.vue';
 import VideoDetails from './VideoDetails.vue';
+import VideoActionMenu from './VideoActionMenu.vue';
 import FilterHeader from './FilterHeader.vue';
 const props = defineProps<{ projectId: string; published: boolean }>();
 const emit = defineEmits<{ publish: [ids: string[], retryTaskId?: string] }>();
@@ -76,8 +73,8 @@ const filterGroups = computed(() => {
         ...(['views', 'likes', 'comments'] as const).map(key => ({ key, label: ({ views: '播放量', likes: '点赞', comments: '评论' } as const)[key], options: metricRanges.map(({ value, label }) => ({ value, label })) })),
       ]
     : [
-        { key: 'type', label: '类型', options: [{ value: '视频', label: '视频' }, { value: '图集', label: '图集' }] },
-        { key: 'source', label: '创作方式', options: ['自由创作', '专家模式', '爆款复刻', '本地上传'].map(value => ({ value, label: value })) },
+        { key: 'type', label: '类型', options: [{ value: '视频', label: '视频' }, { value: '图集', label: '图集' }, { value: '脚本拆解', label: '脚本拆解' }] },
+        { key: 'source', label: '创作方式', options: ['自由创作', '专家模式', '爆款复刻', '本地上传', '脚本拆解'].map(value => ({ value, label: value })) },
         { key: 'generation', label: '生成状态', options: [{ value: '生成中', label: '生成中' }, { value: '生成失败', label: '生成失败' }, { value: '生成成功', label: '生成成功' }] },
         { key: 'publication', label: '发布状态', options: publication },
       ];
@@ -234,6 +231,8 @@ watch(
   },
 );
 function actions(row: VideoRow) { return videoActions(studio.value, row, props.published, !!missingMedia.value[row.film?.id || '']); }
+const detailPrimaryIds = ['publish', 'download', 'regenerate'];
+const actionIcons = { publish: Send, download: Download, regenerate: RotateCcw, modify: Pencil, delete: Trash2, retry: RotateCcw, analytics: ChartNoAxesCombined, reschedule: CalendarClock, cancel: CalendarX };
 function reason(row: VideoRow, id: VideoAction['id']) { return actions(row).find(a => a.id === id)?.reason ?? '当前状态不支持此操作'; }
 const downloadReason = (row: VideoRow) => reason(row, 'download');
 const canPublishReason = (row: VideoRow) => reason(row, 'publish');
@@ -396,10 +395,10 @@ function togglePage() {
 }
 </script>
 <template>
-  <section class="space-y-4" aria-label="我的作品内容">
+  <section class="space-y-4" aria-label="任务列表内容">
     <header class="flex flex-wrap items-start justify-between gap-3">
       <div>
-        <h1 class="text-xl font-semibold text-slate-800">{{ published ? '发布记录' : '我的作品' }}</h1>
+        <h1 class="text-xl font-semibold text-slate-800">{{ published ? '发布记录' : '任务列表' }}</h1>
         <p class="mt-2 text-xs text-slate-400">{{ projectName }} · {{ published ? '查看已提交的发布任务及平台状态' : '管理视频与图文作品，配置帐号、文案和发布时间' }}</p>
       </div>
     </header>
@@ -419,29 +418,30 @@ function togglePage() {
       </label>
       <slot name="upload" />
       </div>
-      <div v-if="selected.length" class="flex h-10 shrink-0 items-center gap-2">
-        <span class="text-xs text-slate-500">已选 {{ selected.length }} 项</span>
-        <button type="button" class="whitespace-nowrap text-xs text-slate-500 hover:text-sky-600" @click="selected = []">取消选择</button>
+      <div v-if="selected.length" class="flex min-h-10 flex-wrap items-center gap-2" aria-label="批量操作">
+        <span role="separator" aria-orientation="vertical" class="mx-1 h-6 w-px shrink-0 bg-slate-200"></span>
         <span v-if="!published" :title="publishBlocked || '发布所选作品'">
-          <button type="button" class="px-1 text-xs text-sky-600 hover:text-sky-700 disabled:cursor-not-allowed disabled:text-slate-300" aria-label="发布所选作品" :title="publishBlocked || '发布所选作品'" :disabled="!!publishBlocked || busy" @click="publish(chosen)">
+          <button type="button" class="h-10 whitespace-nowrap rounded-lg border border-sky-200 bg-sky-50 px-4 text-xs font-medium text-sky-600 transition hover:bg-sky-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-300" aria-label="发布所选作品" :title="publishBlocked || '发布所选作品'" :disabled="!!publishBlocked || busy" @click="publish(chosen)">
             发布
           </button>
         </span>
         <span :title="downloadBlocked || '下载所选作品'">
-          <button type="button" class="px-1 text-xs text-slate-600 hover:text-sky-600 disabled:cursor-not-allowed disabled:text-slate-300" aria-label="下载所选作品" :title="downloadBlocked || '下载所选作品'" :disabled="!!downloadBlocked || busy" @click="download(chosen)">
+          <button type="button" class="h-10 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-4 text-xs font-medium text-slate-600 transition hover:border-sky-200 hover:bg-sky-50 hover:text-sky-600 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-300" aria-label="下载所选作品" :title="downloadBlocked || '下载所选作品'" :disabled="!!downloadBlocked || busy" @click="download(chosen)">
             下载
           </button>
         </span>
         <span v-if="!published" :title="deleteBlocked || '删除所选作品'">
-          <button type="button" class="px-1 text-xs text-slate-600 hover:text-sky-600 disabled:cursor-not-allowed disabled:text-slate-300" aria-label="删除所选作品" :title="deleteBlocked || '删除所选作品'" :disabled="!!deleteBlocked || busy" @click="deleting = true">
+          <button type="button" class="h-10 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-4 text-xs font-medium text-slate-600 transition hover:border-sky-200 hover:bg-sky-50 hover:text-sky-600 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-300" aria-label="删除所选作品" :title="deleteBlocked || '删除所选作品'" :disabled="!!deleteBlocked || busy" @click="deleting = true">
             删除
           </button>
         </span>
         <span v-else :title="cancelBlocked || '取消所选排期'">
-          <button type="button" class="px-1 text-xs text-slate-600 hover:text-sky-600 disabled:cursor-not-allowed disabled:text-slate-300" aria-label="取消所选排期" :title="cancelBlocked || '取消所选排期'" :disabled="!!cancelBlocked || busy" @click="cancelling = true">
+          <button type="button" class="h-10 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-4 text-xs font-medium text-slate-600 transition hover:border-sky-200 hover:bg-sky-50 hover:text-sky-600 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-300" aria-label="取消所选排期" :title="cancelBlocked || '取消所选排期'" :disabled="!!cancelBlocked || busy" @click="cancelling = true">
             取消排期
           </button>
         </span>
+        <span class="ml-1 whitespace-nowrap text-xs text-slate-500">已选 {{ selected.length }} 项</span>
+        <button type="button" class="whitespace-nowrap text-xs text-slate-500 hover:text-sky-600" @click="selected = []">取消选择</button>
       </div>
       <div class="flex flex-wrap items-center gap-2 sm:ml-auto">
       <div class="flex h-10 rounded-lg border border-slate-200 bg-white p-1" aria-label="视频展示方式">
@@ -565,7 +565,7 @@ function togglePage() {
               <td class="whitespace-nowrap">
                 {{
                   row.film
-                    ? row.film.type === '图文' ? `图文 · ${row.film.mediaIds.length} 张图片` : `${row.film.type} · ${row.film.ratio} · ${duration(row.film.duration)}`
+                    ? row.film.resultKind === 'script-breakdown' ? '脚本拆解' : row.film.type === '图文' ? `图文 · ${row.film.mediaIds.length} 张图片` : `${row.film.type} · ${row.film.ratio} · ${duration(row.film.duration)}`
                     : '未提供'
                 }}
                 <p class="mt-1 text-[10px] text-slate-400">{{ row.film?.quality }}</p>
@@ -582,7 +582,7 @@ function togglePage() {
               <td class="whitespace-nowrap">{{ privacyName(row.task?.privacy) }}</td>
             </template>
             <td>
-              <VideoStatus :value="published ? publishStatusLabel(row.publishStatus) : workPublishStatus(row)" />
+              <VideoStatus v-if="mediaTypeName(row) !== '脚本拆解'" :value="published ? publishStatusLabel(row.publishStatus) : workPublishStatus(row)" /><span v-else>—</span>
               <p v-if="row.task?.error" class="mt-1 max-w-40 text-[10px] text-rose-500">
                 {{ row.task.error }}
               </p>
@@ -598,13 +598,8 @@ function togglePage() {
             </template>
             <td>
               <div class="flex items-center gap-2 whitespace-nowrap">
-                <button v-for="action in actions(row).filter(a => a.primary)" :key="action.id" class="studio-btn !h-8 !px-3 !text-xs !text-sky-600" :disabled="!!action.reason || busy" :title="action.reason" @click="runAction(row, action)">{{ action.label }}</button>
-                <DropdownMenu>
-                  <DropdownMenuTrigger as-child><button type="button" class="grid h-8 w-8 place-items-center rounded-full border border-slate-200" aria-label="更多操作"><MoreHorizontal class="h-3.5 w-3.5" /></button></DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" class="w-40 rounded-xl border-slate-200 bg-white p-1 shadow-lg">
-                    <DropdownMenuItem v-for="action in actions(row)" :key="action.id" class="px-3 py-2 text-xs" :class="action.id === 'delete' ? 'text-rose-600' : ''" :disabled="!!action.reason || busy" :title="action.reason" @select="runAction(row, action)">{{ action.label }}</DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                <button v-for="action in actions(row).filter(a => a.primary)" :key="action.id" type="button" class="studio-btn !h-8 !w-8 !rounded-lg !bg-sky-50 !p-0 !text-sky-600" :aria-label="action.label" :disabled="!!action.reason || busy" :title="action.reason || action.label" @click="runAction(row, action)"><component :is="actionIcons[action.id]" class="h-4 w-4" aria-hidden="true" /></button>
+                <VideoActionMenu :actions="actions(row)" :busy="busy" @action="runAction(row, $event)" />
               </div>
             </td>
           </tr>
@@ -618,8 +613,9 @@ function togglePage() {
         class="relative aspect-[3/4] overflow-hidden rounded-2xl border border-slate-200 bg-slate-200"
       >
         <button class="absolute inset-0 w-full" :aria-label="`查看 ${row.title}`" @click="details = row">
+          <span v-if="row.film?.resultKind === 'script-breakdown'" class="flex h-full flex-col items-center justify-center gap-3 bg-sky-50 text-sky-600"><FileText class="h-12 w-12" />脚本拆解 · Mock</span>
           <img
-            v-if="!row.job && (row.film?.type === '图文' || row.content?.type === '图文') && imageCovers[row.film?.id || row.content?.id || row.id]"
+            v-else-if="!row.job && (row.film?.type === '图文' || row.content?.type === '图文') && imageCovers[row.film?.id || row.content?.id || row.id]"
             :src="imageCovers[row.film?.id || row.content?.id || row.id]"
             alt="图文首图封面"
             class="h-full w-full object-cover"
@@ -650,7 +646,7 @@ function togglePage() {
         >
           {{ duration(row.film.duration) }}
         </span>
-        <span v-if="!row.job && (row.film?.type === '图文' || row.content?.type === '图文')" class="absolute left-3 top-3 rounded bg-black/50 px-1.5 py-0.5 text-[10px] text-white">{{ row.content?.imageMediaIds?.length ?? row.task?.imageMediaIds?.length ?? row.film?.mediaIds.length ?? 0 }} 张图片</span>
+        <span v-else-if="!row.job && (row.film?.type === '图文' || row.content?.type === '图文')" class="absolute left-3 top-3 rounded bg-black/50 px-1.5 py-0.5 text-[10px] text-white">{{ row.content?.imageMediaIds?.length ?? row.task?.imageMediaIds?.length ?? row.film?.mediaIds.length ?? 0 }} 张图片</span>
         <div
           class="absolute inset-x-0 bottom-0 space-y-2 px-4 pb-4 pt-12"
           :class="
@@ -678,13 +674,14 @@ function togglePage() {
           </p>
           <div class="flex flex-wrap items-center gap-2">
             <VideoStatus v-if="!published" :value="row.generation" />
-            <VideoStatus :value="published ? publishStatusLabel(row.publishStatus) : workPublishStatus(row)" />
+            <VideoStatus v-if="mediaTypeName(row) !== '脚本拆解'" :value="published ? publishStatusLabel(row.publishStatus) : workPublishStatus(row)" />
             <span v-if="published" class="text-[10px]">
               {{
                 studio.accounts.find((a) => a.id === (row.task?.accountId || row.content?.accountId))?.handle
               }}
             </span>
-            <button v-for="action in actions(row)" :key="action.id" class="rounded-lg border border-current px-2 py-1 text-xs disabled:opacity-40" :disabled="!!action.reason || busy" :title="action.reason" @click="runAction(row, action)">{{ action.label }}</button>
+            <button v-for="action in actions(row).filter(a => a.primary)" :key="action.id" type="button" class="grid h-8 w-8 place-items-center rounded-lg border border-sky-100 bg-sky-50 text-sky-600 disabled:opacity-40" :aria-label="action.label" :disabled="!!action.reason || busy" :title="action.reason || action.label" @click="runAction(row, action)"><component :is="actionIcons[action.id]" class="h-4 w-4" aria-hidden="true" /></button>
+            <VideoActionMenu :actions="actions(row)" :busy="busy" @action="runAction(row, $event)" />
           </div>
           <p v-if="published" class="text-[10px] opacity-80">
             播放 {{ metrics(row)?.views ?? '—' }} · 点赞 {{ metrics(row)?.likes ?? '—' }} · 评论
@@ -735,7 +732,18 @@ function togglePage() {
     <VideoDetails :row="details" @close="details = null">
       <template #actions>
         <template v-if="details">
-          <button v-for="action in actions(details)" :key="action.id" class="studio-btn" :class="action.id === 'delete' ? '!text-rose-600' : ''" :disabled="!!action.reason || busy" :title="action.reason" @click="runAction(details, action)">{{ action.label }}</button>
+          <button
+            v-for="action in actions(details).filter(a => detailPrimaryIds.includes(a.id))"
+            :key="action.id"
+            type="button"
+            class="studio-btn !h-10 !w-10 !rounded-lg !p-0 shadow-sm transition-colors disabled:!border-slate-200 disabled:!bg-slate-100 disabled:!text-slate-400 disabled:shadow-none"
+            :class="action.id === 'publish' ? '!border-sky-600 !bg-sky-600 !text-white hover:!border-sky-700 hover:!bg-sky-700' : '!border-sky-100 !bg-sky-50 !text-sky-700 hover:!border-sky-200 hover:!bg-sky-100'"
+            :aria-label="action.label"
+            :disabled="!!action.reason || busy"
+            :title="action.reason || action.label"
+            @click="runAction(details, action)"
+          ><component :is="actionIcons[action.id]" class="h-4 w-4" aria-hidden="true" /></button>
+          <VideoActionMenu :actions="actions(details).filter(a => !detailPrimaryIds.includes(a.id))" :busy="busy" prominent @action="runAction(details!, $event)" />
         </template>
       </template>
     </VideoDetails>

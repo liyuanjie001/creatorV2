@@ -13,6 +13,7 @@ export type VideoRow = {
 };
 export const activePublish = ['待发布', '已排期', '发布中'];
 export function sourceName(film?: Film) {
+  if (film?.resultKind === 'script-breakdown') return '脚本拆解';
   return !film
     ? 'TK 历史内容'
     : film.source === '本地上传'
@@ -57,7 +58,8 @@ export function publishStatusLabel(value: string) {
 }
 export type GenerationDisplay = '生成中' | '生成成功' | '生成失败' | '未提供';
 export type PublishDisplay = '未发布' | '待发布' | '定时发布' | '发布中' | '发布成功' | '发布失败' | '已取消';
-export function workPublishStatus(row: VideoRow): PublishDisplay {
+export function workPublishStatus(row: VideoRow): PublishDisplay | '—' {
+  if (row.film?.resultKind === 'script-breakdown') return '—';
   return (row.publishStatus === '待配置' ? '未发布' : publishStatusLabel(row.publishStatus)) as PublishDisplay;
 }
 export function isSubmittedTask(t: PublishTask) { return t.status !== '待配置' && (t.status !== '已取消' || !!t.submittedAt || t.attempt > 0); }
@@ -75,6 +77,11 @@ export function videoActions(state: StudioState, row: VideoRow, published: boole
   const ai = !!row.film && row.film.source !== '本地上传';
   const mediaMissing = missing || !!row.film && (row.film.type === '图文' || row.film.source === '本地上传') && !row.film.mediaIds.length;
   const actions: VideoAction[] = [];
+  if (row.film?.resultKind === 'script-breakdown') {
+    if (row.job && !running) actions.push({ id: 'retry', label: '重试拆解', reason: locked, primary: true });
+    if (!published) actions.push({ id: 'delete', label: '删除', reason: locked || (running ? '拆解中不可删除' : '') });
+    return actions;
+  }
   if (row.job) {
     if (!running) actions.push({ id: 'retry', label: '重试生成', reason: locked, primary: true });
   } else {
@@ -118,6 +125,7 @@ export function metrics(row: VideoRow) {
     : undefined;
 }
 export function mediaTypeName(row: VideoRow) {
+  if (row.film?.resultKind === 'script-breakdown') return '脚本拆解';
   return row.film?.type === '图文' || row.content?.type === '图文' ? '图集' : '视频';
 }
 export function metricReason(row: VideoRow) {
@@ -159,7 +167,7 @@ export function videoRows(state: StudioState, projectId: string, published: bool
   });
   if (published) {
     const rows = tasks
-      .filter(isSubmittedTask)
+      .filter(t => isSubmittedTask(t) && !local.some(f => f.id === t.filmId && f.resultKind === 'script-breakdown'))
       .map((t) =>
         rowFor(
           local.find((f) => f.id === t.filmId),
@@ -169,7 +177,7 @@ export function videoRows(state: StudioState, projectId: string, published: bool
         ),
       );
     for (const content of contents)
-      if (!rows.some((r) => r.content?.id === content.id))
+      if (!local.some(f => f.id === content.filmId && f.resultKind === 'script-breakdown') && !rows.some((r) => r.content?.id === content.id))
         rows.push(
           rowFor(
             local.find((f) => f.id === content.filmId),
@@ -202,6 +210,7 @@ export function videoRows(state: StudioState, projectId: string, published: bool
   return rows;
 }
 export function publishReason(state: StudioState, row: VideoRow, archived: boolean) {
+  if (row.film?.resultKind === 'script-breakdown') return '脚本拆解不能发布';
   if (archived) return '项目已归档';
   if (!row.film || row.job) return '需要可用的本地成片';
   if (row.film.source === '本地上传' && row.film.type === '视频' && !row.film.mediaIds.length) return '本机没有可用媒体，请重新上传';

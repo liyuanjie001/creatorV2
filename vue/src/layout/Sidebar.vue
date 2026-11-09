@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { FolderKanban, FolderOpen, Lightbulb, Users, BarChart3 } from 'lucide-vue-next';
+import { FolderKanban, FolderOpen, Lightbulb, Users } from 'lucide-vue-next';
 import { creditsBalance } from '@/services/credits';
 import { currentUser } from '@/services/identity';
 import { Avatar, AvatarFallback } from '@/components/ui';
@@ -12,7 +12,6 @@ const mainNav = [
   { to: '/assets', label: '素材库', icon: FolderOpen, match: (path: string) => path.startsWith('/assets') },
   { to: '/inspiration', label: '爆款视频', icon: Lightbulb, match: (path: string) => ['/inspiration', '/notes', '/create', '/trends'].some(p => path.startsWith(p)) },
   { to: '/accounts', label: '帐号管理', icon: Users, match: (path: string) => path.startsWith('/accounts') || path.startsWith('/roxy') },
-  { to: '/analytics', label: '数据分析', icon: BarChart3, match: (path: string) => path.startsWith('/analytics') },
 ];
 
 const router = useRouter();

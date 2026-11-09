@@ -6,6 +6,12 @@ import { getMedia } from '@/services/media';
 import { currentUser } from '@/services/identity';
 import { isSubmittedTask, dateTime, privacyName, sourceName, workPublishStatus, type VideoRow } from '@/services/videoManagement';
 import VideoStatus from './VideoStatus.vue';
+import { useRouter } from 'vue-router';
+import { toast } from 'vue-sonner';
+import { breakdownText } from '@/services/breakdown';
+const router = useRouter();
+async function copyScript() { try { await navigator.clipboard.writeText(breakdownText(film.value!)); toast.success('已复制'); } catch { toast.error('复制失败，请重试'); } }
+function createFromScript() { if (!film.value || studio.value.projects.find(p => p.id === film.value!.projectId)?.archived) return; void router.push({ path: '/projects/' + film.value.projectId, query: { section: 'gen', mode: 'normal', scriptSource: film.value.id } }); emit('close'); }
 
 const props = defineProps<{ row: VideoRow | null }>();
 const emit = defineEmits<{ close: []; download: []; publish: []; regenerate: []; modify: [] }>();
@@ -93,7 +99,20 @@ const products = computed(() =>
 <template>
   <Dialog :open="!!row" @update:open="!$event && emit('close')">
     <DialogContent class="flex h-[min(86vh,760px)] max-h-[90vh] max-w-5xl flex-col gap-0 overflow-hidden bg-white p-0">
-      <template v-if="row">
+      <template v-if="row && film?.resultKind === 'script-breakdown'">
+        <div class="flex min-h-0 flex-1 flex-col p-6">
+          <DialogTitle>{{ row.title }}</DialogTitle>
+          <DialogDescription>Mock 脚本拆解 · 未实际解析视频内容</DialogDescription>
+          <template v-if="!row.job">
+            <pre class="my-5 min-h-0 flex-1 overflow-auto whitespace-pre-wrap rounded-xl bg-sky-50 p-4 text-sm leading-7">{{ breakdownText(film) }}</pre>
+            <footer class="flex gap-3">
+              <button class="studio-btn" @click="copyScript">复制</button>
+              <button class="studio-primary" :disabled="studio.projects.find(p => p.id === film!.projectId)?.archived" @click="createFromScript">立即创作</button>
+            </footer>
+          </template>
+          <p v-else class="my-6 rounded-xl bg-sky-50 p-6 text-sm text-slate-600">{{ row.generation === '生成中' ? '正在拆解视频，请稍候。刷新后任务仍会继续。' : '拆解失败，请关闭后通过列表中的“重试拆解”重试。' }}</p>
+        </div>
+      </template><template v-else-if="row">
         <div class="grid min-h-0 flex-1 grid-rows-[minmax(190px,0.42fr)_minmax(0,0.58fr)] md:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] md:grid-rows-1">
           <div
             role="region"
@@ -147,7 +166,7 @@ const products = computed(() =>
                 </div>
               </header>
 
-              <section class="rounded-lg bg-sky-50/80 p-3.5" aria-label="生成信息">
+              <section class="rounded-lg bg-sky-50/40 p-3.5" aria-label="生成信息">
                 <h3 class="mb-2 text-xs font-semibold text-slate-700">生成信息</h3>
                 <dl class="grid gap-x-5 gap-y-2 text-xs sm:grid-cols-2">
                   <div v-for="[label, value] in generationFields" :key="label" class="flex min-w-0 items-baseline gap-2 leading-5">
@@ -157,7 +176,7 @@ const products = computed(() =>
                 </dl>
               </section>
 
-              <section v-if="hasPublishInfo" class="rounded-lg bg-indigo-50/70 p-3.5" aria-label="发布信息">
+              <section v-if="hasPublishInfo" class="rounded-lg bg-indigo-50/35 p-3.5" aria-label="发布信息">
                 <h3 class="mb-2 text-xs font-semibold text-slate-700">发布信息</h3>
                 <dl class="grid gap-x-5 gap-y-2 text-xs sm:grid-cols-2">
                   <div v-for="[label, value] in publishFields" :key="label" class="flex min-w-0 items-baseline gap-2 leading-5">
@@ -173,28 +192,28 @@ const products = computed(() =>
                 <p v-if="row.task?.bgm" class="mt-2 text-xs text-slate-500">背景音乐：{{ row.task.bgm.name }}</p>
               </section>
 
-              <section aria-label="创作提示词">
-                <h3 class="mb-2 text-xs font-semibold text-slate-700">创作提示词</h3>
-                <p class="max-h-36 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-slate-50 p-3 text-xs leading-5 text-slate-600">
-                  {{ !film ? '未提供' : film.source === '本地上传' ? '不适用' : film.brief || '未填写' }}
-                </p>
-              </section>
-
               <section class="grid gap-3 sm:grid-cols-2" aria-label="参考资料">
-                <div class="rounded-lg bg-slate-50 p-3 text-xs">
+                <div class="rounded-lg bg-slate-50/50 p-3 text-xs">
                   <h3 class="mb-1.5 font-medium text-slate-500">参考素材</h3>
                   <p class="break-words leading-5 text-slate-700">{{ references.join('、') || (film ? '未引用' : '未提供') }}</p>
                   <p v-if="film?.reference" class="mt-1 break-all text-[11px] leading-4 text-sky-600">{{ film.reference.source }} · {{ film.reference.url || film.reference.title }}</p>
                 </div>
-                <div class="rounded-lg bg-slate-50 p-3 text-xs">
+                <div class="rounded-lg bg-slate-50/50 p-3 text-xs">
                   <h3 class="mb-1.5 font-medium text-slate-500">参考产品卡</h3>
                   <p class="break-words leading-5 text-slate-700">{{ products.join('、') || (film ? '未引用' : '未提供') }}</p>
                 </div>
               </section>
 
+              <section aria-label="创作提示词">
+                <h3 class="mb-2 text-xs font-semibold text-slate-700">创作提示词</h3>
+                <p class="max-h-36 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-slate-50/50 p-3 text-xs leading-5 text-slate-600">
+                  {{ !film ? '未提供' : film.source === '本地上传' ? '不适用' : film.brief || '未填写' }}
+                </p>
+              </section>
+
               <section v-if="history.length" aria-label="发布历史">
                 <h3 class="mb-2 text-xs font-semibold text-slate-700">发布历史（{{ history.length }}）</h3>
-                <div v-for="task in history" :key="task.id" class="mb-2 rounded-lg bg-slate-50 p-3 text-[11px]">
+                <div v-for="task in history" :key="task.id" class="mb-2 rounded-lg bg-slate-50/50 p-3 text-[11px]">
                   <div class="flex flex-wrap items-center gap-2">
                     <VideoStatus :value="task.status === '已排期' ? '定时发布' : task.status" />
                     <span>{{ studio.accounts.find((account) => account.id === task.accountId)?.handle || '已移除帐号' }}</span>

@@ -12,6 +12,9 @@ import { toast } from 'vue-sonner';
 import FilmPreview from './FilmPreview.vue';
 import VideoManagement from './VideoManagement.vue';
 import InfoTip from './InfoTip.vue';
+import AccountPicker from './AccountPicker.vue';
+import AccountAuthorization from './AccountAuthorization.vue';
+import type { TKAccount } from '@/types/studio';
 const preview = ref<Film | null>(null);
 function filmFor(task: PublishTask) { return studio.value.films.find(f => f.id === task.filmId); }
 function coverFor(task: PublishTask) { return `/images/creation-covers/cover-${(Array.from(task.filmId).reduce((sum, char) => sum + char.charCodeAt(0), 0) % 3) + 1}.jpg`; }
@@ -49,7 +52,10 @@ const imagePickerSelection = ref<string[]>([]);
 const imagePickerSearch = ref('');
 
 const project = computed(() => studio.value.projects.find(p => p.id === props.projectId)!);
-const accounts = computed(() => studio.value.accounts.filter(a => !a.deleted && project.value.accountIds.includes(a.id) && a.status === '已授权'));
+const accounts = computed(() => studio.value.accounts.filter(a => !a.deleted && project.value.accountIds.includes(a.id)));
+const authAccount = ref<TKAccount | null>(null);
+const authOpen = ref(false);
+function openAccountAuth(account: TKAccount) { authAccount.value = account; authOpen.value = true; }
 const mutable = (task?: PublishTask) => !task || ['待配置', '发布失败', '已取消'].includes(task.status);
 async function upload(event: Event, kind: 'video' | 'image') {
   const files = Array.from((event.target as HTMLInputElement).files ?? []);
@@ -197,6 +203,7 @@ async function helpWrite(task: PublishTask) {
 
 </script>
 <template>
+  <AccountAuthorization :open="authOpen" :account="authAccount" @update:open="authOpen = $event" />
   <VideoManagement v-if="tab !== 'configure'" :project-id="projectId" :published="tab==='records'" @publish="configure">
     <template #upload>
       <div class="relative" @mouseenter="uploadMenuOpen = true" @mouseleave="uploadMenuOpen = false" @keydown.esc="uploadMenuOpen = false">
@@ -214,7 +221,7 @@ async function helpWrite(task: PublishTask) {
     <DialogContent class="flex max-h-[88vh] max-w-4xl flex-col overflow-hidden bg-white p-0">
       <header class="border-b border-slate-100 px-6 py-5">
         <DialogTitle class="text-base font-semibold text-slate-800">添加图片</DialogTitle>
-        <DialogDescription class="mt-1 text-xs text-slate-400">从本地上传，或选择当前项目“我的作品”中的图片。</DialogDescription>
+        <DialogDescription class="mt-1 text-xs text-slate-400">从本地上传，或选择当前项目“任务列表”中的图片。</DialogDescription>
       </header>
       <div class="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto p-6">
         <div>
@@ -225,8 +232,8 @@ async function helpWrite(task: PublishTask) {
           </label>
         </div>
         <div class="flex flex-wrap items-center justify-between gap-3">
-          <h3 class="text-sm font-semibold text-slate-800">我的作品（图片）</h3>
-          <label class="relative"><Search class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input v-model="imagePickerSearch" class="studio-field !h-9 !w-56 !pl-9 !text-xs" placeholder="搜索素材" aria-label="搜索我的作品图片"></label>
+          <h3 class="text-sm font-semibold text-slate-800">任务列表（图片）</h3>
+          <label class="relative"><Search class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input v-model="imagePickerSearch" class="studio-field !h-9 !w-56 !pl-9 !text-xs" placeholder="搜索素材" aria-label="搜索任务列表图片"></label>
         </div>
         <div v-if="imagePickerItems.filter(item => item.title.toLowerCase().includes(imagePickerSearch.toLowerCase())).length" class="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-5">
           <button v-for="item in imagePickerItems.filter(entry => entry.title.toLowerCase().includes(imagePickerSearch.toLowerCase()))" :key="item.id" type="button" class="overflow-hidden rounded-lg border text-left transition" :class="imagePickerSelection.includes(item.id) ? 'border-sky-500 ring-2 ring-sky-100' : 'border-slate-200 hover:border-slate-300'" :aria-pressed="imagePickerSelection.includes(item.id)" @click="togglePickerImage(item.id)">
@@ -248,7 +255,7 @@ async function helpWrite(task: PublishTask) {
     <div>
     <div v-if="!drafts.length" class="py-12 text-center text-sm text-slate-400">没有可配置的发布任务<button class="ml-3 text-sky-600" @click="backToCreations">返回创作记录</button></div><template v-if="drafts.length"><div v-for="(task, index) in drafts" :key="task.id" class="mb-4 mt-4 grid items-start gap-6 [&+div]:mt-9 md:grid-cols-[minmax(0,1fr)_220px] xl:grid-cols-[minmax(0,1fr)_280px]"><section class="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white">
       <header class="flex items-center gap-3 bg-slate-100/80 px-5 py-3">
-        <span v-if="filmFor(task)?.type !== '图文'" class="flex h-9 min-w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-[#11a3fd] to-[#1769ff] px-2 text-lg font-bold tabular-nums text-white" :aria-label="`第 ${index + 1} 条视频`">{{ index + 1 }}</span>
+        <span v-if="drafts.length > 1 && filmFor(task)?.type !== '图文'" class="flex h-9 min-w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-[#11a3fd] to-[#1769ff] px-2 text-lg font-bold tabular-nums text-white" :aria-label="`第 ${index + 1} 条视频`">{{ index + 1 }}</span>
         <h3 class="min-w-0 flex-1 truncate text-sm font-semibold text-slate-800" :title="filmFor(task)?.title">{{ filmFor(task)?.title }}</h3>
         <span class="shrink-0 text-xs text-slate-400">{{ filmFor(task)?.type }}<template v-if="filmFor(task)?.type === '视频'"> · {{ filmFor(task)?.duration }}s</template><template v-else> · {{ (task.imageMediaIds ?? filmFor(task)?.mediaIds ?? []).length }} 张图片</template></span>
       </header>
@@ -273,7 +280,7 @@ async function helpWrite(task: PublishTask) {
               <button type="button" class="flex h-10 w-full max-w-sm items-center justify-center gap-2 rounded-lg bg-slate-100 text-sm font-medium text-slate-700 hover:bg-slate-200" @click="toast.info('背景音乐选择暂未开放')"><Plus class="h-4 w-4" />选择音乐</button>
             </div>
           </section>
-          <label><span class="studio-label">发布帐号<InfoTip text="请选择项目内已授权的 TikTok 帐号，此项必填。" /></span><select v-model="task.accountId" required class="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:ring-1 focus:ring-sky-300"><option value="">请选择帐号</option><option v-for="account in accounts" :key="account.id" :value="account.id">{{ account.name }} · {{ account.handle }}</option></select></label>
+          <div><span class="studio-label">发布帐号<InfoTip text="请选择当前项目的在线 TikTok 帐号；登录过期时请先登录授权。" /></span><AccountPicker v-model="task.accountId" :accounts="accounts" :groups="studio.groups" :selected-account="studio.accounts.find(a => a.id === task.accountId)" :disabled="project.archived || !mutable(task) || busy" @authorize="openAccountAuth" /></div>
           <div>
             <div class="mb-2 flex items-center justify-between gap-3">
               <label :for="`caption-${task.id}`" class="text-xs font-medium text-slate-500">发布文案</label>

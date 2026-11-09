@@ -544,7 +544,7 @@ export function submitAgentCard(t: AgentTask, c: AgentCard, s: ExpertSession) {
     result.status = 'submitted';
     say(
       t,
-      '生成任务已加入“我的作品”，这里与作品列表同步展示进度。完成后可查看作品详情；当前为封面与信息演示，没有真实视频媒体。',
+      '生成任务已加入“任务列表”，这里与作品列表同步展示进度。完成后可查看作品详情；当前为封面与信息演示，没有真实视频媒体。',
       [result],
     );
     t.stage = '视频生成';
