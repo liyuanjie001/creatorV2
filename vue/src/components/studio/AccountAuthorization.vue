@@ -2,11 +2,14 @@
 import { ref, watch } from 'vue';
 import { ShieldCheck, ExternalLink } from 'lucide-vue-next';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui';
+import { accountPlatform, platforms, platformName } from '@/services/accounts';
+import type { SocialPlatform } from '@/types/studio';
 import { studio, authorize } from '@/services/studio';
 import type { TKAccount } from '@/types/studio';
 import { toast } from 'vue-sonner';
 const props = defineProps<{ open: boolean; account?: TKAccount | null }>();
 const emit = defineEmits<{ 'update:open': [value: boolean] }>();
+const platform = ref<SocialPlatform>('tiktok');
 const authStep = ref(0),
   handle = ref(''),
   authGroup = ref('ungrouped'),
@@ -16,6 +19,7 @@ watch(
   () => props.open,
   (open) => {
     if (!open) return;
+    platform.value = accountPlatform(props.account ?? undefined);
     authStep.value = 0;
     handle.value = props.account?.handle ?? '';
     authGroup.value = props.account?.groupId ?? 'ungrouped';
@@ -29,7 +33,7 @@ function complete() {
     if (props.account && (props.account.deleted || !studio.value.accounts.includes(props.account)))
       throw new Error('帐号已不可用，请刷新后重试');
     const name = props.account?.name;
-    const account = authorize(handle.value, authGroup.value, scenario.value);
+    const account = authorize(handle.value, authGroup.value, scenario.value, platform.value);
     if (name) {
       const stored = studio.value.accounts.find((a) => a.id === account.id);
       if (stored) stored.name = name;
@@ -44,22 +48,22 @@ function complete() {
 <template>
   <Dialog :open="open" @update:open="emit('update:open', $event)">
     <DialogContent class="max-w-lg rounded-2xl bg-white p-7">
-      <DialogTitle>连接 TikTok 帐号</DialogTitle>
-      <DialogDescription>通过官方授权连接帐号，发布前由你确认每条内容。</DialogDescription>
-      <div v-if="authStep === 0" class="space-y-5">
+      <DialogTitle>连接 {{ platformName(platform) }} 帐号</DialogTitle>
+      <DialogDescription>本地模拟授权，不连接真实平台；发布前逐条确认内容。</DialogDescription>
+      <div v-if="authStep === 0" class="space-y-5"><label class="block"><span class="studio-label">帐号平台</span><select v-model="platform" :disabled="!!account" aria-label="帐号平台" class="studio-field"><option v-for="p in platforms" :key="p.value" :value="p.value">{{ p.label }}</option></select></label>
         <div class="rounded-xl bg-sky-50 p-4 text-sm leading-7 text-sky-800">
           <ShieldCheck class="mb-2" />
           授权用于读取基本资料、发布内容及在独立授权允许的范围内读取内容数据。你可以随时解除绑定。
         </div>
         <button class="studio-primary w-full" @click="authStep = 1">
-          前往 TikTok 授权（演示）
+          前往 {{ platformName(platform) }} 授权（演示）
           <ExternalLink class="h-4 w-4" />
         </button>
       </div>
       <div v-else-if="authStep === 1" class="space-y-4">
-        <p class="text-xs text-slate-400">模拟 TikTok 授权回调</p>
+        <p class="text-xs text-slate-400">模拟 {{ platformName(platform) }} 授权回调</p>
         <label class="block">
-          <span class="studio-label">TikTok 用户名</span>
+          <span class="studio-label">{{ platformName(platform) }} 用户名</span>
           <input v-model="handle" :readonly="!!account" class="studio-field" placeholder="@your.brand" />
         </label>
         <label class="block">

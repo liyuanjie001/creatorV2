@@ -58,3 +58,15 @@ test('过期帐号不可选，授权事件独立，已选失效及移除显示�
   expect(wrapper.get('[role=alert]').text()).toContain('不再关联');
   wrapper.unmount();
 });
+
+test('相同用户名按平台独立筛选并选中对应帐号', async () => {
+  const facebook: TKAccount = {...online,id:'facebook',platform:'facebook'};
+  const wrapper = mount(AccountPicker,{...options,props:{...options.props,accounts:[online,facebook]}});
+  await wrapper.get('select[aria-label="筛选帐号平台"]').setValue('facebook');
+  expect(wrapper.findAll('[data-account-action]')).toHaveLength(1);
+  const button=wrapper.get('[data-account-action]');
+  expect(button.attributes('aria-label')).toBe('选择 @brand · Facebook');
+  await button.trigger('click');
+  expect(wrapper.emitted('update:modelValue')?.[0]).toEqual(['facebook']);
+  wrapper.unmount();
+});

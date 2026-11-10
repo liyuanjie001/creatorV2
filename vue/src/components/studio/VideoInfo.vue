@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
+import { studio } from '@/services/studio';
+import { platformName } from '@/services/accounts';
 import { currentUser } from '@/services/identity';
 import { getMedia } from '@/services/media';
 import type { VideoRow } from '@/services/videoManagement';
-import { cover, dateTime, duration, scheduledDateTime } from '@/services/videoManagement';
+import { cover, dateTime, duration, scheduledDateTime, rowPlatforms } from '@/services/videoManagement';
 import { Clock3, FileText } from 'lucide-vue-next';
 defineEmits<{ open: []; rename: [value: string] }>();
 const props = defineProps<{ row: VideoRow; published: boolean; rename: boolean; missing?: boolean }>();
@@ -76,10 +78,10 @@ onBeforeUnmount(() => { if (imageUrl.value) URL.revokeObjectURL(imageUrl.value);
         class="mt-1 inline-flex items-center gap-1 rounded bg-sky-50 px-1.5 py-1 text-[10px] text-sky-600"
       >
         <Clock3 class="h-3 w-3 shrink-0" />
-        {{ scheduledDateTime(row.task.scheduledAt) }}
+        {{ scheduledDateTime(row.task.scheduledAt,row.task.timeZone) }}
       </p>
       <p v-else class="mt-1 text-[10px] text-slate-400">{{ dateTime(row.date) }}</p>
-      <p v-if="isImageWork" class="mt-0.5 text-[10px] text-slate-400">{{ imageIds.length ? `${imageIds.length} 张图片` : '图文图片不可用' }}</p>
+      <p v-if="rowPlatforms(studio,row,!published).length" class="mt-1 text-[10px] text-sky-600">{{ rowPlatforms(studio,row,!published).map(p=>platformName(p)).join(' · ') }}</p><p v-if="isImageWork" class="mt-0.5 text-[10px] text-slate-400">{{ imageIds.length ? `${imageIds.length} 张图片` : '图文图片不可用' }}</p>
     </div>
   </div>
 </template>

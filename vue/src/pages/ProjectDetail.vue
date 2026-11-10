@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { Sparkles, CreditCard, Send, BarChart3, Settings, MessageSquare, ChevronDown, Check, FolderPlus, ListVideo } from 'lucide-vue-next';
+import { Sparkles, CreditCard, Send, BarChart3, Settings, MessageSquare, ChevronDown, Check, FolderPlus } from 'lucide-vue-next';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui';
 import { studio } from '@/services/studio';
 import { useProjectWorkspace } from '@/composables/useProjectWorkspace';
@@ -12,17 +12,15 @@ import StudioAnalytics from '@/components/studio/StudioAnalytics.vue';
 import StudioSettings from '@/components/studio/StudioSettings.vue';
 const route = useRoute(); const router = useRouter(); useProjectWorkspace();
 const project = computed(() => studio.value.projects.find(p=>p.id === route.params.id));
-const nav = [{key:'gen',label:'自由创作',icon:Sparkles},{key:'product',label:'产品卡',icon:CreditCard},{key:'publish',label:'任务列表',icon:Send},{key:'analytics',label:'数据分析',icon:BarChart3},{key:'settings',label:'项目设置',icon:Settings}];
+const nav = [{key:'gen',label:'自由创作',icon:Sparkles},{key:'product',label:'产品卡',icon:CreditCard},{key:'publish',label:'我的作品',icon:Send},{key:'analytics',label:'数据分析',icon:BarChart3},{key:'settings',label:'项目设置',icon:Settings}];
 const aliases: Record<string,string> = {attribution:'analytics',account:'settings',schedule:'publish',chat:'gen',director:'gen'};
 const section = computed(() => aliases[String(route.query.section)] ?? (nav.some(n=>n.key===route.query.section) ? String(route.query.section) : 'gen'));
-const isPublishRecords = computed(() => section.value === 'publish' && route.query.tab === 'records');
 watch(() => route.query.section, legacy => {
   if (legacy === 'chat' || legacy === 'director') void router.replace({query:{...route.query,section:'gen',mode:'expert'}});
 }, {immediate:true});
 const creationNav = [{ label: '自由创作', mode: 'normal', icon: Sparkles }, { label: '专家模式', mode: 'expert', icon: MessageSquare }];
 const managementNav = computed(() => nav.filter(n => ['product', 'publish'].includes(n.key)));
 function select(key: string, mode = 'normal') { void router.push({query:{...route.query, section:key, ...(key==='gen' ? {mode} : {mode:undefined}), ...(key==='publish' ? {tab:'creations'} : {tab:undefined})}}); }
-function selectPublishRecords() { void router.push({query:{...route.query, section:'publish', tab:'records', mode:undefined}}); }
 </script>
 <template>
   <div v-if="project" class="flex h-full min-w-0">
@@ -58,10 +56,9 @@ function selectPublishRecords() { void router.push({query:{...route.query, secti
         </button>
         <p class="mb-2 mt-7 px-3 text-[11px] font-medium text-slate-400">管理</p>
         <template v-for="n in managementNav" :key="n.key">
-          <button :data-video-management="n.key === 'publish' ? '' : undefined" class="mb-1 flex w-full items-center gap-3 rounded-xl px-3 py-3 text-[13px]" :class="section===n.key && !isPublishRecords?'bg-sky-50 font-medium text-sky-600':'text-slate-500 hover:bg-slate-50'" :aria-current="section===n.key && !isPublishRecords?'page':undefined" @click="select(n.key)">
+          <button :data-video-management="n.key === 'publish' ? '' : undefined" class="mb-1 flex w-full items-center gap-3 rounded-xl px-3 py-3 text-[13px]" :class="section===n.key?'bg-sky-50 font-medium text-sky-600':'text-slate-500 hover:bg-slate-50'" :aria-current="section===n.key?'page':undefined" @click="select(n.key)">
             <component :is="n.icon" class="h-4 w-4" />{{n.label}}
           </button>
-          <button v-if="n.key === 'publish'" class="mb-1 flex w-full items-center gap-3 rounded-xl px-3 py-3 text-[13px]" :class="isPublishRecords?'bg-sky-50 font-medium text-sky-600':'text-slate-500 hover:bg-slate-50'" :aria-current="isPublishRecords?'page':undefined" @click="selectPublishRecords"><ListVideo class="h-4 w-4" />发布记录</button>
         </template>
       </nav>
       <button aria-label="项目设置" title="项目设置" class="mt-auto self-end rounded-lg p-2 text-slate-400 hover:bg-slate-50 hover:text-sky-600" @click="select('settings')"><Settings class="h-4 w-4" /></button>

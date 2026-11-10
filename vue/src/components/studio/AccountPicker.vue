@@ -3,7 +3,7 @@ import { computed, ref, watch, nextTick } from 'vue';
 import { PopoverRoot, PopoverTrigger, PopoverPortal, PopoverContent } from 'reka-ui';
 import { Search, ChevronDown, Check } from 'lucide-vue-next';
 import type { TKAccount } from '@/types/studio';
-import { loginStatus } from '@/services/accounts';
+import { loginStatus, accountPlatform, platformName, platforms } from '@/services/accounts';
 import { dateTime } from '@/services/videoManagement';
 const props = defineProps<{
   accounts: TKAccount[];
@@ -15,6 +15,7 @@ const props = defineProps<{
 const emit = defineEmits<{ 'update:modelValue': [id: string]; authorize: [account: TKAccount] }>();
 const open = ref(false),
   query = ref('');
+const platform = ref('');
 const search = ref<HTMLInputElement>();
 const groupName = (account: TKAccount) =>
   props.groups.find((g) => g.id === account.groupId)?.name || '未分组';
@@ -26,12 +27,12 @@ const unavailable = computed(
 );
 const filtered = computed(() => {
   const q = query.value.trim().toLowerCase();
-  return props.accounts.filter((a) =>
-    `${a.name} ${a.handle} ${groupName(a)} ${a.note}`.toLowerCase().includes(q),
+  return props.accounts.filter(a => !platform.value || accountPlatform(a) === platform.value).filter((a) =>
+    `${a.name} ${a.handle} ${groupName(a)} ${a.note} ${platformName(accountPlatform(a))}`.toLowerCase().includes(q),
   );
 });
 watch(open, (value) => {
-  if (value) query.value = '';
+  if (value) { query.value = ''; platform.value = ''; }
 });
 watch(
   () => props.disabled,
@@ -85,7 +86,7 @@ function keyboard(event: KeyboardEvent) {
         >
           <span class="min-w-0 flex-1 truncate">
             {{
-              selected ? `${selected.name} · ${selected.handle}` : modelValue ? '帐号不可用' : '请选择帐号'
+              selected ? `${selected.name} · ${selected.handle} · ${platformName(accountPlatform(selected))}` : modelValue ? '帐号不可用' : '请选择帐号'
             }}
           </span>
           <span
@@ -111,6 +112,7 @@ function keyboard(event: KeyboardEvent) {
           @open-auto-focus.prevent="nextTick(() => search?.focus())"
           @keydown="keyboard"
         >
+<label class="mb-2 flex items-center gap-2 text-xs text-slate-500">平台<select v-model="platform" aria-label="筛选帐号平台" class="studio-field !h-9"><option value="">全部平台</option><option v-for="p in platforms" :key="p.value" :value="p.value">{{ p.label }}</option></select></label>
           <label class="relative m-3 block shrink-0">
             <Search class="pointer-events-none absolute left-3 top-3 h-4 w-4 text-slate-400" />
             <input
@@ -131,7 +133,7 @@ function keyboard(event: KeyboardEvent) {
               <button
                 type="button"
                 data-account-action
-                :aria-label="`选择 ${account.handle}`"
+                :aria-label="`选择 ${account.handle}${accountPlatform(account) === 'tiktok' ? '' : ' · ' + platformName(accountPlatform(account))}`"
                 :disabled="account.status !== '已授权'"
                 class="flex w-full items-start gap-3 rounded-lg p-3 text-left outline-none hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sky-300 disabled:cursor-not-allowed"
                 @click="choose(account)"
@@ -155,7 +157,7 @@ function keyboard(event: KeyboardEvent) {
                       {{ loginStatus(account.status) }}
                     </span>
                   </span>
-                  <span class="block break-all text-slate-500">{{ account.handle }} · TikTok</span>
+                  <span class="block break-all text-slate-500">{{ account.handle }} · {{ platformName(accountPlatform(account)) }}</span>
                   <span class="block break-words text-slate-500">
                     分组：{{ groupName(account) }} · 备注：{{ account.note || '未填写' }}
                   </span>

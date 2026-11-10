@@ -40,12 +40,12 @@ test('默认状态、筛选、历史草稿与刷新保持一致', async ({page},
   await page.screenshot({path:`/tmp/works-details-${info.project.name}.png`});
   await page.keyboard.press('Escape');
   await open(page,'records');await page.getByLabel('每页条数').selectOption('50');
-  await expect(page.getByRole('table')).toContainText('已取消');
-  await page.waitForTimeout(6000);await expect(page.getByRole('table')).toContainText('发布中');
+  await expect(page.getByRole('table')).not.toContainText('已取消');
+  await expect(page.getByRole('table')).not.toContainText('发布中');
   await page.getByLabel('发布状态筛选').click();await expect(page.getByRole('checkbox',{name:'已发布',exact:true})).toHaveCount(0);
   expect(errors).toEqual([]);
 });
-test('菜单、卡片与详情操作一致，只有任务列表支持删除', async ({page})=>{
+test('菜单、卡片与详情操作一致，只有我的作品支持删除', async ({page})=>{
   await open(page);const row=work(page,'晨间护肤故事');
   await row.getByRole('button',{name:'更多操作'}).click();
   const menu=await page.getByRole('menuitem').allTextContents();
@@ -88,22 +88,24 @@ test('独立发布、改期、取消与再次发布保持历史',async({page})=>
   await page.getByRole('button', { name: '选择发布帐号', exact: true }).click(); await page.getByRole('button', { name: '选择 @glowup.official', exact: true }).click();
   await page.getByRole('radio',{name:'定时发布',exact:true}).check();
   await page.getByRole('button',{name:'定时发布',exact:true}).click();
-  await search(page,'晨间护肤故事');
+  await search(page,'晨间护肤故事（演示）');
   await page.getByRole('button',{name:'改期',exact:true}).click();
-  await page.getByLabel('调整排期时间').fill('2099-11-04T18:00');await page.getByRole('button',{name:'保存排期'}).click();
+  await page.getByLabel('发布日期',{exact:true}).fill('2099-11-04');await page.getByLabel('发布时间',{exact:true}).fill('18:00');await page.getByRole('button',{name:'保存排期'}).click();
   await page.reload();await page.getByRole('button',{name:'更多操作'}).click();
   await page.getByRole('menuitem',{name:'取消排期',exact:true}).click();await page.getByRole('button',{name:'确认取消'}).click();
-  await expect(page.getByRole('table')).toContainText('已取消');
+  await expect(page.getByRole('table')).not.toContainText('已取消');
+  await open(page);await expect(work(page,'晨间护肤故事')).toContainText('已取消');
   await open(page);await work(page,'晨间护肤故事').getByRole('button',{name:'去发布',exact:true}).click();
   await page.getByRole('button', { name: '选择发布帐号', exact: true }).click(); await page.getByRole('button', { name: '选择 @glowup.official', exact: true }).click();await page.getByRole('button',{name:'立即发布',exact:true}).click();
-  await search(page,'晨间护肤故事');await expect(page.getByRole('table')).toContainText('发布成功',{timeout:12000});
-  await expect(page.getByRole('table').locator('tbody tr')).toHaveCount(2);
+  await search(page,'晨间护肤故事（演示）');await expect(page.getByRole('table')).toContainText('发布成功',{timeout:12000});
+  await expect(page.getByRole('table').locator('tbody tr')).toHaveCount(1);
+  await page.getByRole('button',{name:'已发布',exact:true}).click();await search(page,'晨间护肤故事（演示）');await expect(page.getByRole('table').locator('tbody tr')).toHaveCount(1);
   await open(page);await work(page,'晨间护肤故事').getByRole('button',{name:'再次发布',exact:true}).click();
   await page.getByRole('button', { name: '选择发布帐号', exact: true }).click(); await page.getByRole('button', { name: '选择 @glowup.official', exact: true }).click();await page.getByRole('button',{name:'立即发布',exact:true}).click();
-  await search(page,'晨间护肤故事');await expect(page.getByRole('table').locator('tbody tr')).toHaveCount(3);
+  await search(page,'晨间护肤故事（演示）');await expect(page.getByRole('table')).toContainText('发布成功',{timeout:12000});await page.getByRole('button',{name:'已发布',exact:true}).click();await search(page,'晨间护肤故事（演示）');await expect(page.getByRole('table').locator('tbody tr')).toHaveCount(2);
 });
 test('失败记录重新配置重试，卡片操作及上传入口位置',async({page},info)=>{
-  await open(page,'records');await search(page,'换季护肤心得');
+  await open(page);await search(page,'换季护肤心得');
   await page.getByRole('button',{name:'重新配置',exact:true}).click();
   await page.getByRole('button',{name:'立即发布',exact:true}).click();
   await search(page,'换季护肤心得');await expect(page.getByRole('table')).toContainText('发布成功',{timeout:12000});
@@ -111,14 +113,14 @@ test('失败记录重新配置重试，卡片操作及上传入口位置',async(
   const searchBox=await page.getByRole('textbox',{name:'搜索视频',exact:true}).boundingBox();
   const upload=await page.getByRole('button',{name:'发布本地作品',exact:true}).boundingBox();
   expect(upload!.x).toBeGreaterThan(searchBox!.x);expect(Math.abs(upload!.y-searchBox!.y)).toBeLessThan(10);
-  await page.getByRole('button',{name:'缩略图视图'}).click();
+  await page.getByRole('button',{name:'定时发布',exact:true}).click();await page.getByRole('button',{name:'缩略图视图'}).click();
   await expect(page.locator('article').first().getByRole('button',{name:'改期',exact:true})).toBeVisible();
   await page.screenshot({path:`/tmp/records-grid-${info.project.name}.png`,fullPage:true});
 });
 
 test('多个本地图文上传合成一个作品，BGM 与图片顺序刷新恢复并可发布', async ({ page }) => {
   await page.goto('/#/projects/P1?section=publish');
-  const manager = page.getByRole('region', { name: '任务列表内容' });
+  const manager = page.getByRole('region', { name: '我的作品内容' });
   const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jDuoAAAAASUVORK5CYII=', 'base64');
   await page.getByRole('button', { name: '上传本地作品' }).click();
   await page.getByRole('menuitem', { name: '图集', exact: true }).locator('input').setInputFiles([
@@ -162,8 +164,8 @@ test('多个本地图文上传合成一个作品，BGM 与图片顺序刷新恢�
   await expect(page.getByText('3 张 · 首张为封面')).toBeVisible();
   await expect(page.getByRole('region', { name: '图文图片与背景音乐' }).getByRole('button', { name: '选择音乐' })).toBeVisible();
   await page.getByRole('button', { name: '立即发布', exact: true }).click();
-  await expect(page).toHaveURL(/tab=records/);
-  await expect(page.getByRole('table').locator('tbody tr').filter({ hasText: 'carousel-cover' })).toContainText('发布成功', { timeout: 12000 });
+  await expect(page).toHaveURL(/tab=creations/);
+  await expect(page.getByRole('row').filter({has:page.getByRole('textbox',{name:'修改视频名称 carousel-cover',exact:true})})).toContainText('发布成功', { timeout: 12000 });
 });
 
 test('分页与批量发布部分失败，仅重试失败项保留成功记录',async({page})=>{
@@ -174,9 +176,9 @@ test('分页与批量发布部分失败，仅重试失败项保留成功记录',
     const template=state.tasks.find((t:{status:string})=>t.status==='发布失败');
     for(let i=0;i<25;i++){
       const film={...sample,id:`batch-${i}`,title:`批量回归 ${i}`,createdAt:new Date(Date.now()+i*1000).toISOString()};state.films.push(film);
-      if(i<2)state.tasks.push({...template,id:`batch-task-${i}`,filmId:film.id,title:film.title,status:'待配置',demoPreview:false,submittedAt:undefined,publishedAt:undefined,platformId:undefined,createdAt:film.createdAt,simulateFailure:i===0,attempt:0,error:''});
+      if(i<2)state.tasks.push({...template,id:`batch-task-${i}`,filmId:film.id,title:film.title,caption:film.title,status:'待配置',demoPreview:false,submittedAt:undefined,publishedAt:undefined,platformId:undefined,createdAt:film.createdAt,simulateFailure:i===0,attempt:0,error:''});
     }
-    localStorage.setItem(key,JSON.stringify(state));return state.films.length+state.jobs.filter((j:{status:string})=>j.status!=='已完成').length+2;
+    localStorage.setItem(key,JSON.stringify(state));return state.films.length+state.jobs.filter((j:{status:string})=>j.status!=='已完成').length+state.content.filter((c:{filmId?:string;projectIds:string[]})=>c.projectIds.includes('P1')&&!c.filmId).length;
   });
   await page.reload();await expect(page.getByRole('table').locator('tbody tr')).toHaveCount(20);
   await page.getByRole('button',{name:'下一页'}).click();await expect(page).toHaveURL(/page=2/);
@@ -184,11 +186,11 @@ test('分页与批量发布部分失败，仅重试失败项保留成功记录',
   await page.getByLabel('每页条数').selectOption('50');await expect(page.getByRole('table').locator('tbody tr')).toHaveCount(total);
   for(const i of [0,1])await page.getByRole('checkbox',{name:`选择 批量回归 ${i}`,exact:true}).check();
   await page.getByRole('button',{name:'发布所选作品',exact:true}).click();await page.getByRole('button',{name:'立即发布',exact:true}).click();
-  await search(page,'批量回归');
-  const first=page.getByRole('table').locator('tbody tr').filter({hasText:'批量回归 0'});
+  await search(page,'批量回归');await page.getByLabel('每页条数').selectOption('50');
+  const first=page.getByRole('row').filter({has:page.getByRole('textbox',{name:'修改视频名称 批量回归 0',exact:true})});
   await expect(first).toContainText('发布失败',{timeout:12000});
   await first.getByRole('button',{name:'重新配置',exact:true}).click();await page.getByRole('button',{name:'立即发布',exact:true}).click();
-  await search(page,'批量回归');await expect(page.getByRole('table').locator('tbody tr')).toHaveCount(2);
+  await search(page,'批量回归');await page.getByLabel('每页条数').selectOption('50');await expect(page.getByRole('table').locator('tbody tr')).toHaveCount(25);
   await expect(page.getByRole('table').locator('tbody tr').filter({hasText:'发布失败'})).toHaveCount(0,{timeout:12000});
 });
 

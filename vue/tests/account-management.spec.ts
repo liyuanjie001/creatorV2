@@ -63,14 +63,14 @@ test('分组列表、拖动和键盘排序、缩略图、查看及删除', async
   await page.screenshot({ path: `/tmp/groups-${info.project.name}-grid.png`, fullPage: true });
   await page.getByRole('button', { name: '查看 品牌帐号', exact: true }).click();
   await expect(page).toHaveURL(/tab=accounts.*group=group-brand/);
-  await expect(page.getByRole('table').locator('tbody tr')).toHaveCount(1);
+  await expect(page.getByRole('table').locator('tbody tr')).toHaveCount(3);
   await page.getByRole('button', { name: '帐号分组', exact: true }).click();
   await page.getByRole('button', { name: '品牌帐号 更多操作', exact: true }).click();
   await page.getByRole('menuitem', { name: '删除', exact: true }).click();
   await page.getByRole('button', { name: '确认删除分组', exact: true }).click();
   await expect(groups).toHaveCount(2);
   await page.getByRole('button', { name: '查看 未分组', exact: true }).click();
-  await expect(page.getByRole('table').locator('tbody tr')).toHaveCount(2);
+  await expect(page.getByRole('table').locator('tbody tr')).toHaveCount(4);
 });
 test('删除帐号确认、待执行任务取消和重新授权恢复身份', async ({ page }) => {
   await page.goto('/#/accounts');
@@ -101,10 +101,10 @@ test('删除帐号确认、待执行任务取消和重新授权恢复身份', as
   const state = await page.evaluate(() => JSON.parse(localStorage.getItem('chuhai-studio-v1:demo')!));
   expect(state.tasks.map((t: { status: string }) => t.status)).toEqual(['已取消', '已取消', '发布成功']);
   expect(state.projects.every((p: { accountIds: string[] }) => !p.accountIds.includes('tk-glow'))).toBe(true);
-  await page.getByRole('button', { name: '添加 TK 帐号' }).click();
+  await page.getByRole('button', { name: '添加帐号' }).click();
   await page.getByRole('button', { name: '前往 TikTok 授权（演示）' }).click();
   await page.getByPlaceholder('@your.brand').fill('glowup.official');
   await page.getByRole('button', { name: '完成授权', exact: true }).click();
-  await page.getByRole('button', { name: '返回帐号列表' }).click();
+  await page.getByRole('button', { name: '完成', exact: true }).click();
   await expect(page.getByRole('table')).toContainText('@glowup.official');
 });

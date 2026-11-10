@@ -1,3 +1,6 @@
+import { migratePublishing, addPlatformExamples, addAccountStatisticsExamples, completeDemoAccountMetrics, upgradeDemoAccountTrends, accountPlatform, publishCaption } from './accounts';
+import { localTimeZone, scheduleCandidates, localDateTime } from './timeZones';
+import type { SocialPlatform } from '@/types/studio';
 import { ref, watch } from 'vue';
 import { projects as legacyProjects, products as legacyProducts } from '@/data/mock';
 import type { ContentAttributes, Film, GenerationJob, PlatformContent, PublishTask, Reference, StudioProject, StudioState } from '@/types/studio';
@@ -47,6 +50,11 @@ function addCreationStatusExamples(state: StudioState) {
 function load(owner: string) {
   const value = readJSON<StudioState>(`chuhai-studio-v1:${owner}`, () => seed(owner));
   const state = value?.version === 1 && Array.isArray(value.projects) && Array.isArray(value.tasks) ? value : seed(owner);
+  migratePublishing(state);
+  addPlatformExamples(state, owner);
+  addAccountStatisticsExamples(state, owner);
+  completeDemoAccountMetrics(state, owner);
+  upgradeDemoAccountTrends(state, owner);
   for (const task of state.tasks) {
     const content = state.content.find(c => c.id === task.platformId);
     if (!task.publishedAt && content) task.publishedAt = content.publishedAt;
@@ -125,14 +133,16 @@ export async function ensureDemoProjectContent(projectId: string) {
     for (const task of state.tasks.filter(t=>t.filmId===gallery?.id)) task.imageMediaIds = images;
   } catch { /* Browsers without IndexedDB retain the explicit missing-media state. */ }
 }
-export function authorize(handle: string, groupId: string, scenario: string) {
+export function authorize(handle: string, groupId: string, scenario: string, platform: SocialPlatform = 'tiktok') {
   if (scenario === '拒绝') throw new Error('用户拒绝授权，可重新发起');
   if (scenario === '取消') throw new Error('授权已取消，帐号未发生变更');
   const normalized = '@' + handle.trim().replace(/^@/, '').toLowerCase();
   if (!/^@[a-z0-9_.]{2,24}$/.test(normalized)) throw new Error('用户名需为 2–24 位字母、数字、下划线或点');
-  const existing = studio.value.accounts.find(a => a.handle === normalized);
-  const account = { id: existing?.id ?? uid(), name: normalized.slice(1), handle: normalized, region: existing?.region ?? '未提供', groupId, note: existing?.note ?? '', status: (scenario === '权限不足' ? '权限不足' : scenario === '过期' ? '授权过期' : '已授权') as '已授权' | '授权过期' | '权限不足', authorizedAt: now(), deleted: false };
-  if (existing) Object.assign(existing, account); else studio.value.accounts.unshift(account);
+  const existing = studio.value.accounts.find(a => a.handle === normalized && accountPlatform(a) === platform);
+  const account = { platform, id: existing?.id ?? uid(), name: normalized.slice(1), handle: normalized, region: existing?.region ?? '未提供', groupId, note: existing?.note ?? '', status: (scenario === '权限不足' ? '权限不足' : scenario === '过期' ? '授权过期' : '已授权') as '已授权' | '授权过期' | '权限不足', authorizedAt: now(), deleted: false };
+  const nextAccounts = existing ? studio.value.accounts.map(a=>a.id===existing.id ? {...account,name:existing.name} : a) : [account,...studio.value.accounts];
+  if (!writeJSON('chuhai-studio-v1:'+(currentUser.value?.id ?? 'guest'), {...studio.value,accounts:nextAccounts})) throw new Error('帐号保存失败，请重试');
+  if (existing) Object.assign(existing, {...account,name:existing.name}); else studio.value.accounts.unshift(account);
   return account;
 }
 export function disconnectAccount(id: string) {
@@ -160,16 +170,19 @@ export function startGeneration(film: GenerationJob['film'], fail = false) {
 }
 export function cancelGeneration(id: string) { const job = studio.value.jobs.find(j => j.id === id); if (job && ['生成中', '等待中'].includes(job.status)) job.status = '已取消'; }
 export function retryGeneration(id: string) { const job = studio.value.jobs.find(j => j.id === id); if (job && !studio.value.projects.find(p => p.id === job.projectId)?.archived && !['生成中', '等待中', '已完成'].includes(job.status)) { job.demoPreview = false; job.status = studio.value.jobs.some(j => !j.demoPreview && j.projectId === job.projectId && j.status === '生成中') ? '等待中' : '生成中'; job.dueAt = Date.now() + 5000; job.fail = false; } }
-export function ensurePublishTask(film: Film, retryTaskId?: string): PublishTask {
+export function ensurePublishTask(film: Film, retryTaskId?: string, forceNew = false): PublishTask {
   if (film.resultKind === 'script-breakdown') throw new Error('脚本拆解不能发布');
+  if (studio.value.projects.find(p=>p.id===film.projectId)?.archived) throw new Error('项目已归档');
   const tasks = studio.value.tasks.filter(t => t.filmId === film.id);
+  const requestedRetry = tasks.find(t=>t.id===retryTaskId && t.status==='发布失败');
+  if (requestedRetry && !forceNew) return requestedRetry;
   const active = tasks.find(t => ['待发布','已排期','发布中'].includes(t.status));
-  if (active) return active;
+  if (active && !forceNew) return active;
   const latest = tasks.filter(t=>t.status !== '待配置').sort((a,b)=>(b.submittedAt||b.createdAt).localeCompare(a.submittedAt||a.createdAt))[0];
   const failed = retryTaskId ? tasks.find(t=>t.id===retryTaskId&&t.status==='发布失败') : retryTaskId === undefined && latest?.status === '发布失败' ? latest : undefined;
   const existing = failed || tasks.find(t=>t.status==='待配置');
-  if (existing) return existing;
-  const task: PublishTask = { id: uid(), batchId: '', filmId: film.id, projectId: film.projectId, accountId: '', title: film.title, tags: '', privacy: 'PUBLIC_TO_EVERYONE', comments: true, duet: true, stitch: true, ai: false, commercial: false, audienceControl: false, cover: '首帧', photoMusic: false, imageMediaIds: film.type === '图文' ? [...film.mediaIds] : undefined, scheduledAt: '', status: '待配置', createdAt: now(), dueAt: 0, simulateFailure: false, attempt: 0 };
+  if (existing && !forceNew) return existing;
+  const task: PublishTask = { caption: film.title, timeZone: localTimeZone(), id: uid(), batchId: '', filmId: film.id, projectId: film.projectId, accountId: '', title: film.title, tags: '', privacy: 'PUBLIC_TO_EVERYONE', comments: true, duet: true, stitch: true, ai: false, commercial: false, audienceControl: false, cover: '首帧', photoMusic: false, imageMediaIds: film.type === '图文' ? [...film.mediaIds] : undefined, scheduledAt: '', status: '待配置', createdAt: now(), dueAt: 0, simulateFailure: false, attempt: 0 };
   film.inPublishing = true; studio.value.tasks.unshift(task); return task;
 }
 export function validatePublish(task: PublishTask) {
@@ -178,18 +191,24 @@ export function validatePublish(task: PublishTask) {
   const film = studio.value.films.find(f => f.id === task.filmId);
   if (!project || project.archived) throw new Error('项目不存在或已归档');
   if (!account || account.deleted || account.status !== '已授权' || !project.accountIds.includes(account.id)) throw new Error('请选择项目关联且授权有效的帐号');
-  if (!film) throw new Error('成片已不存在');
+  if (!film || film.projectId !== task.projectId) throw new Error('成片已不存在或不属于当前项目');
   if (film.resultKind === 'script-breakdown') throw new Error('脚本拆解不能发布');
   if (film.source === '本地上传' && film.type === '视频' && !film.mediaIds.length) throw new Error('本地媒体已丢失，请重新上传');
   if (film.type === '图文' && !(task.imageMediaIds ?? film.mediaIds).length) throw new Error('图文作品至少需要一张图片');
   if (!['PUBLIC_TO_EVERYONE', 'MUTUAL_FOLLOW_FRIENDS', 'SELF_ONLY'].includes(task.privacy)) throw new Error('请主动选择可见范围');
+  if (task.scheduledAt && !scheduleCandidates(localDateTime(task.scheduledAt, task.timeZone || 'Asia/Shanghai'), task.timeZone || 'Asia/Shanghai').length) throw new Error('发布时区或时间无效');
   if (task.scheduledAt && (!Number.isFinite(new Date(task.scheduledAt).getTime()) || new Date(task.scheduledAt).getTime() <= Date.now())) throw new Error('定时时间必须晚于当前时间');
+}
+function persistTaskUpdates(updates: PublishTask[]) {
+  const next = {...studio.value,tasks:studio.value.tasks.map(task=>updates.find(t=>t.id===task.id) || task)};
+  if (!writeJSON('chuhai-studio-v1:'+(currentUser.value?.id ?? 'guest'),next)) throw new Error('本地保存失败，请重试；当前编辑已保留');
+  for (const task of updates) { const stored=studio.value.tasks.find(t=>t.id===task.id); if (stored) Object.assign(stored,task); }
 }
 export async function submitPublish(tasks: PublishTask[]) {
   if (!tasks.length) throw new Error('请选择成片');
   for (const task of tasks) {
     if (!['待配置', '发布失败', '已取消'].includes(studio.value.tasks.find(t=>t.id===task.id)?.status ?? '') || !['待配置', '发布失败', '已取消'].includes(task.status)) throw new Error('部分任务已提交，请勿重复发布');
-    if (tasks.filter(t => t.filmId === task.filmId).length > 1 || studio.value.tasks.some(t => t.id !== task.id && t.filmId === task.filmId && ['待发布', '已排期', '发布中'].includes(t.status))) throw new Error('该视频已有执行中的发布任务');
+    if (tasks.filter(t => t.filmId === task.filmId && t.accountId === task.accountId).length > 1 || studio.value.tasks.some(t => t.id !== task.id && t.filmId === task.filmId && t.accountId === task.accountId && ['待发布', '已排期', '发布中'].includes(t.status))) throw new Error('该视频已有执行中的发布任务');
     validatePublish(task);
     const film = studio.value.films.find(f => f.id === task.filmId)!;
     if (film.source === '本地上传' && film.type === '视频') for (const id of film.mediaIds) if (!await getMedia(currentUser.value!.id, id)) throw new Error(`「${film.title}」的本地媒体已丢失，请重新上传`);
@@ -201,13 +220,15 @@ export async function submitPublish(tasks: PublishTask[]) {
   }
   const batchId = uid();
   for (const task of tasks) {
-    // Recheck the stored task after asynchronous media validation.
+    // Recheck after asynchronous media validation before committing the batch.
     if (!['待配置', '发布失败', '已取消'].includes(studio.value.tasks.find(t=>t.id===task.id)?.status ?? '')) throw new Error('任务已提交，请勿重复发布');
-    if (studio.value.tasks.some(t => t.id !== task.id && t.filmId === task.filmId && ['待发布', '已排期', '发布中'].includes(t.status))) throw new Error('该视频已有执行中的发布任务');
-    task.demoPreview = false; task.submittedAt = now(); task.updatedAt = now(); task.publishedAt = undefined;
-    task.batchId = batchId; task.status = task.scheduledAt ? '已排期' : '待发布'; task.dueAt = task.scheduledAt ? new Date(task.scheduledAt).getTime() : Date.now() + 1000; task.error = ''; task.attempt++;
-    const stored = studio.value.tasks.find(t=>t.id===task.id); if (stored && stored !== task) Object.assign(stored, task);
+    if (studio.value.tasks.some(t => t.id !== task.id && t.filmId === task.filmId && t.accountId === task.accountId && ['待发布', '已排期', '发布中'].includes(t.status))) throw new Error('该视频已有执行中的发布任务');
+    validatePublish(task);
   }
+  const updates = tasks.map(task => ({ ...task, caption: publishCaption(task), demoPreview:false, submittedAt:now(), updatedAt:now(), publishedAt:undefined, batchId, status:task.scheduledAt?'已排期' as const:'待发布' as const, dueAt:task.scheduledAt?new Date(task.scheduledAt).getTime():Date.now()+1000,error:'',attempt:task.attempt+1 }));
+  persistTaskUpdates(updates);
+  for (const task of tasks) Object.assign(task, updates.find(t=>t.id===task.id));
+
 }
 export async function tickStudio(clock = Date.now()) {
   for (const job of studio.value.jobs) {
@@ -234,7 +255,7 @@ export async function tickStudio(clock = Date.now()) {
       if (task.status !== '发布中') { task.status = '发布中'; task.updatedAt = now(); task.dueAt = clock + 4000; continue; }
       if (task.simulateFailure && task.attempt === 1) throw new Error('平台暂时繁忙，请重试此任务');
       task.status = '发布成功'; task.publishedAt = now(); task.updatedAt = now(); task.platformId = `demo-${task.id}`;
-      if (!studio.value.content.some(c => c.id === task.platformId)) studio.value.content.unshift({ id: task.platformId, accountId: task.accountId, filmId: film.id, projectIds: [task.projectId], title: task.title, type: film.type, publishedAt: now(), ...(film.type === '图文' ? { imageMediaIds: [...(task.imageMediaIds ?? film.mediaIds)], bgm: task.bgm ? { ...task.bgm } : undefined } : {}), attributes: { ...film.attributes }, snapshots: [], collection: '未采集' });
+      if (!studio.value.content.some(c => c.id === task.platformId)) studio.value.content.unshift({ id: task.platformId, accountId: task.accountId, filmId: film.id, projectIds: [task.projectId], title: publishCaption(task), type: film.type, publishedAt: now(), ...(film.type === '图文' ? { imageMediaIds: [...(task.imageMediaIds ?? film.mediaIds)], bgm: task.bgm ? { ...task.bgm } : undefined } : {}), attributes: { ...film.attributes }, snapshots: [], collection: '未采集' });
     } catch (e) { task.status = '发布失败'; task.updatedAt = now(); task.error = (e as Error).message; }
   }
 }
@@ -253,13 +274,14 @@ export function saveProduct(id: string, fields: Partial<import('@/types/domain')
 export function cancelPublishTask(id: string) {
   const task = studio.value.tasks.find(t => t.id === id);
   if (!task || !['已排期', '待发布'].includes(task.status)) throw new Error('只能取消尚未执行的发布任务');
-  task.demoPreview = false; task.status = '已取消'; task.updatedAt = now();
+  if (studio.value.projects.find(p => p.id === task.projectId)?.archived) throw new Error('项目已归档');
+  persistTaskUpdates([{...task,demoPreview:false,status:'已取消',updatedAt:now()}]);
 }
-export function reschedulePublishTask(id: string, scheduledAt: string) {
+export function reschedulePublishTask(id: string, scheduledAt: string, timeZone?: string) {
   const task = studio.value.tasks.find(t => t.id === id);
   if (!task || task.status !== '已排期') throw new Error('仅已排期任务可以改期');
-  validatePublish({ ...task, scheduledAt });
-  task.demoPreview = false; task.scheduledAt = scheduledAt; task.dueAt = new Date(scheduledAt).getTime(); task.updatedAt = now();
+  validatePublish({ ...task, scheduledAt, timeZone: timeZone ?? task.timeZone });
+  persistTaskUpdates([{...task,timeZone:timeZone ?? task.timeZone ?? 'Asia/Shanghai',demoPreview:false,scheduledAt,dueAt:new Date(scheduledAt).getTime(),updatedAt:now()}]);
 }
 
 export function accountDeleteReason(id: string) {

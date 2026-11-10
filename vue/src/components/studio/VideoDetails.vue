@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { computed, ref, watch, onBeforeUnmount } from 'vue';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui';
+import { publishCaption, accountPlatform, platformName } from '@/services/accounts';
+import { formatSchedule } from '@/services/timeZones';
 import { studio } from '@/services/studio';
 import { getMedia } from '@/services/media';
 import { currentUser } from '@/services/identity';
 import { isSubmittedTask, dateTime, privacyName, sourceName, workPublishStatus, type VideoRow } from '@/services/videoManagement';
+import PlatformViewButtons from './PlatformViewButtons.vue';
 import VideoStatus from './VideoStatus.vue';
 import { useRouter } from 'vue-router';
 import { toast } from 'vue-sonner';
@@ -13,7 +16,7 @@ const router = useRouter();
 async function copyScript() { try { await navigator.clipboard.writeText(breakdownText(film.value!)); toast.success('已复制'); } catch { toast.error('复制失败，请重试'); } }
 function createFromScript() { if (!film.value || studio.value.projects.find(p => p.id === film.value!.projectId)?.archived) return; void router.push({ path: '/projects/' + film.value.projectId, query: { section: 'gen', mode: 'normal', scriptSource: film.value.id } }); emit('close'); }
 
-const props = defineProps<{ row: VideoRow | null }>();
+const props = defineProps<{ row: VideoRow | null; playerOnly?: boolean }>();
 const emit = defineEmits<{ close: []; download: []; publish: []; regenerate: []; modify: [] }>();
 const urls = ref<string[]>([]);
 const error = ref('');
@@ -78,9 +81,10 @@ const publishFields = computed(() => {
   const accountId = row.task?.accountId || row.content?.accountId;
   return [
     ['发布状态', workPublishStatus(row)],
+    ['平台', platformName(accountPlatform(studio.value.accounts.find(a=>a.id===accountId)))],
     ['发布帐号', studio.value.accounts.find((account) => account.id === accountId)?.handle || (accountId ? '已移除帐号' : '未提供')],
     ['可见范围', row.task ? privacyName(row.task.privacy) : row.content ? '未提供' : '—'],
-    ['计划发布时间', row.task?.scheduledAt ? dateTime(row.task.scheduledAt) : '—'],
+    ['计划发布时间', row.task?.scheduledAt ? formatSchedule(row.task.scheduledAt,row.task.timeZone) : '—'],
     ['实际发布时间', dateTime(row.task?.publishedAt || row.content?.publishedAt)],
   ];
 });
@@ -98,7 +102,7 @@ const products = computed(() =>
 
 <template>
   <Dialog :open="!!row" @update:open="!$event && emit('close')">
-    <DialogContent class="flex h-[min(86vh,760px)] max-h-[90vh] max-w-5xl flex-col gap-0 overflow-hidden bg-white p-0">
+    <DialogContent :class="playerOnly ? 'max-w-3xl [&>button]:bg-white [&>button]:p-1 [&>button]:text-slate-700' : 'max-w-5xl'" class="flex h-[min(86vh,760px)] max-h-[90vh] flex-col gap-0 overflow-hidden bg-white p-0">
       <template v-if="row && film?.resultKind === 'script-breakdown'">
         <div class="flex min-h-0 flex-1 flex-col p-6">
           <DialogTitle>{{ row.title }}</DialogTitle>
@@ -113,14 +117,17 @@ const products = computed(() =>
           <p v-else class="my-6 rounded-xl bg-sky-50 p-6 text-sm text-slate-600">{{ row.generation === '生成中' ? '正在拆解视频，请稍候。刷新后任务仍会继续。' : '拆解失败，请关闭后通过列表中的“重试拆解”重试。' }}</p>
         </div>
       </template><template v-else-if="row">
-        <div class="grid min-h-0 flex-1 grid-rows-[minmax(190px,0.42fr)_minmax(0,0.58fr)] md:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] md:grid-rows-1">
+        <DialogTitle v-if="playerOnly" class="sr-only">{{ row.title }}</DialogTitle>
+        <DialogDescription v-if="playerOnly" class="sr-only">已发布内容媒体预览</DialogDescription>
+        <div :class="playerOnly ? 'flex flex-col' : 'grid grid-rows-[minmax(190px,0.42fr)_minmax(0,0.58fr)] md:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] md:grid-rows-1'" class="min-h-0 flex-1">
           <div
             role="region"
             aria-label="媒体预览"
             class="flex min-h-0 items-center justify-center overflow-hidden bg-slate-950 p-4 md:p-5"
+            :class="playerOnly ? 'flex-1' : ''"
           >
             <video
-              v-if="film?.type === '视频' && urls[0]"
+              v-if="(film?.type || row.content?.type) === '视频' && urls[0]"
               :src="urls[0]"
               controls
               class="max-h-full max-w-full rounded-xl"
@@ -140,7 +147,7 @@ const products = computed(() =>
                   row.job
                     ? row.generation
                     : !film
-                      ? 'TK 历史内容'
+                      ? '平台历史内容'
                       : film.source === '本地上传'
                         ? '本地媒体不可用'
                         : film.type === '图文' ? '图文图片不可用' : '生成效果演示'
@@ -152,7 +159,7 @@ const products = computed(() =>
             </div>
           </div>
 
-          <section role="region" aria-label="创作详情" class="flex min-h-0 flex-col bg-white">
+          <section v-if="!playerOnly" role="region" aria-label="创作详情" class="flex min-h-0 flex-col bg-white">
             <div class="min-h-0 flex-1 space-y-4 overflow-y-auto p-5 md:p-6">
               <header class="pr-8">
                 <DialogTitle class="break-words text-base font-semibold text-slate-800">
@@ -166,6 +173,7 @@ const products = computed(() =>
                 </div>
               </header>
 
+              <PlatformViewButtons :row="row" />
               <section class="rounded-lg bg-sky-50/40 p-3.5" aria-label="生成信息">
                 <h3 class="mb-2 text-xs font-semibold text-slate-700">生成信息</h3>
                 <dl class="grid gap-x-5 gap-y-2 text-xs sm:grid-cols-2">
@@ -186,7 +194,7 @@ const products = computed(() =>
                 </dl>
                 <div v-if="row.task && (row.task.title || row.task.tags)" class="mt-2 flex items-baseline gap-2 text-xs leading-5">
                   <p class="shrink-0 text-slate-400">发布文案与标签</p>
-                  <p class="min-w-0 whitespace-pre-wrap break-words text-slate-700">{{ [row.task.title, row.task.tags].filter(Boolean).join(' ') }}</p>
+                  <p class="min-w-0 whitespace-pre-wrap break-words text-slate-700">{{ publishCaption(row.task) }}</p>
                 </div>
                 <p v-if="row.task?.error" class="mt-2 text-xs leading-5 text-rose-600">{{ row.task.error }}</p>
                 <p v-if="row.task?.bgm" class="mt-2 text-xs text-slate-500">背景音乐：{{ row.task.bgm.name }}</p>
@@ -216,20 +224,21 @@ const products = computed(() =>
                 <div v-for="task in history" :key="task.id" class="mb-2 rounded-lg bg-slate-50/50 p-3 text-[11px]">
                   <div class="flex flex-wrap items-center gap-2">
                     <VideoStatus :value="task.status === '已排期' ? '定时发布' : task.status" />
-                    <span>{{ studio.accounts.find((account) => account.id === task.accountId)?.handle || '已移除帐号' }}</span>
+                    <span>{{ platformName(accountPlatform(studio.accounts.find(a=>a.id===task.accountId))) }}</span><span>{{ studio.accounts.find((account) => account.id === task.accountId)?.handle || '已移除帐号' }}</span>
                     <span class="text-slate-400">提交：{{ dateTime(task.submittedAt) }}</span>
                   </div>
-                  <p v-if="task.scheduledAt" class="mt-2 text-sky-700">计划发布时间：{{ dateTime(task.scheduledAt) }} · 北京时间 UTC+8</p>
+                  <p v-if="task.scheduledAt" class="mt-2 text-sky-700">计划发布时间：{{ formatSchedule(task.scheduledAt,task.timeZone) }}</p>
                   <p class="mt-1 text-slate-500">实际发布时间：{{ dateTime(task.publishedAt || studio.content.find((content) => content.id === task.platformId)?.publishedAt) }}</p>
                   <p v-if="task.error" class="mt-1 text-rose-600">{{ task.error }}</p>
                 </div>
               </section>
             </div>
 
-            <footer class="flex shrink-0 flex-wrap gap-2 border-t border-slate-200 bg-white px-5 py-3 md:px-6">
+            <footer v-if="$slots.actions" class="flex shrink-0 flex-wrap gap-2 border-t border-slate-200 bg-white px-5 py-3 md:px-6">
               <slot name="actions" />
             </footer>
           </section>
+          <div v-if="playerOnly && (film?.type || row.content?.type) === '视频'" class="shrink-0 bg-white p-4"><PlatformViewButtons :row="row" /></div>
         </div>
       </template>
     </DialogContent>

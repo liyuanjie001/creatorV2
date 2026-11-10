@@ -28,7 +28,7 @@ import { uid } from '@/services/storage';
 import { dateTime } from '@/services/videoManagement';
 import { toast } from 'vue-sonner';
 import AccountAuthorization from '@/components/studio/AccountAuthorization.vue';
-import { loginStatus } from '@/services/accounts';
+import { loginStatus, platformName, accountPlatform } from '@/services/accounts';
 import type { TKAccount } from '@/types/studio';
 const route = useRoute(),
   router = useRouter();
@@ -44,12 +44,13 @@ const group = computed(() =>
   studio.value.groups.some((g) => g.id === parameter('group')) ? parameter('group') : '',
 );
 
-const status = computed(() => parameter('status') ? loginStatus(parameter('status')) : '');
+const status = computed(() => (parameter('status') ? loginStatus(parameter('status')) : ''));
 const view = computed(() => (parameter('view') === 'grid' ? 'grid' : 'list'));
 const liveAccounts = computed(() => studio.value.accounts.filter((a) => !a.deleted));
 const accounts = computed(() =>
   liveAccounts.value.filter(
     (a) =>
+      (!parameter('platform') || accountPlatform(a) === parameter('platform')) &&
       (!group.value || a.groupId === group.value) &&
       (!status.value || loginStatus(a.status) === status.value) &&
       `${a.name} ${a.handle} ${a.note}`.toLowerCase().includes(query.value.toLowerCase()),
@@ -78,7 +79,10 @@ const affected = computed(
     ).length,
 );
 const deletingAccount = computed(() => studio.value.accounts.find((a) => a.id === deleteId.value));
-function openAuth(account: TKAccount | null = null) { authAccount.value = account; authOpen.value = true; }
+function openAuth(account: TKAccount | null = null) {
+  authAccount.value = account;
+  authOpen.value = true;
+}
 function groupSave() {
   const name = groupName.value.trim();
   if (!name) {
@@ -173,9 +177,23 @@ function toggleAll() {
     <header class="flex items-start justify-between gap-4">
       <div>
         <h1 class="text-xl font-semibold text-slate-900">帐号管理</h1>
-        <p class="mt-2 text-[13px] text-slate-400">连接 TikTok 帐号，让内容创作与发布顺畅衔接</p>
+        <p class="mt-2 text-[13px] text-slate-400">
+          连接 TikTok、Facebook、Instagram 帐号，让内容创作与发布顺畅衔接
+        </p>
       </div>
-      <div class="flex gap-2">
+      <div class="flex shrink-0 flex-wrap items-center justify-end gap-2">
+        <button class="studio-primary" @click="openAuth()">
+          <Plus class="h-4 w-4" />
+          添加帐号
+        </button>
+        <button
+          type="button"
+          class="studio-tab"
+          :class="tab === 'groups' ? 'studio-active' : 'bg-sky-50 text-sky-600'"
+          @click="setParameter('tab', tab === 'groups' ? 'accounts' : 'groups')"
+        >
+          {{ tab === 'groups' ? '返回帐号列表' : '帐号分组' }}
+        </button>
         <DropdownMenu>
           <DropdownMenuTrigger as-child>
             <button class="studio-btn">
@@ -189,24 +207,30 @@ function toggleAll() {
         </DropdownMenu>
       </div>
     </header>
-    <nav class="flex gap-2 border-b border-slate-100 pb-3" aria-label="帐号分类">
-      <button
-        class="studio-tab"
-        :class="tab === 'accounts' && 'studio-active'"
-        @click="setParameter('tab', 'accounts')"
-      >
-        全部帐号
-      </button>
-      <button
-        class="studio-tab"
-        :class="tab === 'groups' && 'studio-active'"
-        @click="setParameter('tab', 'groups')"
-      >
-        帐号分组
-      </button>
-    </nav>
     <template v-if="tab === 'accounts'">
       <div class="flex flex-wrap items-center gap-3">
+        <nav class="flex flex-wrap gap-2" aria-label="帐号平台分类">
+          <button
+            v-for="item in [
+              { value: '', label: '全部平台' },
+              { value: 'tiktok', label: 'TikTok' },
+              { value: 'instagram', label: 'Instagram' },
+              { value: 'facebook', label: 'Facebook' },
+            ]"
+            :key="item.value || 'all'"
+            type="button"
+            class="rounded-lg border px-3 py-2 text-sm font-medium transition-colors"
+            :class="
+              parameter('platform') === item.value
+                ? 'border-sky-500 bg-sky-500 text-white'
+                : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
+            "
+            :aria-pressed="parameter('platform') === item.value"
+            @click="setParameter('platform', item.value)"
+          >
+            {{ item.label }}
+          </button>
+        </nav>
         <div class="relative w-64">
           <Search class="pointer-events-none absolute left-3 top-3 h-4 w-4 text-slate-400" />
           <input
@@ -216,12 +240,8 @@ function toggleAll() {
             placeholder="搜索帐号、用户名、备注"
           />
         </div>
-        <button class="studio-primary" @click="openAuth()">
-          <Plus class="h-4 w-4" />
-          添加 TK 帐号
-        </button>
         <button
-          v-if="group || status || query"
+          v-if="group || status || query || parameter('platform')"
           class="text-xs text-sky-600"
           @click="router.replace({ query: { tab: 'accounts' } })"
         >
@@ -254,6 +274,7 @@ function toggleAll() {
                 />
               </th>
               <th>帐号</th>
+              <th>平台</th>
               <th>
                 <div class="flex items-center gap-1">
                   帐号分组
@@ -332,10 +353,23 @@ function toggleAll() {
                     {{ a.name.slice(0, 1).toUpperCase() }}
                   </span>
                   <div>
-                    <p class="font-medium text-slate-800">{{ a.name }}</p>
-                    <p class="mt-1 text-[11px] text-slate-400">{{ a.handle }} · TikTok</p>
+                    <button
+                      type="button"
+                      class="text-left font-medium text-slate-800 hover:text-sky-600 hover:underline"
+                      @click="router.push({ path: '/accounts/' + a.id, query: { returnTo: route.fullPath } })"
+                    >
+                      {{ a.name }}
+                    </button>
+                    <p class="mt-1 text-[11px] text-slate-400">
+                      {{ a.handle }} · {{ platformName(accountPlatform(a)) }}
+                    </p>
                   </div>
                 </div>
+              </td>
+              <td>
+                <span class="rounded-md bg-sky-50 px-2 py-1 text-xs font-medium text-sky-700">
+                  {{ platformName(accountPlatform(a)) }}
+                </span>
               </td>
               <td>
                 <button
@@ -357,7 +391,14 @@ function toggleAll() {
                 >
                   {{ loginStatus(a.status) }}
                 </span>
-                <button v-if="a.status !== '已授权'" type="button" class="ml-2 whitespace-nowrap text-xs font-medium text-sky-600 hover:text-sky-700" @click="openAuth(a)">立即登录授权</button>
+                <button
+                  v-if="a.status !== '已授权'"
+                  type="button"
+                  class="ml-2 whitespace-nowrap text-xs font-medium text-sky-600 hover:text-sky-700"
+                  @click="openAuth(a)"
+                >
+                  立即登录授权
+                </button>
               </td>
               <td>
                 <button
@@ -386,7 +427,7 @@ function toggleAll() {
         </table>
         <div v-if="!accounts.length" class="p-16 text-center text-sm text-slate-400">
           <Users class="mx-auto mb-3 h-9 w-9 text-slate-300" />
-          {{ liveAccounts.length ? '暂无符合筛选条件的帐号' : '暂无帐号，添加你的第一个 TikTok 帐号' }}
+          {{ liveAccounts.length ? '暂无符合筛选条件的帐号' : '暂无帐号，添加你的第一个平台帐号' }}
         </div>
       </div>
     </template>
@@ -523,7 +564,7 @@ function toggleAll() {
         </div>
       </div>
     </template>
-    <p class="text-[11px] text-slate-400">官方授权流程演示 · 本页面不会调用 TikTok 或保存真实令牌</p>
+    <p class="text-[11px] text-slate-400">官方授权流程演示 · 本页面不会调用任何平台 API 或保存真实令牌</p>
   </div>
   <AccountAuthorization :open="authOpen" :account="authAccount" @update:open="authOpen = $event" />
   <Dialog :open="!!editor" @update:open="!$event && (editor = null)">

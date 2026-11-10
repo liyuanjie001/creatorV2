@@ -93,7 +93,7 @@ test('项目导航和创作模式可切换并恢复到地址', async ({ page }) 
   for (const [label, section] of [
     ['自由创作', 'gen'],
     ['产品卡', 'product'],
-    ['任务列表', 'publish'],
+    ['我的作品', 'publish'],
   ]) {
     await navigation.getByRole('button', { name: new RegExp(label) }).click();
     await expect(page).toHaveURL(new RegExp(`section=${section}`));
@@ -115,6 +115,7 @@ test('项目导航和创作模式可切换并恢复到地址', async ({ page }) 
   await expect(page.getByText('历史会话 · 当前项目')).toBeHidden();
   await page.getByRole('textbox', { name: '专家对话' }).fill('推广 GlowUp 精华，面向通勤女性，突出快速吸收');
   await page.getByRole('button', { name: '发送消息' }).click();
+  await page.getByRole('button', { name: '展开历史会话' }).click();
   await expect(page.getByText('历史会话 · 当前项目')).toBeVisible();
   await page.reload();
   await expect(page.getByRole('textbox', { name: '专家对话' })).toBeVisible();
@@ -254,12 +255,12 @@ test('链接与推荐卡片复刻选择项目后直接进入 AI 输入框', asyn
 
 test('TK 帐号可走通模拟授权并保留 Roxy 入口', async ({ page }) => {
   await page.goto('/#/accounts');
-  await page.getByRole('button', { name: '添加 TK 帐号' }).click();
+  await page.getByRole('button', { name: '添加帐号' }).click();
   await page.getByRole('button', { name: '前往 TikTok 授权（演示）' }).click();
   await page.getByPlaceholder('@your.brand').fill('playwright.brand');
   await page.getByRole('button', { name: '完成授权' }).click();
+  await page.getByRole('button', { name: '完成', exact: true }).click();
   await expect(page.getByText('@playwright.brand')).toBeVisible();
-  await page.getByRole('button', { name: '返回帐号列表' }).click();
   await page.getByRole('button', { name: '更多' }).click();
   await page.getByRole('menuitem', { name: 'Roxy 窗口管理 ↗' }).click();
   await expect(page).toHaveURL(/#\/roxy$/);
@@ -272,7 +273,7 @@ test('发布单条成片并在项目分析中区分尚未采集的数据', async
   await row.getByRole('button',{name:'去发布',exact:true}).click();
   await page.getByRole('button', { name: '选择发布帐号', exact: true }).click(); await page.getByRole('button', { name: '选择 @glowup.official', exact: true }).click();
   await page.getByRole('button',{name:'立即发布',exact:true}).click();
-  await expect(page.getByRole('table').locator('tbody tr').filter({hasText:'晨间护肤故事（演示）'})).toContainText('发布成功',{timeout:12000});
+  await expect(row).toContainText('发布成功',{timeout:12000});
   await page.goto('/#/projects/P1?section=analytics');
   await page.getByRole('button',{name:'内容明细',exact:true}).click();
   await expect(page.getByRole('cell',{name:'未采集',exact:true}).first()).toBeVisible();
@@ -316,7 +317,7 @@ test('爆款视频品类国家与关键词组合筛选', async ({ page }) => {
   await expect(cards).toHaveCount(9);
 });
 
-test('任务列表统一展示创作记录', async ({ page }) => {
+test('我的作品统一展示创作记录', async ({ page }) => {
   await page.goto('/#/projects/P1?section=gen&mode=normal');
   await expect(page.getByRole('heading', { name: /创作记录/ })).toHaveCount(0);
   const expand = page.getByRole('button', { name: '放大输入框' });
@@ -325,8 +326,8 @@ test('任务列表统一展示创作记录', async ({ page }) => {
   const inputBox = (await input.boundingBox())!;
   expect(buttonBox.y).toBeGreaterThanOrEqual(inputBox.y);
   expect(buttonBox.x + buttonBox.width).toBeLessThanOrEqual(inputBox.x + inputBox.width);
-  await page.getByRole('button', { name: '任务列表', exact: true }).click();
-  await expect(page.getByRole('heading', { name: '任务列表', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '我的作品', exact: true }).click();
+  await expect(page.getByRole('heading', { name: '我的作品', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: '成片列表', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: '列表视图', exact: true }).click();
   await page.reload();
@@ -336,7 +337,7 @@ test('任务列表统一展示创作记录', async ({ page }) => {
   );
 });
 
-test('生成任务沿轨迹加入任务列表并可查看记录', async ({ page }) => {
+test('生成任务沿轨迹加入我的作品并可查看记录', async ({ page }) => {
   await page.goto('/#/projects/P1?section=gen&mode=normal');
   await page.getByRole('textbox', { name: '创作提示词' }).fill('动画回归：清晨护肤视频');
   await page.getByRole('button', { name: /生成.*消耗 20 积分/ }).click();
@@ -345,7 +346,7 @@ test('生成任务沿轨迹加入任务列表并可查看记录', async ({ page 
   await expect(page.locator('[data-task-transfer]')).toHaveCount(0);
   await page.getByRole('button', { name: '查看', exact: true }).click();
   await expect(page).toHaveURL(/section=publish&tab=creations/);
-  await expect(page.getByRole('heading', { name: '任务列表', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '我的作品', exact: true })).toBeVisible();
 });
 
 test('创作提示词自动增高到220像素后滚动', async ({ page }) => {

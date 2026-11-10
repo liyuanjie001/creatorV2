@@ -420,9 +420,9 @@ onMounted(() => {
     selectedProducts.value = productOptions.value.filter(p => editingFilm.productIds.includes(p.id));
     if (editingFilm.type === '视频') {
       const sourceId = `film-reference-${creationRoute.query.editFilm}`;
-      const sourceReference = { id: sourceId, title: editingFilm.title, author: '任务列表', url: '', source: '当前视频', duration: editingFilm.duration };
+      const sourceReference = { id: sourceId, title: editingFilm.title, author: '我的作品', url: '', source: '当前视频', duration: editingFilm.duration };
       if (!studio.value.references.some(reference => reference.id === sourceId)) studio.value.references.unshift(sourceReference);
-      referenceVideo.value = { id: sourceId, title: editingFilm.title, author: '任务列表' };
+      referenceVideo.value = { id: sourceId, title: editingFilm.title, author: '我的作品' };
       editingVideoMedia.value = editingFilm.mediaIds.map(mediaId => ({ id: mediaId, name: editingFilm.title, type: '视频', mediaId }));
     } else {
       referenceVideo.value = editingFilm.reference ? { id: editingFilm.reference.id, title: editingFilm.reference.title, author: editingFilm.reference.author } : null;

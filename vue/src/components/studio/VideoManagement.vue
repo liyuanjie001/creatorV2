@@ -17,7 +17,8 @@ import {
   ensureDemoProjectContent,
 } from '@/services/studio';
 import {
-  videoRows,
+  categorizedVideoRows,
+  rowPlatforms,
   videoActions,
   type VideoAction,
   dateTime,
@@ -34,14 +35,17 @@ import {
 } from '@/services/videoManagement';
 import { getMedia } from '@/services/media';
 import { currentUser } from '@/services/identity';
-import { downloadFile } from '@/services/storage';
+import type { StudioState } from '@/types/studio';
+import { downloadFile, writeJSON } from '@/services/storage';
 import { toast } from 'vue-sonner';
 import VideoInfo from './VideoInfo.vue';
 import VideoStatus from './VideoStatus.vue';
 import VideoDetails from './VideoDetails.vue';
 import VideoActionMenu from './VideoActionMenu.vue';
+import SchedulePicker from './SchedulePicker.vue';
+import { platforms, platformName } from '@/services/accounts';
 import FilterHeader from './FilterHeader.vue';
-const props = defineProps<{ projectId: string; published: boolean }>();
+const props = defineProps<{ projectId: string; published: boolean; category?: 'all'|'scheduled'|'published' }>();
 const emit = defineEmits<{ publish: [ids: string[], retryTaskId?: string] }>();
 const route = useRoute();
 const router = useRouter();
@@ -64,8 +68,10 @@ const filterGroups = computed(() => {
     { value: '10000-99999', label: '10K–100K', min: 10000, max: 99999 },
     { value: '100000-', label: '>100K', min: 100000, max: Infinity },
   ];
+  const platformFilter = {key:'platform',label:'平台',options:platforms.map(p=>({value:p.value,label:p.label}))};
   return props.published
     ? [
+        platformFilter,
         { key: 'type', label: '类型', options: [{ value: '视频', label: '视频' }, { value: '图集', label: '图集' }] },
         { key: 'account', label: '帐号', options: studio.value.accounts.filter(a => studio.value.projects.find(p => p.id === props.projectId)?.accountIds.includes(a.id)).map(a => ({ value: a.id, label: a.handle })) },
         { key: 'publication', label: '发布状态', options: publication },
@@ -112,9 +118,11 @@ const cancelling = ref(false);
 const busy = ref(false);
 const scheduleId = ref('');
 const schedule = ref('');
+const scheduleZone = ref('Asia/Shanghai');
+const scheduleValid = ref(true);
 const archived = computed(() => !!studio.value.projects.find((p) => p.id === props.projectId)?.archived);
 watch(() => props.projectId, ensureDemoProjectContent, { immediate: true });
-const rows = computed(() => videoRows(studio.value, props.projectId, props.published));
+const rows = computed(() => categorizedVideoRows(studio.value, props.projectId, props.category ?? (props.published ? 'published':'all')));
 watch(rows, (value) => {
   if (details.value) {
     const updated = value.find((r) => r.id === details.value?.id);
@@ -149,6 +157,7 @@ const filtered = computed(() =>
           `${row.title} ${row.film?.brief || ''} ${studio.value.accounts.find((a) => a.id === (row.task?.accountId || row.content?.accountId))?.handle || ''}`
             .toLowerCase()
             .includes(q)) &&
+        (!props.published || !paramValues('platform').length || rowPlatforms(studio.value,row,!props.published).some(p=>paramValues('platform').includes(p))) &&
         (!sources.length || sources.includes(row.source)) &&
         (!types.length || types.includes(mediaTypeName(row))) &&
         (!generations.length || generations.includes(row.generation)) &&
@@ -207,7 +216,7 @@ watch(
 );
 onBeforeUnmount(() => { mediaRevision++; Object.values(imageCovers.value).forEach(url => URL.revokeObjectURL(url)); });
 watch(
-  () => [props.projectId, props.published],
+  () => [props.projectId, props.published, props.category],
   () => {
     selected.value = [];
     details.value = null;
@@ -222,7 +231,7 @@ watch(
 watch(
   () =>
     JSON.stringify(
-      ['q', 'type', 'source', 'generation', 'publication', 'account', 'privacy', 'sort', 'page', 'size'].map(
+      ['platform', 'q', 'type', 'source', 'generation', 'publication', 'account', 'privacy', 'sort', 'page', 'size'].map(
         (key) => route.query[key],
       ),
     ),
@@ -322,25 +331,25 @@ async function download(rows: VideoRow[]) {
 }
 function remove() {
   if (deleteBlocked.value) return;
+  const next: StudioState = JSON.parse(JSON.stringify(studio.value));
   for (const row of chosen.value) {
     if (row.film) {
-      for (const task of studio.value.tasks.filter((t) => t.filmId === row.film!.id)) {
-        if (['待发布', '已排期'].includes(task.status)) cancelPublishTask(task.id);
-        if (task.status === '待配置') {
-          task.status = '已取消';
-          task.updatedAt = new Date().toISOString();
+      for (const task of next.tasks.filter(t=>t.filmId===row.film!.id)) {
+        if (['待配置','待发布','已排期'].includes(task.status)) {
+          task.status='已取消'; task.demoPreview=false; task.updatedAt=new Date().toISOString();
         }
       }
-      for (const content of studio.value.content.filter((c) => c.filmId === row.film!.id))
-        content.projectIds = content.projectIds.filter((id) => id !== props.projectId);
-      studio.value.films = studio.value.films.filter((f) => f.id !== row.film!.id);
-      studio.value.jobs = studio.value.jobs.filter((j) => j.id !== row.film!.id);
-    } else if (row.content)
-      row.content.projectIds = row.content.projectIds.filter((id) => id !== props.projectId);
+      for (const content of next.content.filter(c=>c.filmId===row.film!.id)) content.projectIds=content.projectIds.filter(id=>id!==props.projectId);
+      next.films=next.films.filter(f=>f.id!==row.film!.id);
+      next.jobs=next.jobs.filter(j=>j.id!==row.film!.id);
+    } else if (row.content) {
+      const content=next.content.find(c=>c.id===row.content!.id);
+      if (content) content.projectIds=content.projectIds.filter(id=>id!==props.projectId);
+    }
   }
-  selected.value = [];
-  deleting.value = false;
-  details.value = null;
+  if (!writeJSON('chuhai-studio-v1:'+(currentUser.value?.id ?? 'guest'),next)) { toast.error('删除保存失败，请重试'); return; }
+  studio.value=next;
+  selected.value=[]; deleting.value=false; details.value=null;
   toast.success('已移除本地记录，平台内容与发布历史保留');
 }
 function cancelRows() {
@@ -356,13 +365,13 @@ function cancelRows() {
 function openSchedule(row: VideoRow) {
   if (!row.task) return;
   scheduleId.value = row.task.id;
-  schedule.value = new Date(new Date(row.task.scheduledAt).getTime() + 8 * 3600000)
-    .toISOString()
-    .slice(0, 16);
+  schedule.value = row.task.scheduledAt;
+  scheduleZone.value = row.task.timeZone || 'Asia/Shanghai';
+  scheduleValid.value = true;
 }
 function saveSchedule() {
   try {
-    reschedulePublishTask(scheduleId.value, new Date(schedule.value + '+08:00').toISOString());
+    reschedulePublishTask(scheduleId.value, schedule.value, scheduleZone.value);
     scheduleId.value = '';
     toast.success('排期已更新');
   } catch (e) {
@@ -395,14 +404,18 @@ function togglePage() {
 }
 </script>
 <template>
-  <section class="space-y-4" aria-label="任务列表内容">
+  <section class="space-y-4" aria-label="我的作品内容">
     <header class="flex flex-wrap items-start justify-between gap-3">
       <div>
-        <h1 class="text-xl font-semibold text-slate-800">{{ published ? '发布记录' : '任务列表' }}</h1>
+        <h1 class="text-xl font-semibold text-slate-800">我的作品</h1>
         <p class="mt-2 text-xs text-slate-400">{{ projectName }} · {{ published ? '查看已提交的发布任务及平台状态' : '管理视频与图文作品，配置帐号、文案和发布时间' }}</p>
       </div>
     </header>
+    <nav class="flex gap-2 border-b border-slate-100 pb-3" aria-label="作品分类"><button v-for="item in [{key:'creations',label:'全部'},{key:'scheduled',label:'定时发布'},{key:'records',label:'已发布'}]" :key="item.key" type="button" class="studio-tab" :class="(category ?? (published?'published':'all')) === ({creations:'all',scheduled:'scheduled',records:'published'} as Record<string,string>)[item.key] && 'studio-active'" @click="router.replace({query:{section:'publish',tab:item.key,view:route.query.view}})">{{ item.label }}</button></nav>
     <div class="flex flex-wrap items-center gap-2 rounded-xl p-3">
+      <nav v-if="published" class="flex flex-wrap gap-1" aria-label="发布平台分类">
+        <button v-for="item in [{value:'',label:'全部平台'},{value:'tiktok',label:'TikTok'},{value:'instagram',label:'Instagram'},{value:'facebook',label:'Facebook'}]" :key="item.value || 'all'" type="button" class="studio-tab" :class="param('platform') === item.value && 'studio-active'" :aria-pressed="param('platform') === item.value" @click="setParam('platform',item.value)">{{ item.label }}</button>
+      </nav>
       <div class="flex flex-wrap items-center gap-2" data-testid="video-search-upload">
       <label class="relative w-full sm:w-56">
         <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
@@ -523,12 +536,13 @@ function togglePage() {
                 <FilterHeader v-if="filterByKey('comments')" :filter="filterByKey('comments')!" :active="paramValues('comments')" :open="openFilter === 'comments'" @toggle="toggleFilter('comments')" @toggle-value="toggleFilterValue" @clear="clearFilter('comments')" @apply="applyFilter('comments')" />
               </th>
             </template>
+            <th v-if="published">平台</th>
             <th>操作</th>
           </tr>
         </thead>
         <tbody>
           <tr v-if="!pageRows.length">
-            <td :colspan="published ? 9 : 7" class="py-16 text-center text-sm text-slate-400">
+            <td :colspan="published ? 10 : 7" class="py-16 text-center text-sm text-slate-400">
               {{ rows.length ? '暂无符合筛选条件的视频' : published ? '暂无发布任务或关联内容' : '还没有视频，可上传或前往自由创作' }}
             </td>
           </tr>
@@ -596,6 +610,7 @@ function togglePage() {
                 {{ metrics(row)?.[key]?.toLocaleString() ?? '—' }}
               </td>
             </template>
+            <td v-if="published" class="whitespace-nowrap"><span class="rounded-md bg-sky-50 px-2 py-1 text-xs text-sky-700">{{ rowPlatforms(studio,row).map(p=>platformName(p)).join(' · ') || '—' }}</span></td>
             <td>
               <div class="flex items-center gap-2 whitespace-nowrap">
                 <button v-for="action in actions(row).filter(a => a.primary)" :key="action.id" type="button" class="studio-btn !h-8 !w-8 !rounded-lg !bg-sky-50 !p-0 !text-sky-600" :aria-label="action.label" :disabled="!!action.reason || busy" :title="action.reason || action.label" @click="runAction(row, action)"><component :is="actionIcons[action.id]" class="h-4 w-4" aria-hidden="true" /></button>
@@ -667,10 +682,10 @@ function togglePage() {
           <button v-else class="line-clamp-2 text-left text-sm font-medium" @click="details = row">
             {{ row.title || '无发布文案' }}
           </button>
-          <p class="text-[10px] opacity-75">{{ dateTime(row.date) }}</p>
+          <p class="text-[10px] opacity-75">{{ dateTime(row.date) }}</p><p v-if="rowPlatforms(studio,row,!published).length" class="text-[10px] opacity-90">{{ rowPlatforms(studio,row,!published).map(p=>platformName(p)).join(' · ') }}</p>
           <p v-if="row.task?.status === '已排期'" class="flex items-center gap-1 text-[10px] text-sky-300">
             <Clock3 class="h-3 w-3" />
-            {{ scheduledDateTime(row.task.scheduledAt) }}
+            {{ scheduledDateTime(row.task.scheduledAt, row.task.timeZone) }}
           </p>
           <div class="flex flex-wrap items-center gap-2">
             <VideoStatus v-if="!published" :value="row.generation" />
@@ -773,9 +788,9 @@ function togglePage() {
     <Dialog :open="!!scheduleId" @update:open="!$event && (scheduleId = '')">
       <DialogContent class="max-w-md bg-white">
         <DialogTitle>调整定时发布</DialogTitle>
-        <DialogDescription>请选择未来的北京时间（UTC+8）。</DialogDescription>
-        <input v-model="schedule" type="datetime-local" class="studio-field" aria-label="调整排期时间" />
-        <button class="studio-primary" :disabled="archived" @click="saveSchedule">保存排期</button>
+        <DialogDescription>请选择城市时区和未来的当地日期时间。</DialogDescription>
+        <SchedulePicker v-if="scheduleId" v-model="schedule" v-model:time-zone="scheduleZone" :disabled="archived" @validity="scheduleValid=$event" />
+        <button class="studio-primary" :disabled="archived || !scheduleValid" @click="saveSchedule">保存排期</button>
       </DialogContent>
     </Dialog>
   </section>
