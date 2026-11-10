@@ -1,73 +1,38 @@
-# React + TypeScript + Vite
+# overseas-studio-new
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+出海动力前端演示项目，当前开发版本位于 `vue/`，使用 Vue 3、TypeScript 和 Vite。数据与业务操作均为前端演示，无需后端。
 
-Currently, two official plugins are available:
+## 本地运行
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+需要 Node.js 22.12 或更新版本。
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```sh
+cd vue
+npm ci
+cp .env.example .env
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+在 `vue/.env` 中设置 `password=你的访问密码`，然后执行：
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```sh
+npm run dev
 ```
+
+默认地址为 `http://127.0.0.1:5173`。`.env`、依赖目录和构建产物不提交到仓库。
+
+## 目录
+
+| 路径 | 用途 |
+| --- | --- |
+| `vue/` | 当前 Vue 演示工程、测试及设计说明 |
+| `源码/` | 原 React 工程，用于迁移对照 |
+| `网页版/` | 原版静态演示 |
+| `reference/` | 同事提供的数据分析参考设计 |
+
+## 项目说明
+
+- [Vue 工程运行与验证](vue/README.md)
+- [产品需求](vue/prd.md)
+- [数据分析改造原因与指标获取边界](vue/docs/analytics-design-rationale.md)
+- [验收记录](vue/docs/verification.md)
+
