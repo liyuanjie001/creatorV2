@@ -1,5 +1,5 @@
 import { formatSchedule } from './timeZones';
-import { publishCaption, publishedForAccount } from './accounts';
+import { publishCaption, publishedForAccount, accountAvailableInProject } from './accounts';
 import type { Film, GenerationJob, PlatformContent, PublishTask, StudioState } from '@/types/studio';
 export type VideoRow = {
   id: string;
@@ -202,7 +202,7 @@ export function publishReason(state: StudioState, row: VideoRow, archived: boole
   if (archived) return '项目已归档';
   if (!row.film || row.job) return '需要可用的本地成片';
   if (row.film.source === '本地上传' && row.film.type === '视频' && !row.film.mediaIds.length) return '本机没有可用媒体，请重新上传';
-  return state.accounts.filter(a => !a.deleted && a.status === '已授权' && state.projects.find(p => p.id === row.film!.projectId)?.accountIds.includes(a.id)).every(a => state.tasks.some(t => t.filmId === row.film!.id && t.accountId === a.id && activePublish.includes(t.status)))
+  return state.accounts.filter(a => a.status === '已授权' && accountAvailableInProject(a, state.projects.find(p => p.id === row.film!.projectId))).every(a => state.tasks.some(t => t.filmId === row.film!.id && t.accountId === a.id && activePublish.includes(t.status)))
     ? '项目帐号均有执行中的发布任务，请等待完成或关联其他帐号'
     : '';
 }

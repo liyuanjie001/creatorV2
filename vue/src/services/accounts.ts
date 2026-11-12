@@ -6,6 +6,7 @@ export const platforms: { value: SocialPlatform; label: string }[] = [
   { value: 'facebook', label: 'Facebook' },
   { value: 'instagram', label: 'Instagram' },
 ];
+export const accountAvailableInProject = (account: TKAccount, project?: StudioState['projects'][number]) => !!project && !account.deleted && (account.source === 'recharge' || project.accountIds.includes(account.id));
 export const accountPlatform = (account?: TKAccount): SocialPlatform => account?.platform ?? 'tiktok';
 export const platformName = (platform?: SocialPlatform) =>
   platforms.find((p) => p.value === (platform ?? 'tiktok'))!.label;

@@ -43,7 +43,7 @@ import VideoStatus from './VideoStatus.vue';
 import VideoDetails from './VideoDetails.vue';
 import VideoActionMenu from './VideoActionMenu.vue';
 import SchedulePicker from './SchedulePicker.vue';
-import { platforms, platformName } from '@/services/accounts';
+import { platforms, platformName, accountAvailableInProject } from '@/services/accounts';
 import FilterHeader from './FilterHeader.vue';
 const props = defineProps<{ projectId: string; published: boolean; category?: 'all'|'scheduled'|'published' }>();
 const emit = defineEmits<{ publish: [ids: string[], retryTaskId?: string] }>();
@@ -73,7 +73,7 @@ const filterGroups = computed(() => {
     ? [
         platformFilter,
         { key: 'type', label: '类型', options: [{ value: '视频', label: '视频' }, { value: '图集', label: '图集' }] },
-        { key: 'account', label: '帐号', options: studio.value.accounts.filter(a => studio.value.projects.find(p => p.id === props.projectId)?.accountIds.includes(a.id)).map(a => ({ value: a.id, label: a.handle })) },
+        { key: 'account', label: '帐号', options: studio.value.accounts.filter(a => accountAvailableInProject(a, studio.value.projects.find(p => p.id === props.projectId))).map(a => ({ value: a.id, label: a.handle })) },
         { key: 'publication', label: '发布状态', options: publication },
         { key: 'privacy', label: '可见范围', options: ['PUBLIC_TO_EVERYONE', 'MUTUAL_FOLLOW_FRIENDS', 'SELF_ONLY'].map(value => ({ value, label: privacyName(value) })) },
         ...(['views', 'likes', 'comments'] as const).map(key => ({ key, label: ({ views: '播放量', likes: '点赞', comments: '评论' } as const)[key], options: metricRanges.map(({ value, label }) => ({ value, label })) })),

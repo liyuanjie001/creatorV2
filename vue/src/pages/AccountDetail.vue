@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ArrowLeft, Search, UserRound, Video, Image } from 'lucide-vue-next';
+import { toast } from 'vue-sonner';
 import { studio } from '@/services/studio';
 import { loginStatus, accountPlatform, platformName } from '@/services/accounts';
 import { accountVideoRows, dateTime, metrics, type VideoRow } from '@/services/videoManagement';
@@ -12,6 +13,15 @@ import AccountAuthorization from '@/components/studio/AccountAuthorization.vue';
 const route = useRoute(),
   router = useRouter();
 const account = computed(() => studio.value.accounts.find((a) => a.id === route.params.id && !a.deleted));
+const passwordVisible = ref(false);
+async function copyLogin(value: string) {
+  try {
+    await navigator.clipboard.writeText(value);
+    toast.success('已复制');
+  } catch {
+    toast.error('复制失败，请手动选择内容复制');
+  }
+}
 const search = ref(''),
   type = ref(''),
   details = ref<VideoRow | null>(null),
@@ -46,6 +56,7 @@ const rows = computed(() =>
 watch(
   () => account.value?.id,
   () => {
+    passwordVisible.value = false;
     details.value = null;
     auth.value = false;
     search.value = '';
@@ -64,7 +75,10 @@ function back() {
       返回帐号管理
     </button>
     <template v-if="account">
-      <section class="grid gap-5 rounded-2xl border border-slate-200 bg-white p-4 lg:grid-cols-[minmax(270px,0.85fr)_minmax(0,1.65fr)]" aria-label="帐号信息">
+      <section
+        class="grid gap-5 rounded-2xl border border-slate-200 bg-white p-4 lg:grid-cols-[minmax(270px,0.85fr)_minmax(0,1.65fr)]"
+        aria-label="帐号信息"
+      >
         <header class="flex flex-wrap items-center gap-3 self-start">
           <span
             class="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-sky-50 text-2xl font-semibold text-sky-600"
@@ -116,7 +130,9 @@ function back() {
             </div>
           </dl>
           <div class="mt-2 flex flex-wrap items-center gap-2">
-            <p class="text-xs text-slate-400">关联项目</p>
+            <p class="text-xs text-slate-400">
+              {{ account.source === 'recharge' ? '所有项目可用' : '关联项目' }}
+            </p>
             <div class="flex flex-wrap gap-2">
               <button
                 v-for="p in projects"
@@ -126,10 +142,93 @@ function back() {
               >
                 {{ p.name }}{{ p.archived ? '（已归档）' : '' }}
               </button>
-              <span v-if="!projects.length" class="text-xs text-slate-500">未关联项目</span>
+              <span v-if="!projects.length && account.source !== 'recharge'" class="text-xs text-slate-500">
+                未关联项目
+              </span>
             </div>
           </div>
         </div>
+      </section>
+      <section
+        v-if="account.loginInfo"
+        class="space-y-4 rounded-2xl border border-slate-200 bg-white p-5"
+        aria-label="帐号登录信息"
+      >
+        <div class="flex flex-wrap items-center gap-2">
+          <h2 class="text-sm font-semibold text-slate-800">登录信息</h2>
+          <span class="rounded bg-sky-50 px-2 py-1 text-xs text-sky-700">套餐领取 · 所有项目可用</span>
+          <span class="text-xs text-slate-400">模拟凭据和示例 IP，仅供演示</span>
+        </div>
+        <p v-if="account.source === 'recharge'" class="text-xs text-slate-500">
+          帐号所有权归用户，登录信息可在帐号管理中查看。
+        </p>
+        <p v-if="account.source === 'recharge'" class="text-sm font-semibold text-sky-700">
+          可直接通过本平台发布视频至
+          {{
+            account.platform === 'facebook'
+              ? 'Facebook'
+              : account.platform === 'instagram'
+                ? 'Instagram'
+                : 'TikTok'
+          }}，所有项目均可使用。
+        </p>
+        <dl class="grid gap-4 sm:grid-cols-2">
+          <div>
+            <dt class="text-xs text-slate-400">用户名</dt>
+            <dd class="mt-2 flex items-center gap-2">
+              <code class="min-w-0 break-all text-sm text-slate-700">{{ account.loginInfo.username }}</code>
+              <button
+                class="shrink-0 text-xs text-sky-600"
+                aria-label="复制用户名"
+                @click="copyLogin(account.loginInfo.username)"
+              >
+                复制
+              </button>
+            </dd>
+          </div>
+          <div>
+            <dt class="text-xs text-slate-400">密码</dt>
+            <dd class="mt-2 flex flex-wrap items-center gap-2">
+              <code class="break-all text-sm text-slate-700">
+                {{ passwordVisible ? account.loginInfo.password : '••••••••••••' }}
+              </code>
+              <button
+                class="text-xs text-sky-600"
+                :aria-label="passwordVisible ? '隐藏密码' : '查看密码'"
+                @click="passwordVisible = !passwordVisible"
+              >
+                {{ passwordVisible ? '隐藏' : '查看' }}
+              </button>
+              <button
+                class="text-xs text-sky-600"
+                aria-label="复制密码"
+                @click="copyLogin(account.loginInfo.password)"
+              >
+                复制
+              </button>
+            </dd>
+          </div>
+          <div>
+            <dt class="text-xs text-slate-400">IP 地址</dt>
+            <dd class="mt-2 flex items-center gap-2">
+              <code class="text-sm text-slate-700">{{ account.loginInfo.ip }}</code>
+              <button
+                class="text-xs text-sky-600"
+                aria-label="复制 IP"
+                @click="copyLogin(account.loginInfo.ip)"
+              >
+                复制
+              </button>
+            </dd>
+          </div>
+          <div>
+            <dt class="text-xs text-slate-400">IP 所属国家／地区</dt>
+            <dd class="mt-2 text-sm text-slate-700">{{ account.loginInfo.region }}</dd>
+          </div>
+        </dl>
+        <p class="rounded-lg bg-amber-50 p-3 text-xs leading-6 text-amber-800">
+          建议使用该帐号所属地区的 IP 登录，避免频繁跨地区切换，降低触发平台风控的风险。
+        </p>
       </section>
       <AccountViewsTrend :account="account" />
       <section class="space-y-4" aria-label="帐号已发布内容">

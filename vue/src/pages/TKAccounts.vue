@@ -27,6 +27,9 @@ import { studio, accountDeleteReason, deleteAccount, reorderGroup } from '@/serv
 import { uid } from '@/services/storage';
 import { dateTime } from '@/services/videoManagement';
 import { toast } from 'vue-sonner';
+import AccountClaimDialog from '@/components/studio/AccountClaimDialog.vue';
+import { socialAccountsRemaining } from '@/services/credits';
+const claimOpen = ref(false);
 import AccountAuthorization from '@/components/studio/AccountAuthorization.vue';
 import { loginStatus, platformName, accountPlatform } from '@/services/accounts';
 import type { TKAccount } from '@/types/studio';
@@ -207,6 +210,25 @@ function toggleAll() {
         </DropdownMenu>
       </div>
     </header>
+    <AccountClaimDialog v-model:open="claimOpen" />
+    <div
+      class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-sky-100 bg-sky-50/60 p-4"
+      aria-label="待领取帐号提示"
+    >
+      <div>
+        <p class="text-sm font-medium text-sky-900">待领取 TikTok 帐号：{{ socialAccountsRemaining }} 个</p>
+        <p class="mt-2 text-sm font-semibold text-sky-700">领取后可直接通过本平台发布视频至 TikTok</p>
+        <p class="mt-1 text-xs leading-5 text-slate-500">
+          绑定对应帐号后，也可通过本平台发布至 Facebook / Instagram。
+        </p>
+        <p class="mt-1 text-xs text-slate-500">
+          帐号所有权归用户；在帐号管理中打开详情可查看登录信息。领取后所有项目可直接发布。
+        </p>
+      </div>
+      <button class="studio-btn" @click="claimOpen = true">
+        {{ socialAccountsRemaining ? '领取帐号' : '获取帐号' }}
+      </button>
+    </div>
     <template v-if="tab === 'accounts'">
       <div class="flex flex-wrap items-center gap-3">
         <nav class="flex flex-wrap gap-2" aria-label="帐号平台分类">
@@ -362,6 +384,12 @@ function toggleAll() {
                     </button>
                     <p class="mt-1 text-[11px] text-slate-400">
                       {{ a.handle }} · {{ platformName(accountPlatform(a)) }}
+                      <span
+                        v-if="a.source === 'recharge'"
+                        class="ml-1 rounded bg-sky-50 px-1.5 py-0.5 text-[10px] text-sky-600"
+                      >
+                        套餐领取
+                      </span>
                     </p>
                   </div>
                 </div>

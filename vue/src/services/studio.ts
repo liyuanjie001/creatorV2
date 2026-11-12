@@ -1,4 +1,5 @@
-import { migratePublishing, addPlatformExamples, addAccountStatisticsExamples, completeDemoAccountMetrics, upgradeDemoAccountTrends, accountPlatform, publishCaption } from './accounts';
+import { migratePublishing, addPlatformExamples, addAccountStatisticsExamples, completeDemoAccountMetrics, upgradeDemoAccountTrends, accountPlatform, accountAvailableInProject, publishCaption } from './accounts';
+import { recoverPurchasedAccounts } from './credits';
 import { localTimeZone, scheduleCandidates, localDateTime } from './timeZones';
 import type { SocialPlatform } from '@/types/studio';
 import { ref, watch } from 'vue';
@@ -51,6 +52,7 @@ function load(owner: string) {
   const value = readJSON<StudioState>(`chuhai-studio-v1:${owner}`, () => seed(owner));
   const state = value?.version === 1 && Array.isArray(value.projects) && Array.isArray(value.tasks) ? value : seed(owner);
   migratePublishing(state);
+  if (recoverPurchasedAccounts(state, owner)) writeJSON(`chuhai-studio-v1:${owner}`, state);
   addPlatformExamples(state, owner);
   addAccountStatisticsExamples(state, owner);
   completeDemoAccountMetrics(state, owner);
@@ -140,7 +142,7 @@ export function authorize(handle: string, groupId: string, scenario: string, pla
   if (!/^@[a-z0-9_.]{2,24}$/.test(normalized)) throw new Error('用户名需为 2–24 位字母、数字、下划线或点');
   const existing = studio.value.accounts.find(a => a.handle === normalized && accountPlatform(a) === platform);
   const account = { platform, id: existing?.id ?? uid(), name: normalized.slice(1), handle: normalized, region: existing?.region ?? '未提供', groupId, note: existing?.note ?? '', status: (scenario === '权限不足' ? '权限不足' : scenario === '过期' ? '授权过期' : '已授权') as '已授权' | '授权过期' | '权限不足', authorizedAt: now(), deleted: false };
-  const nextAccounts = existing ? studio.value.accounts.map(a=>a.id===existing.id ? {...account,name:existing.name} : a) : [account,...studio.value.accounts];
+  const nextAccounts = existing ? studio.value.accounts.map(a=>a.id===existing.id ? {...a,...account,name:existing.name} : a) : [account,...studio.value.accounts];
   if (!writeJSON('chuhai-studio-v1:'+(currentUser.value?.id ?? 'guest'), {...studio.value,accounts:nextAccounts})) throw new Error('帐号保存失败，请重试');
   if (existing) Object.assign(existing, {...account,name:existing.name}); else studio.value.accounts.unshift(account);
   return account;
@@ -190,7 +192,7 @@ export function validatePublish(task: PublishTask) {
   const project = studio.value.projects.find(p => p.id === task.projectId);
   const film = studio.value.films.find(f => f.id === task.filmId);
   if (!project || project.archived) throw new Error('项目不存在或已归档');
-  if (!account || account.deleted || account.status !== '已授权' || !project.accountIds.includes(account.id)) throw new Error('请选择项目关联且授权有效的帐号');
+  if (!account || account.status !== '已授权' || !accountAvailableInProject(account, project)) throw new Error('请选择项目关联且授权有效的帐号');
   if (!film || film.projectId !== task.projectId) throw new Error('成片已不存在或不属于当前项目');
   if (film.resultKind === 'script-breakdown') throw new Error('脚本拆解不能发布');
   if (film.source === '本地上传' && film.type === '视频' && !film.mediaIds.length) throw new Error('本地媒体已丢失，请重新上传');

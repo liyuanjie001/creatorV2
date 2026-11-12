@@ -13,7 +13,7 @@ import FilmPreview from './FilmPreview.vue';
 import VideoManagement from './VideoManagement.vue';
 import InfoTip from './InfoTip.vue';
 import SchedulePicker from './SchedulePicker.vue';
-import { publishCaption, platformName, accountPlatform } from '@/services/accounts';
+import { publishCaption, platformName, accountPlatform, accountAvailableInProject } from '@/services/accounts';
 import AccountPicker from './AccountPicker.vue';
 import AccountAuthorization from './AccountAuthorization.vue';
 import type { TKAccount } from '@/types/studio';
@@ -53,7 +53,7 @@ const imagePickerSelection = ref<string[]>([]);
 const imagePickerSearch = ref('');
 
 const project = computed(() => studio.value.projects.find(p => p.id === props.projectId)!);
-const accounts = computed(() => studio.value.accounts.filter(a => !a.deleted && project.value.accountIds.includes(a.id)));
+const accounts = computed(() => studio.value.accounts.filter(a => accountAvailableInProject(a, project.value)));
 const authAccount = ref<TKAccount | null>(null);
 const authOpen = ref(false);
 function openAccountAuth(account: TKAccount) { authAccount.value = account; authOpen.value = true; }
