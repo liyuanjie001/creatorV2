@@ -2,6 +2,7 @@ import { computed, ref, watch } from 'vue';
 import { currentUser } from './identity';
 import { now, readJSON, uid, writeJSON } from './storage';
 import type { SocialPlatform, StudioState, TKAccount } from '@/types/studio';
+import { countryName, isCountryCode } from './countries';
 
 export type PaymentChannel = 'alipay' | 'wechat';
 export const rechargePacks = {
@@ -79,11 +80,14 @@ export type RechargeOrder = {
   completedAt?: string;
 };
 export type AccountAllocation = Record<SocialPlatform, number>;
+export type AccountClaimItem = { platform: SocialPlatform; countryCode: string; quantity: number };
+export type AccountClaimInput = AccountAllocation | AccountClaimItem[];
 export type AccountClaim = {
   id: string;
   userId: string;
   createdAt: string;
   allocation: AccountAllocation;
+  items?: AccountClaimItem[];
   accounts: TKAccount[];
 };
 type CreditAccount = { balance: number; total: number; orders: RechargeOrder[]; claims: AccountClaim[] };
@@ -159,21 +163,40 @@ export function completeRecharge(orderId: string, channel: PaymentChannel): Rech
 }
 
 // The claim ledger commits first; delivery can be recovered after an interrupted workspace write.
-export function reserveSocialAccounts(requestId: string, allocation: AccountAllocation): AccountClaim {
+export function normalizeClaimItems(input: AccountClaimInput): AccountClaimItem[] {
+  const platformKeys: SocialPlatform[] = ['tiktok', 'instagram', 'facebook'];
+  const rows = Array.isArray(input)
+    ? input
+    : platformKeys.map((platform) => ({ platform, countryCode: 'US', quantity: input?.[platform] }));
+  const merged = new Map<string, AccountClaimItem>();
+  let total = 0;
+  for (const item of rows) {
+    if (!item || !platformKeys.includes(item.platform)) throw new Error('请选择有效的社媒平台');
+    if (!isCountryCode(item.countryCode)) throw new Error('请选择有效的国家地区');
+    if (!Number.isSafeInteger(item.quantity) || item.quantity < 0)
+      throw new Error('请输入有效的非负整数帐号数量');
+    total += item.quantity;
+    if (!Number.isSafeInteger(total)) throw new Error('帐号数量超出有效范围');
+    if (item.quantity === 0) continue;
+    const key = `${item.platform}:${item.countryCode}`;
+    const existing = merged.get(key);
+    if (existing) existing.quantity += item.quantity;
+    else merged.set(key, { platform: item.platform, countryCode: item.countryCode, quantity: item.quantity });
+  }
+  if (total <= 0) throw new Error('请至少选择 1 个帐号');
+  return [...merged.values()];
+}
+
+export function reserveSocialAccounts(requestId: string, input: AccountClaimInput): AccountClaim {
   const id = userId(),
     value = read(id);
   const existing = value.claims.find((claim) => claim.id === requestId);
   if (existing) return existing;
-  const platformKeys: SocialPlatform[] = ['facebook', 'instagram', 'tiktok'];
-  if (
-    !requestId ||
-    platformKeys.some((platform) => !Number.isSafeInteger(allocation[platform]) || allocation[platform] < 0)
-  )
-    throw new Error('请输入有效的非负整数帐号数量');
-  if (allocation.facebook !== 0 || allocation.instagram !== 0)
-    throw new Error('充值套餐仅提供 TikTok (TK) 帐号');
-  const count = platformKeys.reduce((sum, platform) => sum + allocation[platform], 0);
-  if (!Number.isSafeInteger(count) || count <= 0) throw new Error('请至少选择 1 个帐号');
+  if (!requestId.trim()) throw new Error('领取请求标识不能为空');
+  const items = normalizeClaimItems(input);
+  const allocation: AccountAllocation = { tiktok: 0, instagram: 0, facebook: 0 };
+  for (const item of items) allocation[item.platform] += item.quantity;
+  const count = items.reduce((sum, item) => sum + item.quantity, 0);
   const used = value.claims.flatMap((claim) => claim.accounts);
   const slots = value.orders
     .filter((order) => order.status === 'completed')
@@ -187,8 +210,10 @@ export function reserveSocialAccounts(requestId: string, allocation: AccountAllo
     );
   if (count > slots.length) throw new Error('领取数量不能超过待领取名额');
   const accounts: TKAccount[] = [];
-  for (const platform of ['tiktok'] as const) {
-    for (let i = 0; i < allocation[platform]; i++) {
+  const names = { tiktok: 'TikTok', instagram: 'Instagram', facebook: 'Facebook' };
+  for (const { platform, countryCode, quantity } of items) {
+    const region = countryName(countryCode) + '（演示）';
+    for (let i = 0; i < quantity; i++) {
       const accountId = uid(),
         username = 'demo_' + platform.slice(0, 2) + '_' + accountId.replaceAll('-', '').slice(0, 12);
       accounts.push({
@@ -197,9 +222,10 @@ export function reserveSocialAccounts(requestId: string, allocation: AccountAllo
         claimId: requestId,
         orderId: slots[accounts.length],
         platform,
-        name: 'TikTok 套餐帐号 ' + (used.length + accounts.length + 1),
+        name: names[platform] + ' 套餐帐号 ' + (used.length + accounts.length + 1),
         handle: '@' + username,
-        region: '美国（演示）',
+        countryCode,
+        region,
         groupId: 'ungrouped',
         note: '套餐领取 · 所有项目可用',
         status: '已授权',
@@ -208,7 +234,7 @@ export function reserveSocialAccounts(requestId: string, allocation: AccountAllo
           username,
           password: 'Demo!' + uid().replaceAll('-', '').slice(0, 14),
           ip: '192.0.2.' + (((used.length + accounts.length) % 254) + 1),
-          region: '美国 · 洛杉矶（演示）',
+          region,
           mock: true,
         },
       });
@@ -219,6 +245,7 @@ export function reserveSocialAccounts(requestId: string, allocation: AccountAllo
     userId: id,
     createdAt: now(),
     allocation: { ...allocation },
+    items,
     accounts,
   };
   save(id, { ...value, claims: [...value.claims, claim] });

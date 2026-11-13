@@ -15,7 +15,7 @@ import {
 import { toast } from 'vue-sonner';
 import AccountClaimDialog from '@/components/studio/AccountClaimDialog.vue';
 import UserSettings from '@/components/studio/UserSettings.vue';
-import InfoTip from '@/components/studio/InfoTip.vue';
+import AccountPurchaseInfo from '@/components/studio/AccountPurchaseInfo.vue';
 import { MessageCircle, Check } from 'lucide-vue-next';
 import { Card, Button, Badge, Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui';
 import { PageHeader, CreditsIcon } from '@/components/shared';
@@ -77,6 +77,10 @@ const paymentChannel = ref<PaymentChannel>('alipay');
 const order = ref<RechargeOrder | null>(null);
 const paying = ref(false);
 const channelName = computed(() => (paymentChannel.value === 'alipay' ? '支付宝' : '微信'));
+function focusPayment(event: Event) {
+  event.preventDefault();
+  (event.target as HTMLElement).querySelector<HTMLElement>('[data-payment-channel]')?.focus();
+}
 async function pay() {
   if (!order.value || paying.value || order.value.status === 'completed') return;
   paying.value = true;
@@ -109,7 +113,7 @@ function openRecharge(pack: RechargePack) {
   <div class="space-y-6">
     <PageHeader
       title="个人中心"
-      desc="充值获取 AI 积分与 TikTok 帐号，领取后可直接通过本平台发布视频至 TikTok"
+      desc="充值获取 AI 积分与社媒帐号，领取后可直接通过本平台发布视频、图文等作品"
     />
 
     <div class="mx-auto max-w-[1180px] space-y-8">
@@ -176,11 +180,7 @@ function openRecharge(pack: RechargePack) {
         <div class="flex flex-wrap items-center justify-between gap-4">
           <h3 class="flex items-center text-sm font-semibold text-slate-800">
             我购买的账号
-            <InfoTip text="我购买的账号说明">
-              <p class="font-semibold">可直接通过本平台发布至 TikTok</p>
-              <p>帐号所有权归用户</p>
-              <p>登录信息在帐号管理中查看</p>
-            </InfoTip>
+            <AccountPurchaseInfo label="我购买的账号说明" />
           </h3>
           <Button
             size="sm"
@@ -296,11 +296,11 @@ function openRecharge(pack: RechargePack) {
                 v-if="pack.credits > 0"
                 class="mt-3 flex min-h-[7rem] flex-col items-center justify-center rounded-xl border border-slate-100 bg-slate-50/80 px-2.5 py-3 text-center"
               >
-                <div class="text-[11px] text-slate-400">总积分</div>
                 <div
-                  class="mt-1 text-[20px] font-semibold leading-none tracking-tight tabular-nums text-slate-900"
+                  class="flex items-center justify-center text-[20px] font-semibold leading-none tracking-tight tabular-nums text-slate-900"
                 >
                   {{ pack.totalCredits!.toLocaleString() }}
+                  <span class="ml-1 text-[11px] font-normal tracking-normal text-slate-400">个积分</span>
                 </div>
                 <p v-if="pack.videoCount !== null" class="mt-2 text-[11px] leading-4 text-slate-500">
                   约可生成视频 {{ pack.videoCount.toLocaleString() }} 个
@@ -315,21 +315,15 @@ function openRecharge(pack: RechargePack) {
                 class="mt-3 flex min-h-[7rem] flex-col items-center justify-center rounded-xl border border-slate-100 bg-slate-50/80 px-2.5 py-3 text-center"
                 aria-label="套餐社媒帐号权益"
               >
-                <div class="text-[11px] text-slate-400">TikTok 帐号 · 付款后领取</div>
                 <div
-                  class="mt-1 text-[20px] font-semibold leading-none tracking-tight tabular-nums text-slate-900"
+                  class="flex items-center justify-center text-[20px] font-semibold leading-none tracking-tight tabular-nums text-slate-900"
                 >
                   {{ pack.accountCount }}
-                  <span class="text-[11px] font-normal tracking-normal text-slate-400">个</span>
+                  <span class="ml-1 text-[11px] font-normal tracking-normal text-slate-400">个账号</span>
+                  <AccountPurchaseInfo />
                 </div>
-                <p class="mt-2 text-[11px] font-semibold leading-4 text-sky-700">
-                  可直接通过本平台发布至 TikTok
-                </p>
-                <p class="mt-0.5 text-[10.5px] leading-4 text-slate-400">
-                  帐号所有权归用户
-                  <br />
-                  登录信息在帐号管理中查看
-                </p>
+                <p class="mt-2 text-[11px] leading-4 text-slate-500">可选择账号平台和国家地区</p>
+                <p class="mt-0.5 text-[10.5px] text-slate-400">账号所有权归用户所有</p>
               </div>
 
               <ul
@@ -362,7 +356,10 @@ function openRecharge(pack: RechargePack) {
 
     <AccountClaimDialog v-model:open="claimOpen" />
     <Dialog v-model:open="paymentOpen">
-      <DialogContent class="max-w-sm rounded-2xl border-slate-200 bg-white p-7 text-center">
+      <DialogContent
+        class="max-w-sm rounded-2xl border-slate-200 bg-white p-7 text-center"
+        @open-auto-focus="focusPayment"
+      >
         <DialogTitle class="text-lg text-slate-900">
           {{
             order?.status === 'completed'
@@ -384,12 +381,10 @@ function openRecharge(pack: RechargePack) {
             <p class="text-sm text-slate-500">最新余额：{{ creditsBalance.toLocaleString() }} 积分</p>
           </template>
           <template v-if="(order.accountCount ?? 0) > 0">
-            <p class="text-base font-medium text-sky-700">
+            <p class="flex items-center justify-center text-base font-medium text-sky-700">
               已到账 {{ order.accountCount ?? 0 }} 个社媒帐号名额
+              <AccountPurchaseInfo />
             </p>
-            <p class="text-xs text-slate-500">仅提供 TikTok (TK) 帐号，可分批领取</p>
-            <p class="text-sm font-semibold text-sky-700">领取后可直接通过本平台发布视频至 TikTok</p>
-            <p class="text-xs text-slate-500">帐号所有权归用户，登录信息可在帐号管理中查看。</p>
             <Button class="brand-gradient w-full text-white" @click="openClaim">领取帐号</Button>
             <Button variant="outline" class="w-full" @click="paymentOpen = false">稍后领取</Button>
           </template>
@@ -401,11 +396,15 @@ function openRecharge(pack: RechargePack) {
             <p v-if="order.credits > 0" class="mt-2 text-sm text-slate-500">
               到账 {{ order.credits.toLocaleString() }} 积分
             </p>
-            <p v-if="(order.accountCount ?? 0) > 0" class="mt-1 text-sm text-sky-600">
-              TikTok 帐号 × {{ order.accountCount ?? 0 }} · 支付后领取
+            <p
+              v-if="(order.accountCount ?? 0) > 0"
+              class="mt-1 flex items-center justify-center text-sm text-sky-600"
+            >
+              {{ order.accountCount ?? 0 }} 个账号
+              <AccountPurchaseInfo />
             </p>
-            <p v-if="(order.accountCount ?? 0) > 0" class="mt-2 text-xs font-semibold leading-5 text-sky-700">
-              领取后可直接通过本平台发布视频至 TikTok
+            <p v-if="(order.accountCount ?? 0) > 0" class="mt-2 text-xs text-slate-500">
+              购买后选择账号平台和国家地区
             </p>
           </div>
           <div class="flex gap-2" role="group" aria-label="支付方式">
@@ -413,6 +412,7 @@ function openRecharge(pack: RechargePack) {
               v-for="channel in ['alipay', 'wechat'] as const"
               :key="channel"
               type="button"
+              data-payment-channel
               class="h-10 flex-1 rounded-lg border text-sm"
               :class="
                 paymentChannel === channel

@@ -1,10 +1,10 @@
-import { reserveSocialAccounts, recoverPurchasedAccounts, type AccountAllocation } from './credits';
+import { reserveSocialAccounts, recoverPurchasedAccounts, type AccountClaimInput } from './credits';
 import { studio } from './studio';
 import { currentUser } from './identity';
 import { writeJSON } from './storage';
 import type { StudioState } from '@/types/studio';
-export function claimSocialAccounts(requestId: string, allocation: AccountAllocation) {
-  const claim = reserveSocialAccounts(requestId, allocation);
+export function claimSocialAccounts(requestId: string, input: AccountClaimInput) {
+  const claim = reserveSocialAccounts(requestId, input);
   const owner = currentUser.value!.id;
   const next = JSON.parse(JSON.stringify(studio.value)) as StudioState;
   recoverPurchasedAccounts(next, owner);

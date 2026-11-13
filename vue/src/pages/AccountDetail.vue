@@ -163,7 +163,7 @@ function back() {
           帐号所有权归用户，登录信息可在帐号管理中查看。
         </p>
         <p v-if="account.source === 'recharge'" class="text-sm font-semibold text-sky-700">
-          可直接通过本平台发布视频至
+          可直接通过本平台发布视频、图文等作品至
           {{
             account.platform === 'facebook'
               ? 'Facebook'

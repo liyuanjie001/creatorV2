@@ -216,8 +216,8 @@ function toggleAll() {
       aria-label="待领取帐号提示"
     >
       <div>
-        <p class="text-sm font-medium text-sky-900">待领取 TikTok 帐号：{{ socialAccountsRemaining }} 个</p>
-        <p class="mt-2 text-sm font-semibold text-sky-700">领取后可直接通过本平台发布视频至 TikTok</p>
+        <p class="text-sm font-medium text-sky-900">待领取社媒帐号：{{ socialAccountsRemaining }} 个</p>
+        <p class="mt-2 text-sm font-semibold text-sky-700">可选择 TikTok、Instagram、Facebook 帐号及国家地区，领取后可直接发布视频、图文等作品</p>
         <p class="mt-1 text-xs leading-5 text-slate-500">
           绑定对应帐号后，也可通过本平台发布至 Facebook / Instagram。
         </p>
