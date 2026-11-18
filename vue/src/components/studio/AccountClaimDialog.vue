@@ -85,7 +85,7 @@ function manage() {
 }
 function recharge() {
   emit('update:open', false);
-  void router.push('/me');
+  void router.push('/purchase');
 }
 </script>
 <template>
@@ -95,11 +95,11 @@ function recharge() {
       @open-auto-focus="focusClaim"
     >
       <DialogTitle class="flex items-center">
-        {{ result ? '帐号领取成功' : '领取社媒帐号' }}
-        <AccountPurchaseInfo />
+        {{ result ? '帐号领取成功' : '领取历史社媒账号' }}
+        <AccountPurchaseInfo legacy />
       </DialogTitle>
       <DialogDescription>
-        选择平台、国家地区和数量，支持混合及分批领取，帐号与剩余名额长期有效。
+        仅用于历史购买的剩余名额。选择平台、国家地区和数量，支持混合及分批领取。
       </DialogDescription>
       <template v-if="result">
         <div class="rounded-xl bg-emerald-50 p-4 text-sm text-emerald-800">
@@ -210,7 +210,7 @@ function recharge() {
           </button>
         </template>
         <template v-else>
-          <p class="text-sm text-slate-500">暂无待领取名额，购买套餐或帐号可获得社媒帐号名额。</p>
+          <p class="text-sm text-slate-500">暂无历史待领取账号，新购买的美国 TikTok 账号付款后自动到账。</p>
           <button class="studio-primary w-full justify-center" @click="recharge">前往充值</button>
         </template>
       </template>

@@ -11,9 +11,13 @@ import {
   recoverPurchasedAccounts,
   type AccountAllocation,
   type AccountClaimItem,
+  purchasePacks,
+  type PurchasePackKey,
+  type RechargePackKey,
+  rechargePacks,
 } from '@/services/credits';
 import { countries, countryName } from '@/services/countries';
-import { claimSocialAccounts } from '@/services/purchasedAccounts';
+import { claimSocialAccounts, completePurchase, PurchaseSyncError } from '@/services/purchasedAccounts';
 import {
   studio,
   createProject,
@@ -31,8 +35,12 @@ async function login(id: string) {
   currentUser.value = { id, name: id, identity: id + '@test.com', method: 'email', bindings: ['email'] };
   await nextTick();
 }
-function purchase(pack: 'p490' | 'p1000' = 'p1000') {
+function purchase(pack: 'p500' | 'p1000' = 'p1000') {
   const order = createRechargeOrder(pack);
+  // Saved orders without deliveryMode represent historical purchases, even if still unpaid.
+  const ledger = JSON.parse(localStorage.getItem('chuhai-credits-v1:' + order.userId)!);
+  delete ledger.orders.find((item: { id: string }) => item.id === order.id).deliveryMode;
+  localStorage.setItem('chuhai-credits-v1:' + order.userId, JSON.stringify(ledger));
   completeRecharge(order.id, 'alipay');
   return order;
 }
@@ -41,6 +49,159 @@ beforeEach(async () => {
   currentUser.value = null;
   localStorage.clear();
   await login('buyer');
+});
+const ledgerKey = 'chuhai-credits-v1:buyer';
+for (const pack of Object.keys(rechargePacks) as RechargePackKey[]) {
+  test(`${pack}: exchanging all accounts for credits never delivers or reserves accounts`, async () => {
+    const historical = purchase('p500');
+    const options = { includeAccounts: false };
+    const order = createRechargeOrder(pack, options);
+    const balance = creditsBalance.value;
+    options.includeAccounts = true;
+    completePurchase(order.id, 'wechat');
+    completePurchase(order.id, 'alipay');
+    expect(creditsBalance.value).toBe(balance + rechargePacks[pack].creditsOnly.credits);
+    expect(studio.value.accounts).toHaveLength(0);
+    expect(socialAccountsRemaining.value).toBe(2);
+    expect(JSON.parse(localStorage.getItem(ledgerKey)!).claims).toEqual([]);
+    await login('other');
+    await login('buyer');
+    expect(studio.value.accounts).toHaveLength(0);
+    expect(socialAccountsRemaining.value).toBe(2);
+    const claim = claimSocialAccounts('legacy-after-credits', { tiktok: 1, instagram: 0, facebook: 0 });
+    expect(claim.accounts[0]!.orderId).toBe(historical.id);
+  });
+}
+for (const pack of Object.keys(purchasePacks) as PurchasePackKey[]) {
+  test(`${pack}: automatic payment delivers exactly the configured US TikTok accounts`, async () => {
+    const order = createRechargeOrder(pack);
+    expect(studio.value.accounts).toHaveLength(0);
+    expect(creditsBalance.value).toBe(100);
+    const writes = vi.spyOn(Storage.prototype, 'setItem');
+    completePurchase(order.id, 'wechat');
+    const quantity = purchasePacks[pack].accountCount;
+    const snapshot = JSON.parse(localStorage.getItem(ledgerKey)!);
+    expect(writes.mock.calls.filter(([key]) => key === ledgerKey)).toHaveLength(1);
+    expect(snapshot.orders[0].status).toBe('completed');
+    expect(snapshot.claims).toHaveLength(quantity ? 1 : 0);
+    expect(studio.value.accounts).toHaveLength(quantity);
+    expect(
+      studio.value.accounts.every(
+        (a, index) =>
+          a.id === `automatic:${order.id}:${index}` &&
+          a.orderId === order.id &&
+          a.countryCode === 'US' &&
+          a.platform === 'tiktok' &&
+          a.status === '已授权' &&
+          a.groupId === 'ungrouped' &&
+          a.source === 'recharge' &&
+          !!a.loginInfo?.password &&
+          a.loginInfo.region === '美国（演示）' &&
+          a.loginInfo.ip.startsWith('192.0.2.'),
+      ),
+    ).toBe(true);
+    const credentials = studio.value.accounts.map((a) => ({ ...a.loginInfo }));
+    const persisted = JSON.parse(localStorage.getItem('chuhai-studio-v1:buyer')!);
+    expect(persisted.accounts).toHaveLength(quantity);
+    expect(socialAccountsRemaining.value).toBe(0);
+    completePurchase(order.id, 'alipay');
+    expect(localStorage.getItem(ledgerKey)).toBe(JSON.stringify(snapshot));
+    await login('other');
+    expect(studio.value.accounts).toHaveLength(0);
+    expect(() => completePurchase(order.id, 'alipay')).toThrow('不存在');
+    await login('buyer');
+    completePurchase(order.id, 'wechat');
+    expect(studio.value.accounts.map((a) => ({ ...a.loginInfo }))).toEqual(credentials);
+    expect(creditsBalance.value).toBe(100 + purchasePacks[pack].credits);
+  });
+}
+
+test('automatic ledger failure leaves the order unpaid, credits unchanged and no delivery', () => {
+  const order = createRechargeOrder('p2000');
+  const before = localStorage.getItem(ledgerKey);
+  const original = Storage.prototype.setItem;
+  const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (this: Storage, key, value) {
+    if (key === ledgerKey) throw Error('quota');
+    original.call(this, key, value);
+  });
+  expect(() => completePurchase(order.id, 'alipay')).toThrow('本地保存失败');
+  expect(localStorage.getItem(ledgerKey)).toBe(before);
+  expect(creditsBalance.value).toBe(100);
+  expect(studio.value.accounts).toHaveLength(0);
+  spy.mockRestore();
+  completePurchase(order.id, 'wechat');
+  expect(studio.value.accounts).toHaveLength(10);
+  expect(creditsBalance.value).toBe(4045);
+});
+
+test.each(['retry', 'reload'] as const)(
+  'automatic studio failure recovers by %s without another recharge',
+  async (mode) => {
+    const order = createRechargeOrder('p500');
+    const original = Storage.prototype.setItem;
+    const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
+      this: Storage,
+      key,
+      value,
+    ) {
+      if (key.startsWith('chuhai-studio-v1:')) throw Error('quota');
+      original.call(this, key, value);
+    });
+    expect(() => completePurchase(order.id, 'wechat')).toThrow(PurchaseSyncError);
+    expect(() => completePurchase(order.id, 'alipay')).toThrow('支付已完成，账号同步失败');
+    const snapshot = localStorage.getItem(ledgerKey);
+    const delivered = JSON.parse(snapshot!).claims[0].accounts;
+    expect(studio.value.accounts).toHaveLength(0);
+    expect(creditsBalance.value).toBe(1033);
+    spy.mockRestore();
+    if (mode === 'reload') {
+      await login('other');
+      await login('buyer');
+    } else completePurchase(order.id, 'alipay');
+    expect(localStorage.getItem(ledgerKey)).toBe(snapshot);
+    expect(studio.value.accounts).toEqual(delivered);
+    completePurchase(order.id, 'wechat');
+    expect(studio.value.accounts).toHaveLength(2);
+  },
+);
+
+test('automatic recovery retains edits, credentials, deletion tombstones and works across projects', async () => {
+  const existing = createProject('existing');
+  const order = createRechargeOrder('p500');
+  completePurchase(order.id, 'alipay');
+  const account = studio.value.accounts[0]!;
+  const next = createProject('new');
+  expect(accountAvailableInProject(account, existing)).toBe(true);
+  expect(accountAvailableInProject(account, next)).toBe(true);
+  account.name = 'custom name';
+  account.region = 'edited region';
+  account.loginInfo!.password = 'edited password';
+  deleteAccount(studio.value.accounts[1]!.id);
+  await login('other');
+  await login('buyer');
+  completePurchase(order.id, 'wechat');
+  expect(studio.value.accounts).toHaveLength(2);
+  expect(studio.value.accounts[0]).toMatchObject({
+    name: 'custom name',
+    region: 'edited region',
+    loginInfo: { password: 'edited password' },
+  });
+  expect(studio.value.accounts[1]!.deleted).toBe(true);
+});
+
+test('new automatic deliveries coexist with legacy slots and manual claiming never uses automatic orders', () => {
+  const historical = purchase('p500');
+  const automatic = createRechargeOrder('p1000');
+  completePurchase(automatic.id, 'alipay');
+  expect(studio.value.accounts).toHaveLength(5);
+  expect(socialAccountsRemaining.value).toBe(2);
+  const claim = claimSocialAccounts('legacy-only', [
+    { platform: 'facebook', countryCode: 'JP', quantity: 2 },
+  ]);
+  expect(claim.accounts.every((a) => a.orderId === historical.id)).toBe(true);
+  expect(studio.value.accounts).toHaveLength(7);
+  expect(socialAccountsRemaining.value).toBe(0);
+  expect(() => claimSocialAccounts('extra', { tiktok: 1, instagram: 0, facebook: 0 })).toThrow('不能超过');
 });
 test('TikTok partial claims consume completed orders, not pending orders; duplicate request is idempotent', () => {
   createRechargeOrder('p5000');
@@ -77,7 +238,7 @@ for (const allocation of [
   });
 }
 test('ledger write failure consumes nothing; retry succeeds', () => {
-  purchase('p490');
+  purchase('p500');
   const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
     throw Error('quota');
   });
@@ -91,7 +252,7 @@ test('ledger write failure consumes nothing; retry succeeds', () => {
   expect(socialAccountsRemaining.value).toBe(0);
 });
 test('delivery failure is recoverable and never double-claims', async () => {
-  purchase('p490');
+  purchase('p500');
   const original = Storage.prototype.setItem;
   const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (this: Storage, key, value) {
     if (key.startsWith('chuhai-studio-v1:')) throw Error('quota');
@@ -155,8 +316,8 @@ test('legacy balance and orders retain snapshots and receive no account entitlem
   expect(socialAccountsRemaining.value).toBe(0);
   expect(completeRecharge('old', 'wechat').credits).toBe(2500);
   expect(creditsBalance.value).toBe(2600);
-  purchase('p490');
-  expect(creditsBalance.value).toBe(4520);
+  purchase('p500');
+  expect(creditsBalance.value).toBe(3533);
   expect(socialAccountsRemaining.value).toBe(2);
 });
 test.each(['tiktok', 'instagram', 'facebook'] as const)(
@@ -251,7 +412,7 @@ test('bundled country list is complete, unique and has Chinese and English label
 });
 
 test('mixed platform and country claims merge duplicates, skip zero rows and retain order attribution', () => {
-  const first = purchase('p490');
+  const first = purchase('p500');
   const second = purchase();
   const items: AccountClaimItem[] = [
     { platform: 'tiktok', countryCode: 'US', quantity: 1 },

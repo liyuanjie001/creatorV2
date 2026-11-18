@@ -30,7 +30,7 @@ const route = useRoute();
         >
           <main
             v-if="!route.meta.immersive"
-            :class="route.meta.wide ? 'flex-1 px-8 py-6' : 'mx-auto w-full max-w-[1400px] flex-1 px-6 py-6'"
+            :class="route.meta.wide ? 'min-w-0 flex-1 px-4 py-6 sm:px-8' : 'mx-auto w-full max-w-[1400px] flex-1 px-6 py-6'"
           >
             <RouterView :key="route.path" />
           </main>

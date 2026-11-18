@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Bell, Search, FolderOpen, Sparkles } from 'lucide-vue-next';
+import { Bell, Search, FolderOpen, Sparkles, UserRound } from 'lucide-vue-next';
 import { Button } from '@/components/ui';
 import { Input } from '@/components/ui';
 import {
@@ -19,7 +19,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui';
 import { Avatar, AvatarFallback } from '@/components/ui';
-import { notifications } from '@/data/mock';
+import { notifications, unreadCount } from '@/services/notifications';
+import { currentUser, identityService } from '@/services/identity';
 import InspireGenPanel from '@/components/InspireGenPanel.vue';
 import { useRouter } from 'vue-router';
 import { useInspirationDialog } from '@/composables/useInspirationDialog';
@@ -83,23 +84,24 @@ const { inspireOpen } = useInspirationDialog();
         <DropdownMenuTrigger as-child>
           <Button variant="ghost" size="icon" class="relative text-slate-500 hover:text-slate-800">
             <Bell class="h-5 w-5"></Bell>
-            <span class="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-rose-500"></span>
+            <span v-if="unreadCount" class="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-rose-500"></span>
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" class="w-80 border-slate-200 bg-white text-slate-800 shadow-lg">
           <DropdownMenuLabel class="text-slate-500">通知中心</DropdownMenuLabel>
           <DropdownMenuSeparator class="bg-slate-100"></DropdownMenuSeparator>
-          <template :key="n.id" v-for="n in notifications">
-            <DropdownMenuItem class="cursor-pointer items-start gap-2 focus:bg-slate-50">
+          <template :key="n.id" v-for="n in notifications.slice(0, 5)">
+            <DropdownMenuItem class="cursor-pointer items-start gap-2 focus:bg-slate-50" @click="router.push('/me?section=messages')">
               <span
-                :class="`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${n.unread ? 'bg-sky-500' : 'bg-slate-200'}`"
+                :class="`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${!n.read ? 'bg-sky-500' : 'bg-slate-200'}`"
               ></span>
               <span>
-                <span class="block text-[13px] leading-snug text-slate-700">{{ n.text }}</span>
-                <span class="text-[11px] text-slate-400">{{ n.time }}</span>
+                <span class="block text-[13px] leading-snug text-slate-700">{{ n.title }}</span>
+                <span class="text-[11px] text-slate-400">{{ new Date(n.createdAt).toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' }) }}</span>
               </span>
             </DropdownMenuItem>
           </template>
+          <DropdownMenuItem @click="router.push('/me?section=messages')">查看全部消息</DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
       <DropdownMenu>
@@ -108,10 +110,12 @@ const { inspireOpen } = useInspirationDialog();
             class="ml-1 flex items-center gap-2.5 rounded-full py-1 pl-1 pr-3 transition-colors hover:bg-slate-100"
           >
             <Avatar class="h-8 w-8 border border-slate-200">
-              <AvatarFallback class="brand-gradient text-xs font-semibold text-white">LY</AvatarFallback>
+              <AvatarFallback class="brand-gradient text-white">
+                <UserRound class="h-5 w-5" aria-hidden="true" />
+              </AvatarFallback>
             </Avatar>
             <div class="text-left">
-              <div class="text-[13px] leading-tight text-slate-800">林悦</div>
+              <div class="text-[13px] leading-tight text-slate-800">{{ currentUser?.name ?? '用户' }}</div>
               <div class="text-[11px] leading-tight text-slate-400">运营负责人</div>
             </div>
           </button>
@@ -127,7 +131,7 @@ const { inspireOpen } = useInspirationDialog();
             团队设置
           </DropdownMenuItem>
           <DropdownMenuSeparator class="bg-slate-100"></DropdownMenuSeparator>
-          <DropdownMenuItem class="cursor-pointer text-rose-500 focus:bg-slate-50">退出登录</DropdownMenuItem>
+          <DropdownMenuItem class="cursor-pointer text-rose-500 focus:bg-slate-50" @click="identityService.logout(); router.replace('/auth')">退出登录</DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
     </div>

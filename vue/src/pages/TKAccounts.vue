@@ -212,22 +212,23 @@ function toggleAll() {
     </header>
     <AccountClaimDialog v-model:open="claimOpen" />
     <div
+      v-if="socialAccountsRemaining > 0"
       class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-sky-100 bg-sky-50/60 p-4"
       aria-label="待领取帐号提示"
     >
       <div>
-        <p class="text-sm font-medium text-sky-900">待领取社媒帐号：{{ socialAccountsRemaining }} 个</p>
-        <p class="mt-2 text-sm font-semibold text-sky-700">可选择 TikTok、Instagram、Facebook 帐号及国家地区，领取后可直接发布视频、图文等作品</p>
+        <p class="text-sm font-medium text-sky-900">历史待领取账号：{{ socialAccountsRemaining }} 个</p>
+        <p class="mt-2 text-sm font-semibold text-sky-700">
+          可选择 TikTok、Instagram、Facebook 帐号及国家地区，领取后可直接发布视频、图文等作品
+        </p>
         <p class="mt-1 text-xs leading-5 text-slate-500">
-          绑定对应帐号后，也可通过本平台发布至 Facebook / Instagram。
+          此入口仅用于历史购买的剩余名额，新购买账号付款后自动到账。
         </p>
         <p class="mt-1 text-xs text-slate-500">
-          帐号所有权归用户；在帐号管理中打开详情可查看登录信息。领取后所有项目可直接发布。
+          领取账号使用权；在帐号管理中打开详情可查看登录信息。领取后所有项目可直接发布。
         </p>
       </div>
-      <button class="studio-btn" @click="claimOpen = true">
-        {{ socialAccountsRemaining ? '领取帐号' : '获取帐号' }}
-      </button>
+      <button class="studio-btn" @click="claimOpen = true">领取历史账号</button>
     </div>
     <template v-if="tab === 'accounts'">
       <div class="flex flex-wrap items-center gap-3">
@@ -388,7 +389,7 @@ function toggleAll() {
                         v-if="a.source === 'recharge'"
                         class="ml-1 rounded bg-sky-50 px-1.5 py-0.5 text-[10px] text-sky-600"
                       >
-                        套餐领取
+                        购买账号
                       </span>
                     </p>
                   </div>

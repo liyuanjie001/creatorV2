@@ -8,7 +8,11 @@ export function createAppRouter(history: RouterHistory = createWebHashHistory(),
     scrollBehavior: () => ({ top: 0 }),
     routes: [
       { path: '/auth', name: 'auth', component: () => import('./pages/Auth.vue') },
-      { path: '/legacy/projects/:id', component: () => import('./pages/LegacyProjectDetail.vue'), meta: { immersive: true } },
+      {
+        path: '/legacy/projects/:id',
+        component: () => import('./pages/LegacyProjectDetail.vue'),
+        meta: { immersive: true },
+      },
       { path: '/roxy', component: () => import('./pages/Accounts.vue'), meta: { wide: true } },
       { path: '/unlock', name: 'unlock', component: () => import('./pages/Unlock.vue') },
       { path: '/', component: () => import('./pages/Dashboard.vue'), meta: { wide: true } },
@@ -43,6 +47,7 @@ export function createAppRouter(history: RouterHistory = createWebHashHistory(),
       { path: '/settings', component: () => import('./pages/Settings.vue') },
       { path: '/trash', component: () => import('./pages/Trash.vue') },
       { path: '/me', component: () => import('./pages/Profile.vue'), meta: { wide: true } },
+      { path: '/purchase', component: () => import('./pages/Purchase.vue'), meta: { wide: true } },
       {
         path: '/:pathMatch(.*)*',
         component: () => import('./pages/Dashboard.vue'),
@@ -55,8 +60,10 @@ export function createAppRouter(history: RouterHistory = createWebHashHistory(),
       return gate.isUnlocked() ? { path: unlockDestination(to.query.redirect), replace: true } : true;
     }
     if (!gate.isUnlocked()) return { name: 'unlock', query: { redirect: to.fullPath }, replace: true };
-    if (!currentUser.value && to.name !== 'auth') return { name: 'auth', query: { redirect: to.fullPath }, replace: true };
-    if (currentUser.value && to.name === 'auth') return { path: unlockDestination(to.query.redirect), replace: true };
+    if (!currentUser.value && to.name !== 'auth')
+      return { name: 'auth', query: { redirect: to.fullPath }, replace: true };
+    if (currentUser.value && to.name === 'auth')
+      return { path: unlockDestination(to.query.redirect), replace: true };
     return true;
   });
   return router;

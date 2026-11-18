@@ -84,6 +84,7 @@ describe('全部路由挂载真实 Vue 组件', () => {
     ['/settings', '设置中心'],
     ['/trash', '回收站'],
     ['/me', '个人中心'],
+    ['/purchase', '套餐购买'],
   ];
   test.each(paths)('%s', async (path, title) => {
     const { app } = await open(path);
@@ -182,11 +183,20 @@ test('项目灵感库按源码展示推荐爆款与翻拍操作', async () => {
 
   const remake = app.findAll('button').find((item) => item.text() === '一键翻拍');
   if (!remake) throw new Error('一键翻拍按钮不存在');
-  studio.value.projects.push({ id: 'P1', name: 'GlowUp 美妆出海', desc: '', color: '#11a3fd', accountIds: [], archived: false });
+  studio.value.projects.push({
+    id: 'P1',
+    name: 'GlowUp 美妆出海',
+    desc: '',
+    color: '#11a3fd',
+    accountIds: [],
+    archived: false,
+  });
   await remake.trigger('click');
   await vi.advanceTimersByTimeAsync(100);
   await flushPromises();
-  const projectChoice = Array.from(document.querySelectorAll('[data-remake-project-picker] button')).find(item => item.textContent?.trim() === 'GlowUp 美妆出海');
+  const projectChoice = Array.from(document.querySelectorAll('[data-remake-project-picker] button')).find(
+    (item) => item.textContent?.trim() === 'GlowUp 美妆出海',
+  );
   expect(projectChoice).toBeTruthy();
   (projectChoice as HTMLButtonElement).click();
   await flushPromises();
@@ -298,7 +308,7 @@ test('第一版创建校验项目名并进入工作区，返回首页展示项�
   const snapshot = [...projects];
   try {
     resetHomeProjects();
-  studio.value.hiddenHot = false;
+    studio.value.hiddenHot = false;
     const { app, router } = await open('/');
     expect(app.text()).toContain('还没有项目');
     expect(app.text()).not.toContain('从模板新建');
@@ -332,7 +342,7 @@ test('第一版创建校验项目名并进入工作区，返回首页展示项�
     expect(app.text()).not.toContain('还没有项目');
   } finally {
     resetHomeProjects();
-  studio.value.hiddenHot = false;
+    studio.value.hiddenHot = false;
     projects.splice(0, projects.length, ...snapshot);
   }
 });
@@ -343,7 +353,7 @@ test('手动创建项目校验品牌名称并进入工作区', async () => {
   const snapshot = [...projects];
   try {
     resetHomeProjects();
-  studio.value.hiddenHot = false;
+    studio.value.hiddenHot = false;
     const { app, router } = await open('/projects/new');
     await button('手动创建品牌套件').trigger('click');
     await button('创建项目').trigger('click');
@@ -361,7 +371,7 @@ test('手动创建项目校验品牌名称并进入工作区', async () => {
     expect(app.find('aside').text()).not.toContain('测试品牌');
   } finally {
     resetHomeProjects();
-  studio.value.hiddenHot = false;
+    studio.value.hiddenHot = false;
     projects.splice(0, projects.length, ...snapshot);
   }
 });
@@ -372,7 +382,7 @@ test('离开首页再返回仍展示已创建的项目卡', async () => {
   const snapshot = [...projects];
   try {
     resetHomeProjects();
-  studio.value.hiddenHot = false;
+    studio.value.hiddenHot = false;
     addHomeProject({ name: '回访项目卡' });
     const { app, router } = await open('/');
     expect(app.text()).toContain('我的项目');
@@ -386,7 +396,7 @@ test('离开首页再返回仍展示已创建的项目卡', async () => {
     expect(app.text()).not.toContain('还没有项目');
   } finally {
     resetHomeProjects();
-  studio.value.hiddenHot = false;
+    studio.value.hiddenHot = false;
     projects.splice(0, projects.length, ...snapshot);
   }
 });
@@ -416,7 +426,7 @@ test('项目卡支持重命名与删除，删空后回到缺省页', async () =>
   const snapshot = [...projects];
   try {
     resetHomeProjects();
-  studio.value.hiddenHot = false;
+    studio.value.hiddenHot = false;
     const item = addHomeProject({ name: '待改名项目' });
     renameHomeProject(item.id, '已改名项目');
     const { app, router } = await open('/');
@@ -431,7 +441,7 @@ test('项目卡支持重命名与删除，删空后回到缺省页', async () =>
     expect(app.text()).toContain('已归档项目');
   } finally {
     resetHomeProjects();
-  studio.value.hiddenHot = false;
+    studio.value.hiddenHot = false;
     projects.splice(0, projects.length, ...snapshot);
   }
 });

@@ -156,11 +156,11 @@ function back() {
       >
         <div class="flex flex-wrap items-center gap-2">
           <h2 class="text-sm font-semibold text-slate-800">登录信息</h2>
-          <span class="rounded bg-sky-50 px-2 py-1 text-xs text-sky-700">套餐领取 · 所有项目可用</span>
+          <span class="rounded bg-sky-50 px-2 py-1 text-xs text-sky-700">购买账号 · 所有项目可用</span>
           <span class="text-xs text-slate-400">模拟凭据和示例 IP，仅供演示</span>
         </div>
         <p v-if="account.source === 'recharge'" class="text-xs text-slate-500">
-          帐号所有权归用户，登录信息可在帐号管理中查看。
+          账号使用权，登录信息可在帐号管理中查看。
         </p>
         <p v-if="account.source === 'recharge'" class="text-sm font-semibold text-sky-700">
           可直接通过本平台发布视频、图文等作品至

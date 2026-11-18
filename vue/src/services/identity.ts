@@ -18,9 +18,17 @@ async function persist(list: Credential[]) {
   if (!writeJSON('chuhai-credential-pointer', id)) throw new Error('浏览器存储不可用，无法保存注册信息');
 }
 function digest(password: string, salt: string) { return Array.from(sha256(new TextEncoder().encode(salt + password)), b => b.toString(16).padStart(2, '0')).join(''); }
-function session(user: AuthUser) { currentUser.value = user; writeJSON(SESSION, user); return user; }
+function session(user: AuthUser) {
+  if (!writeJSON(SESSION, user)) throw new Error('本地保存失败，请恢复浏览器存储后重试');
+  currentUser.value = user;
+  return user;
+}
 const challenges = new Map<string, { code: string; expires: number; sentAt: number }>();
 export const DEMO_CODE = '123456';
+export function codeResendSeconds(identity: string) {
+  const challenge = challenges.get(identity);
+  return challenge ? Math.max(0, Math.ceil((challenge.sentAt + 60000 - Date.now()) / 1000)) : 0;
+}
 export function validateIdentity(identity: string, method: string) {
   if (method === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identity)) throw new Error('请输入有效邮箱');
   if (method === 'phone' && !/^\+\d{7,15}$/.test(identity)) throw new Error('请输入含国家区号的有效手机号');
@@ -73,9 +81,13 @@ export const identityService = {
     await persist([...list, { user, salt: uid(), digest: '' }]);
     return session(user);
   },
-  demo() { return session({ id: 'demo', name: '林悦', identity: 'demo@chuhai.studio', method: 'email', bindings: ['email'] }); },
+  demo() {
+    const saved = readJSON<string>('chuhai-demo-name', () => '林悦');
+    return session({ id: 'demo', name: typeof saved === 'string' && saved.trim() ? saved : '林悦', identity: 'demo@chuhai.studio', method: 'email', bindings: ['email'] });
+  },
   async updateName(name: string) {
-    const user = currentUser.value; if (!user || !name.trim()) throw new Error('请填写名称');
+    const user = currentUser.value; if (!user || !name.trim() || name.trim().length > 30) throw new Error('昵称需为 1—30 个字符');
+    if (user.id === 'demo' && !writeJSON('chuhai-demo-name', name.trim())) throw new Error('本地保存失败，请重试');
     if (user.id !== 'demo') { const list = await records(); const entry = list.find(x => x.user.id === user.id); if (entry) { entry.user.name = name.trim(); await persist(list); } }
     session({ ...user, name: name.trim() });
   },
