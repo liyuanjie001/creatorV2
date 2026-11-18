@@ -9,6 +9,7 @@ withDefaults(defineProps<{ label?: string; legacy?: boolean }>(), { label: '账�
       <li v-if="legacy">历史名额可选择 TikTok、Instagram、Facebook 账号及国家地区</li>
       <li v-else>美国 TikTok 账号，付款后自动到账</li>
       <li class="font-semibold">可直接通过本平台发布视频、图文等作品</li>
+      <li v-if="!legacy">购买套餐时，可选择是否勾选账号使用权</li>
     </ol>
   </InfoTip>
 </template>

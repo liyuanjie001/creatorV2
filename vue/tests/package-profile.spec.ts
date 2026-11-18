@@ -32,7 +32,7 @@ test('套餐独立页面、个人中心套餐状态、权益详情与积分充�
   await expect(page.getByText('我的积分', { exact: true })).toHaveCount(0);
   await expect(page.getByText('剩余积分', { exact: true })).toHaveCount(0);
   await expect(page.getByText('当前版本', { exact: true })).toHaveCount(0);
-  await expect(page.getByLabel('定制化服务', { exact: true })).toContainText('专属方案与报价');
+  await expect(page.getByLabel('定制化服务', { exact: true })).toContainText('规模化走向全球');
 
   await page
     .getByLabel('¥2,000 套餐', { exact: true })
@@ -75,10 +75,12 @@ test('套餐独立页面、个人中心套餐状态、权益详情与积分充�
   await page.getByRole('button', { name: '积分充值', exact: true }).click();
   await expect(page).toHaveURL(/#\/purchase\?tab=credits$/);
   await expect(page.getByRole('heading', { name: '积分充值', exact: true })).toBeVisible();
-  await expect(page.getByRole('tab')).toHaveCount(0);
+  await expect(page.getByRole('tab')).toHaveCount(2);
+  await expect(page.getByRole('tab', { name: '积分充值', exact: true })).toHaveAttribute('aria-selected', 'true');
   await page.reload();
   await expect(page.getByRole('heading', { name: '积分充值', exact: true })).toBeVisible();
-  await expect(page.getByRole('tab')).toHaveCount(0);
+  await expect(page.getByRole('tab')).toHaveCount(2);
+  await expect(page.getByRole('tab', { name: '积分充值', exact: true })).toHaveAttribute('aria-selected', 'true');
   await page
     .getByLabel('¥500 积分充值', { exact: true })
     .getByRole('button', { name: '立即充值', exact: true })
@@ -132,41 +134,32 @@ test('未购买套餐时的权益卡片和详情引导', async ({ page }) => {
   await expect(page).toHaveURL(/#\/purchase$/);
 });
 
-test('企业定制服务展示模拟品牌、业务数据、平台与商务咨询', async ({ page }, info) => {
+test('定制服务卡片随内容自适应，完整展示平台并支持联系销售', async ({ page }, info) => {
   await page.goto('/#/purchase');
   const custom = page.getByRole('region', { name: '定制化服务', exact: true });
-  await expect(custom.getByRole('heading', { name: '面向企业的 AI 内容服务', exact: true })).toBeVisible();
-  await expect(custom.getByLabel('模拟合作品牌').getByRole('listitem')).toHaveCount(6);
-  await expect(custom).toContainText('MOCK');
-  await expect(custom).toContainText('品牌及视频数量为演示数据');
-  await expect(custom.getByLabel('服务规模示例数据')).toContainText('1,200+');
-  await expect(custom.getByLabel('服务规模示例数据')).toContainText('240万+');
-  await expect(custom.getByLabel('覆盖社媒平台').getByRole('listitem')).toHaveText([
-    'TikTok',
-    'Instagram',
-    'YouTube',
-    'Facebook',
-    'X',
-    'LinkedIn',
-  ]);
-  await expect(custom.getByLabel('定制服务项目').getByRole('heading')).toHaveText([
-    '灵活用量与报价',
-    '品牌内容定制',
-    '定时发布与矩阵规划',
-    '商务采购支持',
-    '培训与运营陪跑',
-    '团队协作与资产管理',
-  ]);
+  await expect(custom.getByRole('heading', { name: /让品牌内容，\s*规模化走向全球/ })).toBeVisible();
+  await expect(custom).toContainText('定制适合业务的增长工作流');
+  const stats = custom.getByLabel('服务规模数据');
+  await expect(stats).toContainText('品牌与团队');
+  await expect(stats).toContainText('1,200+');
+  await expect(stats).toContainText('已生成视频');
+  await expect(stats).toContainText('240万+');
+  await expect(stats).toContainText('覆盖社媒平台');
+  await expect(stats.locator('dd').last()).toHaveText('6 个');
+  await expect(custom).not.toContainText('示例');
+  const platformItems = custom.getByRole('list', { name: '覆盖社媒平台', exact: true }).getByRole('listitem');
+  await expect(platformItems).toHaveText(['TikTok', 'Instagram', 'YouTube', 'Facebook', 'X', 'LinkedIn']);
+  for (const platform of await platformItems.all()) await expect(platform).toBeVisible();
   await custom.screenshot({ path: info.outputPath('enterprise-services-desktop.png') });
-  await custom.getByRole('button', { name: '联系商务', exact: true }).click();
+  await custom.getByRole('button', { name: '联系销售', exact: true }).click();
   const contact = page.getByRole('dialog');
-  await expect(contact.getByRole('heading')).toHaveText('添加企业微信联系商务经理');
+  await expect(contact.getByRole('heading')).toHaveText('添加企业微信联系销售');
   const qr = contact.getByRole('img', { name: '企业微信二维码', exact: true });
   await expect(qr).toHaveAttribute('src', /\/wecom-qr\.png$/);
   await expect
     .poll(() => qr.evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0))
     .toBe(true);
-  await expect(contact).toContainText('定制化方案请扫码添加商务经理沟通需求');
+  await expect(contact).toContainText('定制化方案请扫码添加销售沟通需求');
   await expect(contact).not.toContainText('备注充值档位');
   await page.keyboard.press('Escape');
   await page.setViewportSize({ width: 390, height: 844 });
@@ -174,13 +167,13 @@ test('企业定制服务展示模拟品牌、业务数据、平台与商务咨�
   const bounds = (await custom.boundingBox())!;
   expect(bounds.x).toBeGreaterThanOrEqual(0);
   expect(bounds.x + bounds.width).toBeLessThanOrEqual(390);
-  for (const item of await custom.locator('li').all()) {
-    const box = (await item.boundingBox())!;
-    expect(box.x + box.width).toBeLessThanOrEqual(bounds.x + bounds.width);
-  }
+  expect(await custom.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+  for (const platform of await platformItems.all()) await expect(platform).toBeVisible();
+  await expect(custom.getByRole('button', { name: '联系销售', exact: true })).toBeVisible();
+  await expect(stats).toBeVisible();
   await custom.screenshot({ path: info.outputPath('enterprise-services-mobile.png') });
-  await custom.getByRole('button', { name: '咨询定制方案', exact: true }).focus();
+  await custom.getByRole('button', { name: '联系销售', exact: true }).focus();
   await page.keyboard.press('Enter');
-  await expect(contact.getByRole('heading')).toHaveText('添加企业微信联系商务经理');
+  await expect(contact.getByRole('heading')).toHaveText('添加企业微信联系销售');
   expect(await page.evaluate(() => localStorage.getItem('chuhai-credits-v1:demo'))).toBeNull();
 });

@@ -21,6 +21,7 @@ import { Card, Button, Badge, Dialog, DialogContent, DialogTitle, DialogDescript
 import { PageHeader } from '@/components/shared';
 import { cn } from '@/lib/utils';
 import { computed, ref } from 'vue';
+import { TabsRoot, TabsList, TabsTrigger, TabsContent } from 'reka-ui';
 
 const accountSelections = ref<Record<string, boolean>>({ p500: true, p1000: true, p2000: true, p5000: true });
 const paidPacks = computed(() =>
@@ -137,10 +138,21 @@ function changePaymentAccounts(event: Event) {
     <div class="mx-auto max-w-[1180px] space-y-8">
       <EnterpriseServices @contact="openRecharge(customPack)" />
 
-      <div class="space-y-5" aria-label="购买与充值">
-        <section
-          v-for="tab in purchaseTabs.filter((item) => item.key === activePurchaseTab)"
+      <TabsRoot v-model="activePurchaseTab" class="space-y-5" aria-label="购买与充值">
+        <TabsList class="flex gap-6 border-b border-slate-200" aria-label="购买类型">
+          <TabsTrigger
+            v-for="tab in purchaseTabs"
+            :key="tab.key"
+            :value="tab.key"
+            class="-mb-px border-b-2 border-transparent px-1 pb-3 pt-1 text-sm font-medium text-slate-500 transition hover:text-sky-600 focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-sky-500 data-[state=active]:border-sky-500 data-[state=active]:text-sky-600"
+          >
+            {{ tab.label }}
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent
+          v-for="tab in purchaseTabs"
           :key="tab.key"
+          :value="tab.key"
           class="space-y-4 outline-none"
         >
           <div class="grid grid-cols-1 items-stretch sm:grid-cols-2 gap-3 pt-3 md:grid-cols-4">
@@ -261,8 +273,8 @@ function changePaymentAccounts(event: Event) {
               <PackageBenefits v-if="tab.key === 'bundle'" :benefits="pack.benefits" />
             </Card>
           </div>
-        </section>
-      </div>
+        </TabsContent>
+      </TabsRoot>
     </div>
 
     <Dialog v-model:open="paymentOpen">
@@ -390,13 +402,13 @@ function changePaymentAccounts(event: Event) {
         <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-50 text-sky-600">
           <MessageCircle class="h-6 w-6" />
         </div>
-        <DialogTitle class="mt-3 text-[18px] text-slate-900">添加企业微信联系商务经理</DialogTitle>
+        <DialogTitle class="mt-3 text-[18px] text-slate-900">添加企业微信联系销售</DialogTitle>
         <DialogDescription class="mt-1.5 text-[13px] leading-5 text-slate-500">
-          <template v-if="selectedPack?.custom">定制化方案请扫码添加商务经理沟通需求。</template>
+          <template v-if="selectedPack?.custom">定制化方案请扫码添加销售沟通需求。</template>
           <template v-else-if="selectedPack">
-            已选「{{ selectedPack.price }}」充值档位，扫码添加后由商务经理协助完成充值。
+            已选「{{ selectedPack.price }}」充值档位，扫码添加后由销售协助完成充值。
           </template>
-          <template v-else>扫码添加企业微信，由商务经理协助完成积分充值。</template>
+          <template v-else>扫码添加企业微信，由销售协助完成积分充值。</template>
         </DialogDescription>
 
         <div

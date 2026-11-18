@@ -66,6 +66,6 @@ test('充值扫码演示、余额同步与刷新恢复', async ({ page }, info) 
   );
   await page.keyboard.press('Escape');
   await expect(page.getByLabel('积分余额', { exact: true })).toHaveText('4,045');
-  await page.getByRole('button', { name: '联系商务', exact: true }).click();
-  await expect(dialog.getByRole('heading')).toHaveText('添加企业微信联系商务经理');
+  await page.getByRole('button', { name: '联系销售', exact: true }).click();
+  await expect(dialog.getByRole('heading')).toHaveText('添加企业微信联系销售');
 });

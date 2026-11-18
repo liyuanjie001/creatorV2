@@ -6,7 +6,11 @@ const token = createHash('sha256')
   .update(loadEnv('production', process.cwd(), 'password').password ?? '')
   .digest('hex');
 
-const accountHelp = ['美国 TikTok 账号，付款后自动到账', '可直接通过本平台发布视频、图文等作品'];
+const accountHelp = [
+  '美国 TikTok 账号，付款后自动到账',
+  '可直接通过本平台发布视频、图文等作品',
+  '购买套餐时，可选择是否勾选账号使用权',
+];
 const bundleExpectations = [
   {
     price: '¥500',
@@ -538,16 +542,26 @@ for (const pack of bundleExpectations) {
     await expect(page.getByLabel('待领取帐号提示')).toHaveCount(0);
   });
 }
-test('隐藏充值页签，保留个人中心入口、说明内容及独立积分充值', async ({ page }, info) => {
+test('展示套餐和积分充值页签，保留个人中心入口、说明内容及独立积分充值', async ({ page }, info) => {
   await page.goto('/#/purchase');
   await page.getByRole('button', { name: '账号购买说明', exact: true }).first().hover();
   const tip = page.getByRole('tooltip');
   for (const text of accountHelp) await expect(tip).toContainText(text);
-  await expect(page.locator('ol:visible > li')).toHaveCount(2);
+  await expect(page.locator('ol:visible > li')).toHaveCount(3);
   await expect(tip).not.toContainText(/所有权|登录信息/);
   await page.getByRole('heading', { name: '套餐购买', exact: true }).hover();
   await expect(tip).toBeHidden();
-  await expect(page.getByRole('tab')).toHaveCount(0);
+  await expect(page.getByRole('tab')).toHaveCount(2);
+  const bundleTab = page.getByRole('tab', { name: '套餐', exact: true });
+  const creditsTab = page.getByRole('tab', { name: '积分充值', exact: true });
+  await expect(bundleTab).toHaveAttribute('aria-selected', 'true');
+  await creditsTab.click();
+  await expect(creditsTab).toHaveAttribute('aria-selected', 'true');
+  await expect(page).toHaveURL(/#\/purchase\?tab=credits$/);
+  await expect(page.getByRole('tabpanel')).toHaveAccessibleName('积分充值');
+  await creditsTab.press('ArrowLeft');
+  await expect(bundleTab).toBeFocused();
+  await expect(bundleTab).toHaveAttribute('aria-selected', 'true');
   const benefits = page.getByLabel('平台功能权益');
   await expect(benefits).toHaveCount(4);
   for (let index = 0; index < 4; index++)
@@ -555,7 +569,8 @@ test('隐藏充值页签，保留个人中心入口、说明内容及独立积�
   await page.getByRole('button', { name: '个人中心', exact: true }).click();
   await page.getByRole('button', { name: '积分充值', exact: true }).click();
   await expect(page.getByRole('heading', { name: '积分充值', exact: true })).toBeVisible();
-  await expect(page.getByRole('tab')).toHaveCount(0);
+  await expect(page.getByRole('tab')).toHaveCount(2);
+  await expect(creditsTab).toHaveAttribute('aria-selected', 'true');
   const panel = page.getByLabel('购买与充值');
   await expect(panel.getByLabel('套餐社媒帐号权益')).toHaveCount(0);
   await expect(panel.getByLabel('平台功能权益')).toHaveCount(0);
@@ -574,8 +589,10 @@ test('隐藏充值页签，保留个人中心入口、说明内容及独立积�
   await expect(page.getByLabel('积分余额', { exact: true })).toHaveText('1,141');
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.getByRole('heading', { name: '积分充值', exact: true })).toBeVisible();
+  await expect(creditsTab).toBeVisible();
+  await expect(creditsTab).toHaveAttribute('aria-selected', 'true');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-  await page.getByRole('button', { name: '返回套餐', exact: true }).click();
+  await bundleTab.click();
   await expect(page).toHaveURL(/#\/purchase$/);
   await expect(page.getByRole('heading', { name: '套餐购买', exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
