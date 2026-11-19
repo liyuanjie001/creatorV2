@@ -140,12 +140,11 @@ test('定制服务卡片随内容自适应，完整展示平台并支持联系�
   await expect(custom.getByRole('heading', { name: /让品牌内容，\s*规模化走向全球/ })).toBeVisible();
   await expect(custom).toContainText('定制适合业务的增长工作流');
   const stats = custom.getByLabel('服务规模数据');
-  await expect(stats).toContainText('品牌与团队');
+  await expect(stats).toContainText('服务品牌与团队');
   await expect(stats).toContainText('1,200+');
   await expect(stats).toContainText('已生成视频');
   await expect(stats).toContainText('240万+');
-  await expect(stats).toContainText('覆盖社媒平台');
-  await expect(stats.locator('dd').last()).toHaveText('6 个');
+  await expect(stats.locator('dd')).toHaveText(['1,200+', '240万+']);
   await expect(custom).not.toContainText('示例');
   const platformItems = custom.getByRole('list', { name: '覆盖社媒平台', exact: true }).getByRole('listitem');
   await expect(platformItems).toHaveText(['TikTok', 'Instagram', 'YouTube', 'Facebook', 'X', 'LinkedIn']);

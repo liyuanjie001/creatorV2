@@ -131,14 +131,9 @@ function changePaymentAccounts(event: Event) {
           : '选择适合你的版本；所选账号使用权付款后自动到账'
       "
     />
-    <Button v-if="activePurchaseTab === 'credits'" variant="outline" @click="activePurchaseTab = 'bundle'">
-      返回套餐
-    </Button>
-
-    <div class="mx-auto max-w-[1180px] space-y-8">
+    <div class="mx-auto max-w-[1360px] space-y-6">
       <EnterpriseServices @contact="openRecharge(customPack)" />
-
-      <TabsRoot v-model="activePurchaseTab" class="space-y-5" aria-label="购买与充值">
+      <TabsRoot v-model="activePurchaseTab" class="mx-auto max-w-[1180px] space-y-5" aria-label="购买与充值">
         <TabsList class="flex gap-6 border-b border-slate-200" aria-label="购买类型">
           <TabsTrigger
             v-for="tab in purchaseTabs"
