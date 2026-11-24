@@ -11,11 +11,12 @@ import { currentUser } from './identity';
 import { writeJSON } from './storage';
 import type { StudioState } from '@/types/studio';
 import { recordSyncFailure } from './notifications';
+import { workspaceOwnerId } from './team';
 function syncPurchasedAccounts(message: string) {
-  const owner = currentUser.value!.id;
+  const owner = workspaceOwnerId();
   const next = JSON.parse(JSON.stringify(studio.value)) as StudioState;
   if (!recoverPurchasedAccounts(next, owner)) return;
-  if (!writeJSON('chuhai-studio-v1:' + owner, next)) throw new Error(message);
+  if (!writeJSON(`chuhai-studio-v1:${owner}`, next)) throw new Error(message);
   studio.value = next;
 }
 

@@ -6,7 +6,7 @@ import { identityService, sendCode } from '@/services/identity';
 import { unlockDestination } from '@/lib/access';
 const route = useRoute(); const router = useRouter();
 const page = ref<'login' | 'register' | 'reset' | 'google'>('login');
-const loginMode = ref<'code' | 'password'>('code');
+const loginMode = ref<'code' | 'password'>(route.query.mode === 'password' ? 'password' : 'code');
 const identity = ref(''); const prefix = ref('+86'); const password = ref(''); const code = ref(''); const invite = ref(''); const showInvite = ref(false);
 const error = ref(''); const notice = ref(''); const busy = ref(false);
 const sentTo = ref(''); const resendAt = ref(0); const now = ref(Date.now());
@@ -74,12 +74,12 @@ async function googleLogin() {
       <header class="mb-7 text-center"><h1 class="text-[26px] font-semibold tracking-tight text-slate-900">{{ title }}</h1><p class="mt-2.5 text-[13px] text-slate-400">{{ subtitle }}</p></header>
       <template v-if="page === 'login' || page === 'register'">
         <button type="button" class="studio-btn !h-11 w-full !gap-3 !rounded-xl" :disabled="busy" @click="googleLogin"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.09-1.93 3.27-4.77 3.27-8.1Z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.65l-3.57-2.77c-.98.66-2.24 1.06-3.71 1.06-2.87 0-5.3-1.94-6.17-4.54H2.15v2.84A11 11 0 0 0 12 23Z"/><path fill="#FBBC05" d="M5.83 14.1a6.6 6.6 0 0 1 0-4.2V7.06H2.15a11 11 0 0 0 0 9.88Z"/><path fill="#EA4335" d="M12 5.36c1.62 0 3.06.56 4.21 1.64l3.15-3.15A10.56 10.56 0 0 0 12 1a11 11 0 0 0-9.85 6.06L5.83 9.9C6.7 7.3 9.13 5.36 12 5.36Z"/></svg>使用 Google {{ page === 'register' ? '注册' : '登录' }}</button>
-        <div class="my-6 flex items-center gap-4 text-[11px] text-slate-400"><span class="h-px flex-1 bg-slate-100" />或使用手机号 / 邮箱<span class="h-px flex-1 bg-slate-100" /></div>
+        <div class="my-6 flex items-center gap-4 text-[11px] text-slate-400"><span class="h-px flex-1 bg-slate-100" />或使用 {{ page === 'login' && loginMode === 'password' ? '账号名 / 邮箱 / 手机号和密码' : '手机号 / 邮箱' }}<span class="h-px flex-1 bg-slate-100" /></div>
       </template>
       <form class="space-y-4" @submit.prevent="submit">
-        <div><label for="auth-identity" class="studio-label">{{ page === 'google' ? 'Google 邮箱' : '手机号 / 邮箱' }}</label><div class="flex gap-2">
+        <div><label for="auth-identity" class="studio-label">{{ page === 'google' ? 'Google 邮箱' : page === 'login' && loginMode === 'password' ? '账号名 / 邮箱 / 手机号' : '手机号 / 邮箱' }}</label><div class="flex gap-2">
           <select v-if="method === 'phone' && !international" v-model="prefix" class="studio-field !h-11 !w-24 shrink-0" aria-label="国家区号"><option>+86</option><option>+1</option><option>+44</option><option>+65</option><option>+81</option></select>
-          <input id="auth-identity" v-model="identity" class="studio-field !h-11 min-w-0" :type="page === 'google' ? 'email' : 'text'" required :placeholder="page === 'google' ? 'you@gmail.com' : '请输入手机号或邮箱'" autocomplete="username" autocapitalize="none" spellcheck="false" :disabled="busy">
+          <input id="auth-identity" v-model="identity" class="studio-field !h-11 min-w-0" :type="page === 'google' ? 'email' : 'text'" required :placeholder="page === 'google' ? 'you@gmail.com' : page === 'login' && loginMode === 'password' ? '请输入受邀账号名、邮箱或手机号' : '请输入手机号或邮箱'" autocomplete="username" autocapitalize="none" spellcheck="false" :disabled="busy">
         </div></div>
         <div v-if="needsCode"><label for="auth-code" class="studio-label">验证码</label><div class="flex gap-2"><input id="auth-code" v-model="code" class="studio-field !h-11 min-w-0" placeholder="请输入验证码" required inputmode="numeric" maxlength="6" autocomplete="one-time-code"><button class="studio-btn !h-11 shrink-0 !text-sky-600" :disabled="countdown > 0 || busy" type="button" @click="send">{{ countdown ? `${countdown}s 后重发` : '发送验证码' }}</button></div><p v-if="sentTo === normalized && resendAt > now" role="status" class="mt-2 text-[11px] text-sky-600">演示验证码：123456（5 分钟有效）</p></div>
         <div v-if="!needsCode || page !== 'login'"><label for="auth-password" class="studio-label">{{ page === 'google' ? '已有帐号密码（绑定时填写）' : page === 'login' ? '登录密码' : '设置新密码' }}</label><input id="auth-password" v-model="password" class="studio-field !h-11" type="password" :required="page !== 'google'" :minlength="page === 'login' || page === 'google' ? 1 : 8" :autocomplete="page === 'register' || page === 'reset' ? 'new-password' : 'current-password'" :placeholder="page === 'login' ? '请输入密码' : page === 'google' ? '绑定已有帐号时需验证原密码' : '至少 8 位字符'"></div>

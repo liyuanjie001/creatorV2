@@ -1,7 +1,7 @@
 import { createRouter, createWebHashHistory, type RouterHistory } from 'vue-router';
-import { currentUser } from '@/services/identity';
+import { currentUser, identityService } from '@/services/identity';
 import { accessGate, unlockDestination } from '@/lib/access';
-import { canEditProject, canUseAccount, isTeamAdmin, isTeamMember } from '@/services/team';
+import { canEditProject, canUseAccount, currentMember, isTeamAdmin, isTeamMember } from '@/services/team';
 
 export function createAppRouter(history: RouterHistory = createWebHashHistory(), gate = accessGate) {
   const router = createRouter({
@@ -62,6 +62,10 @@ export function createAppRouter(history: RouterHistory = createWebHashHistory(),
       return gate.isUnlocked() ? { path: unlockDestination(to.query.redirect), replace: true } : true;
     }
     if (!gate.isUnlocked()) return { name: 'unlock', query: { redirect: to.fullPath }, replace: true };
+    if (isTeamMember.value && !currentMember.value) {
+      identityService.logout();
+      return { name: 'auth', replace: true };
+    }
     if (!currentUser.value && to.name !== 'auth')
       return { name: 'auth', query: { redirect: to.fullPath }, replace: true };
     if (currentUser.value && to.name === 'auth')

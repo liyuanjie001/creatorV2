@@ -4,6 +4,7 @@ import { studio, startGeneration } from './studio';
 import { blankAttributes } from './studio';
 import { now, uid, writeJSON, readJSON } from './storage';
 import { currentUser } from './identity';
+import { workspaceOwnerId } from './team';
 export const agentImage = (kind: string) => `/agent-${kind}.svg`;
 const f = (key: string, label: string, value: string, type: AgentField['type'] = 'textarea'): AgentField => ({
   key,
@@ -33,12 +34,12 @@ function check(t: AgentTask) {
 }
 export function loadAgent(session: ExpertSession): AgentTask | undefined {
   return readJSON<AgentTask | undefined>(
-    `chuhai-agent-v1:${currentUser.value?.id}:${session.id}`,
+    `chuhai-agent-v1:${workspaceOwnerId()}:${session.id}`,
     () => undefined,
   );
 }
 export function saveAgent(t: AgentTask) {
-  if (!writeJSON(`chuhai-agent-v1:${currentUser.value?.id}:${t.sessionId}`, t))
+  if (!writeJSON(`chuhai-agent-v1:${workspaceOwnerId()}:${t.sessionId}`, t))
     throw new Error('任务保存失败，当前编辑已保留，请重试保存');
 }
 export function createAgent(s: ExpertSession, request: string, demo = false, intentFlow = false): AgentTask {
@@ -921,7 +922,7 @@ export function saveAgentProduct(t: AgentTask, c: AgentCard, s: ExpertSession) {
   const existing = studio.value.products.find(p => p.id === id);
   const product = { ...existing, id, projectId: t.projectId, name, price: existing?.price ?? '待核实', sales: existing?.sales ?? '未采集', sellingPoint: points.join('；'), points, imageMediaId: c.imageMediaId, targetMarket: value(c, 'market'), desc: 'Agent 模拟分析草稿，产品事实需人工核实。' };
   const products = [...studio.value.products.filter(p => p.id !== id), product];
-  if (!writeJSON(`chuhai-studio-v1:${currentUser.value?.id ?? 'guest'}`, { ...studio.value, products })) throw new Error('产品卡保存失败，请重试');
+  if (!writeJSON(`chuhai-studio-v1:${workspaceOwnerId()}`, { ...studio.value, products })) throw new Error('产品卡保存失败，请重试');
   studio.value.products = products;
   t.savedProductId = id;
   if (!s.productIds.includes(id)) s.productIds.push(id);

@@ -48,7 +48,7 @@ function accountLabel(id: string) {
 }
 function projectLabel(id: string) { return activeProjects.value.find(item => item.id === id)?.name ?? id; }
 function invitation(member: { name: string; identity: string; password: string; role: TeamRole }) {
-  return `你已被邀请加入「${currentUser.value?.name ?? '团队'}」内容工作区\n登录账号：${member.identity}\n初始密码：${member.password}\n角色：${member.role === 'admin' ? '管理员' : '创作者'}\n入口：${window.location.origin}${window.location.pathname}#/auth`;
+  return `你已被邀请加入「${currentUser.value?.name ?? '团队'}」内容工作区\n登录账号：${member.identity}\n初始密码：${member.password}\n登录方式：密码登录\n角色：${member.role === 'admin' ? '管理员' : '创作者'}\n入口：${window.location.origin}${window.location.pathname}#/auth?mode=password`;
 }
 async function copy(text: string) {
   inviteText.value = text;
@@ -62,7 +62,6 @@ async function create() {
   busy.value = true; error.value = '';
   try {
     const created = await createMembers(drafts.value, creditsBalance.value);
-    const first = drafts.value[0]!;
     await copy(created.map((member, index) => invitation({ ...drafts.value[index]!, name: member.name, identity: member.identity })).join('\n\n'));
     toast.success(`已创建 ${created.length} 个成员账号`);
     drafts.value = [blank()];
@@ -101,7 +100,7 @@ function recover(member: TeamMember) {
 
     <template v-if="isTeamAdmin">
       <div class="grid gap-4 sm:grid-cols-3">
-        <Card class="border-slate-100 p-5"><div class="text-xs text-slate-400">团队成员</div><div class="mt-2 text-2xl font-semibold text-slate-800">{{ teamMembers.length }}</div><div class="mt-1 text-xs text-slate-400">含管理员本人</div></Card>
+        <Card class="border-slate-100 p-5"><div class="text-xs text-slate-400">团队成员</div><div class="mt-2 text-2xl font-semibold text-slate-800">{{ teamMembers.length }}</div><div class="mt-1 text-xs text-slate-400">当前有效成员</div></Card>
         <Card class="border-slate-100 p-5"><div class="text-xs text-slate-400">团队积分钱包</div><div class="mt-2 text-2xl font-semibold text-slate-800">{{ creditsBalance.toLocaleString() }}</div><div class="mt-1 text-xs text-slate-400">当前管理员余额</div></Card>
         <Card class="border-slate-100 p-5"><div class="text-xs text-slate-400">可分配积分</div><div class="mt-2 text-2xl font-semibold text-sky-600">{{ availableCredits.toLocaleString() }}</div><div class="mt-1 text-xs text-slate-400">已分配额度会暂时锁定</div></Card>
       </div>
