@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import { useRoute, useRouter, type RouteLocationRaw } from 'vue-router';
-import { ArrowRight, MousePointer2, Sparkles, X } from 'lucide-vue-next';
+import { ArrowRight, Gift, MousePointer2, Play, Sparkles, X } from 'lucide-vue-next';
+import { Button, Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui';
 import { currentUser } from '@/services/identity';
+import { confirmWelcomeCredits } from '@/services/credits';
 import { guideTour } from '@/services/guideTour';
-import { createProject, ensurePublishTask, studio } from '@/services/studio';
+import { createProject, studio } from '@/services/studio';
 
 const router = useRouter();
 const route = useRoute();
@@ -26,17 +28,12 @@ const steps = [
     targets: ['works-nav', 'works-upload'],
   },
   {
-    title: '去发布',
-    body: '这里是发布配置页面。先绑定 TikTok 账号并关联到项目，或选择已关联的账号，再确认文案、可见范围和发布时间。',
-    targets: ['publish-accounts', 'bind-account'],
-  },
-  {
-    title: '发布成功',
-    body: '发布成功后，在这里查看视频播放、点赞、评论和分享数据；切换到账号数据，可查看账号的粉丝与内容表现。',
-    targets: ['video-data', 'account-data', 'account-data-link'],
+    title: '账号管理',
+    body: '在这里统一管理已绑定的账号，查看授权状态、管理分组和备注。点击“绑定账号”添加账号，点击“数据看板”查看账号与内容表现。',
+    targets: ['accounts-nav', 'account-data', 'accounts-bind'],
   },
 ];
-const step = computed(() => progress.value?.step ?? 0);
+const step = computed(() => Math.min(progress.value?.step ?? 0, steps.length - 1));
 const current = computed(() => steps[step.value]!);
 const visible = computed(
   () =>
@@ -59,6 +56,25 @@ const projectName = ref('我的第一个项目');
 const busy = ref(false);
 const error = ref('');
 const retry = ref(0);
+const giftOpen = ref(false);
+const giftError = ref('');
+const giftReceived = ref(false);
+function showWelcomeGift() {
+  giftError.value = '';
+  giftReceived.value = false;
+  try {
+    const received = confirmWelcomeCredits();
+    guideTour.acknowledgeWelcomeGift();
+    if (!received) {
+      giftOpen.value = false;
+      return;
+    }
+    giftReceived.value = true;
+  } catch {
+    giftError.value = '积分到账状态暂时无法确认，请检查浏览器存储后重试。';
+  }
+  giftOpen.value = true;
+}
 const bubble = ref<HTMLElement>();
 const closeButton = ref<HTMLButtonElement>();
 type Rectangle = { x: number; y: number; width: number; height: number };
@@ -72,8 +88,27 @@ let mutationObserver: MutationObserver | undefined;
 
 watch(
   () => currentUser.value?.id,
-  (id) => guideTour.activate(id ?? null),
-  { immediate: true },
+  (id) => {
+    giftOpen.value = false;
+    giftError.value = '';
+    guideTour.activate(id ?? null);
+  },
+  { immediate: true, flush: 'sync' },
+);
+watch(
+  () => [currentUser.value?.id, progress.value?.status, route.fullPath],
+  () => {
+    const user = currentUser.value;
+    if (!user || user.teamOwnerId || user.id === 'demo' || !route.matched.length ||
+      ['auth', 'unlock'].includes(String(route.name))) {
+      giftOpen.value = false;
+      return;
+    }
+    if (['completed', 'skipped'].includes(progress.value?.status ?? '') &&
+      progress.value?.welcomeGift && !progress.value.welcomeGift.noticeShown)
+      showWelcomeGift();
+  },
+  { immediate: true, flush: 'post' },
 );
 watch(
   () => [route.fullPath, progress.value?.status, currentUser.value?.id],
@@ -91,26 +126,13 @@ watch(
 
 function destination(index: number): RouteLocationRaw {
   if (index === 0) return '/';
+  if (index === 3) return '/accounts';
   const selected = project.value!;
   guideTour.selectProject(selected.id);
   const path = `/projects/${selected.id}`;
   if (index === 1) return { path, query: { section: 'gen', mode: 'normal' } };
   if (index === 2) return { path, query: { section: 'publish', tab: 'creations' } };
-  if (index === 3) {
-    // Reuse an editable draft, or prepare the actual work's draft just as “去发布” does.
-    const draft = studio.value.tasks.find(
-      (t) =>
-        t.projectId === selected.id &&
-        ['待配置', '发布失败', '已取消'].includes(t.status) &&
-        studio.value.films.some((f) => f.id === t.filmId && f.resultKind !== 'script-breakdown'),
-    );
-    const film = studio.value.films.find(
-      (f) => f.projectId === selected.id && f.resultKind !== 'script-breakdown',
-    );
-    const task = draft ?? (film ? ensurePublishTask(film, undefined, true) : undefined);
-    return { path, query: { section: 'publish', tab: 'configure', ...(task ? { task: task.id } : {}) } };
-  }
-  return { path, query: { section: 'analytics', report: 'content' } };
+  return '/accounts';
 }
 
 watch(
@@ -129,7 +151,7 @@ watch(
     busy.value = true;
     error.value = '';
     try {
-      if (index > 0 && !project.value) {
+      if (index > 0 && index < 3 && !project.value) {
         guideTour.move(0);
         return;
       }
@@ -263,29 +285,6 @@ function move(index: number) {
   busy.value = true;
   guideTour.move(index);
 }
-async function showData(kind: 'video' | 'account') {
-  if (busy.value) return;
-  busy.value = true;
-  try {
-    if (kind === 'video') await router.push(destination(4));
-    else {
-      const account =
-        studio.value.accounts.find(
-          (a) =>
-            !a.deleted &&
-            a.status !== '已解绑' &&
-            (a.source === 'recharge' || project.value?.accountIds.includes(a.id)),
-        ) ?? studio.value.accounts.find((a) => !a.deleted && a.status !== '已解绑');
-      await router.push(account ? `/accounts/${account.id}` : '/accounts');
-    }
-    await nextTick();
-    refreshTargets(true);
-  } catch {
-    error.value = '数据页面暂时无法打开，请稍后重试。';
-  } finally {
-    busy.value = false;
-  }
-}
 onBeforeUnmount(() => {
   sequence++;
   release();
@@ -339,7 +338,7 @@ onBeforeUnmount(() => {
         </div>
         <p class="step-number" aria-live="polite">
           {{ String(step + 1).padStart(2, '0') }}
-          <span>/ 05</span>
+          <span>/ {{ String(steps.length).padStart(2, '0') }}</span>
         </p>
         <h2 id="guide-tour-title">{{ current.title }}</h2>
         <p id="guide-tour-description" class="bubble-body">{{ current.body }}</p>
@@ -348,26 +347,31 @@ onBeforeUnmount(() => {
           <input v-model="projectName" maxlength="60" aria-label="引导项目名称" @keydown.enter="move(1)" />
           <small>点击下一步将创建此项目，并打开自由创作页面。</small>
         </label>
-        <div v-if="step === 2 && !hasWorks" class="publish-animation" aria-label="作品进入发布配置的流程动画">
-          <span>我的作品</span>
-          <ArrowRight :size="14" />
-          <span class="animated-publish">
-            去发布
-            <MousePointer2 :size="16" />
-          </span>
-          <ArrowRight :size="14" />
-          <span>发布配置</span>
-        </div>
-        <p v-if="step === 3 && !hasWorks" class="bubble-hint">
-          当前项目还没有作品。可先绑定、关联账号；上传或创作作品后，即可配置并发布。
-        </p>
-        <template v-if="step === 4">
-          <p class="bubble-hint">这里介绍发布后的数据入口。尚未发布或采集时，页面会显示实际空状态。</p>
-          <div class="data-links">
-            <button :disabled="busy" @click="showData('video')">视频数据 ↗</button>
-            <button :disabled="busy" @click="showData('account')">账号数据 ↗</button>
+        <div v-if="step === 2 && !hasWorks" class="publish-animation" aria-label="视频发布演示动图占位">
+          <!-- Replace this preview with the publishing screencast GIF when it is ready. -->
+          <div class="publish-demo-placeholder" role="img" aria-label="视频发布演示，动图占位">
+            <div class="publish-demo-heading" aria-hidden="true">
+              <span>视频发布演示</span>
+              <span class="publish-demo-badge">动图占位</span>
+            </div>
+            <div class="publish-demo-center" aria-hidden="true">
+              <span class="publish-demo-play"><Play :size="22" fill="currentColor" /></span>
+              <span>从作品到发布</span>
+              <small>选择账号 · 配置内容 · 发布视频</small>
+            </div>
           </div>
-        </template>
+          <div class="publish-flow" aria-hidden="true">
+            <span>我的作品</span>
+            <ArrowRight :size="14" />
+            <span class="animated-publish">
+              去发布
+              <MousePointer2 :size="16" />
+            </span>
+            <ArrowRight :size="14" />
+            <span>发布配置</span>
+          </div>
+        </div>
+        <p v-if="step === 3" class="bubble-hint">绑定后可在项目设置中关联账号，用于作品发布；授权过期时，可在此重新授权。</p>
         <p v-if="error" role="alert" class="tour-error">
           {{ error }}
           <button @click="retry++">重试</button>
@@ -386,9 +390,9 @@ onBeforeUnmount(() => {
           <button
             class="tour-next"
             :disabled="busy"
-            @click="step === 4 ? guideTour.end('completed') : move(step + 1)"
+            @click="step === steps.length - 1 ? guideTour.end('completed') : move(step + 1)"
           >
-            {{ busy ? '正在打开…' : step === 4 ? '开始使用' : '下一步' }}
+            {{ busy ? '正在打开…' : step === steps.length - 1 ? '开始使用' : '下一步' }}
             <ArrowRight :size="16" />
           </button>
         </div>
@@ -396,6 +400,23 @@ onBeforeUnmount(() => {
       </section>
     </div>
   </Teleport>
+  <Dialog v-model:open="giftOpen">
+    <DialogContent class="max-w-sm rounded-2xl p-8 text-center" data-testid="welcome-gift">
+      <div class="mx-auto flex size-14 items-center justify-center rounded-2xl bg-sky-50 text-sky-500">
+        <Gift :size="28" />
+      </div>
+      <DialogTitle class="text-lg font-semibold">
+        {{ giftReceived ? '新用户赠送50积分已到账' : '赠送积分暂未确认到账' }}
+      </DialogTitle>
+      <DialogDescription>
+        {{ giftReceived ? '欢迎开启创作之旅，积分可用于平台视频创作。' : '恢复浏览器存储后可重试确认，无需重新注册或完成引导。' }}
+      </DialogDescription>
+      <p v-if="giftReceived" class="my-2 text-4xl font-semibold text-sky-500">+50 <span class="text-base">积分</span></p>
+      <p v-if="giftError" role="alert" class="text-sm text-rose-600">{{ giftError }}</p>
+      <Button v-if="giftReceived" class="w-full" @click="giftOpen = false">我知道了</Button>
+      <Button v-else class="w-full" @click="showWelcomeGift">重试</Button>
+    </DialogContent>
+  </Dialog>
 </template>
 
 <style scoped>
@@ -430,7 +451,7 @@ onBeforeUnmount(() => {
 .bubble-top > span,
 .bubble-actions,
 .tour-next,
-.publish-animation {
+.publish-flow {
   display: flex;
   align-items: center;
 }
@@ -506,13 +527,69 @@ h2 {
   font-size: 11px;
 }
 .publish-animation {
-  gap: 7px;
   margin-top: 16px;
-  padding: 15px 8px;
-  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
   background: #f8fafc;
   color: #64748b;
   font-size: 11px;
+}
+.publish-demo-placeholder {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: radial-gradient(ellipse at 50% 70%, #dbeafe 0%, transparent 65%), #f0f9ff;
+}
+.publish-demo-heading {
+  position: absolute;
+  inset: 12px 12px auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #475569;
+  font-size: 10px;
+}
+.publish-demo-badge {
+  padding: 2px 7px;
+  border: 1px dashed #bae6fd;
+  border-radius: 5px;
+  color: #0284c7;
+}
+.publish-demo-center {
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  padding-top: 22px;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 500;
+}
+.publish-demo-center small {
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 400;
+}
+.publish-demo-play {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  margin-bottom: 3px;
+  padding-left: 3px;
+  border-radius: 50%;
+  background: white;
+  color: #0ea5e9;
+  box-shadow: 0 3px 14px #0ea5e91a;
+  animation: demo-pulse 2s ease-in-out infinite;
+}
+.publish-flow {
+  justify-content: center;
+  gap: 9px;
+  padding: 12px 8px;
+  border-top: 1px solid #e2e8f0;
 }
 .animated-publish {
   position: relative;
@@ -526,17 +603,6 @@ h2 {
   right: -4px;
   bottom: -10px;
   animation: tour-click 2s ease-in-out infinite;
-}
-.data-links {
-  display: flex;
-  gap: 10px;
-  margin-top: 12px;
-}
-.data-links button {
-  padding: 7px 10px;
-  border: 1px solid #bae6fd;
-  border-radius: 8px;
-  color: #0284c7;
 }
 .step-dots {
   display: flex;
@@ -599,8 +665,18 @@ input:focus-visible {
     opacity: 1;
   }
 }
+@keyframes demo-pulse {
+  0%,
+  100% {
+    box-shadow: 0 3px 14px #0ea5e91a, 0 0 0 0 #38bdf826;
+  }
+  50% {
+    box-shadow: 0 3px 14px #0ea5e91a, 0 0 0 7px #38bdf800;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
-  .animated-publish svg {
+  .animated-publish svg,
+  .publish-demo-play {
     animation: none;
   }
 }

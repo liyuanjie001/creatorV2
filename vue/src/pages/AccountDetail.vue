@@ -10,6 +10,7 @@ import VideoDetails from '@/components/studio/VideoDetails.vue';
 import VideoInfo from '@/components/studio/VideoInfo.vue';
 import AccountViewsTrend from '@/components/studio/AccountViewsTrend.vue';
 import AccountAuthorization from '@/components/studio/AccountAuthorization.vue';
+import { canEditProject } from '@/services/team';
 const route = useRoute(),
   router = useRouter();
 const account = computed(() => studio.value.accounts.find((a) => a.id === route.params.id && !a.deleted));
@@ -27,7 +28,7 @@ const search = ref(''),
   details = ref<VideoRow | null>(null),
   auth = ref(false);
 const projects = computed(() =>
-  studio.value.projects.filter((p) => p.accountIds.includes(account.value?.id || '')),
+  studio.value.projects.filter((p) => p.accountIds.includes(account.value?.id || '') && canEditProject(p.id)),
 );
 const fields = computed(() =>
   account.value

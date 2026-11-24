@@ -49,7 +49,7 @@ const visibleNav = computed(() => mainNav.filter(item => item.to !== '/team' || 
         :key="item.to"
         :to="item.to"
         :aria-label="item.label"
-        :data-tour="item.to === '/' ? 'projects' : undefined"
+        :data-tour="item.to === '/' ? 'projects' : item.to === '/accounts' ? 'accounts-nav' : undefined"
         :class="
           cn(
             'flex w-full flex-col items-center gap-1 rounded-xl px-1 py-2.5 transition-colors',

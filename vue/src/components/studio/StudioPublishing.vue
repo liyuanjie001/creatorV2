@@ -4,7 +4,6 @@ import { useRoute, useRouter } from 'vue-router';
 import { Upload, Search, ArrowLeft, Sparkles, ChevronDown, Loader2, Heart, MessageCircle, Share2, Music2, House, UsersRound, Inbox, UserRound, Plus, X, GripVertical } from 'lucide-vue-next';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui';
 import { studio, blankAttributes, ensurePublishTask, submitPublish } from '@/services/studio';
-import { currentUser } from '@/services/identity';
 import { workspaceOwnerId, canUseAccount, isTeamAdmin } from '@/services/team';
 import { getMedia, saveMedia } from '@/services/media';
 import { uid, now } from '@/services/storage';

@@ -7,6 +7,7 @@ import { PageHeader, PlatformBadge } from '@/components/shared';
 import { useHomeProjects } from '@/composables/useHomeProjects';
 const { homeProjects: projects } = useHomeProjects();
 import { cn } from '@/lib/utils';
+import { isTeamAdmin } from '@/services/team';
 import { RouterLink } from 'vue-router';
 const statusStyle: Record<string, string> = {
   进行中: 'bg-sky-50 text-sky-600',
@@ -19,7 +20,7 @@ const statusStyle: Record<string, string> = {
   <div class="space-y-6">
     <PageHeader title="全部项目" desc="跨平台宣发项目的统一视图">
       <template #extra>
-        <RouterLink to="/projects/new">
+        <RouterLink v-if="isTeamAdmin" to="/projects/new">
           <Button size="sm" class="gap-2 brand-gradient text-white hover:opacity-90">
             <Plus class="h-4 w-4"></Plus>
             新建项目

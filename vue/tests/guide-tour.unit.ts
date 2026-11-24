@@ -4,6 +4,7 @@ import { createMemoryHistory } from 'vue-router';
 import App from '@/App.vue';
 import { createTourController, guideTour, tourKey } from '@/services/guideTour';
 import { currentUser } from '@/services/identity';
+import { creditsBalance, spendCredits } from '@/services/credits';
 import { blankAttributes, createProject, studio } from '@/services/studio';
 import { createAppRouter } from '@/router';
 import { ACCESS_STORAGE_KEY } from '@/lib/access';
@@ -36,14 +37,16 @@ test('仅新用户自动引导，进度及项目按用户保存，刷新续接�
   tour.move(2);
   const restored = createTourController(localStorage);
   restored.activate('new-user');
-  expect(restored.progress.value).toEqual({ version: 1, step: 2, status: 'in-progress', projectId: 'P-test' });
+  expect(restored.progress.value).toEqual({ version: 1, step: 2, status: 'in-progress', projectId: 'P-test', welcomeGift: { amount: 50, noticeShown: false } });
   restored.end('completed');
+  restored.acknowledgeWelcomeGift();
   restored.activate('old-user');
   expect(restored.progress.value).toBeNull();
   restored.activate('new-user');
   expect(restored.progress.value?.status).toBe('completed');
   restored.start('new-user');
   expect(restored.progress.value?.step).toBe(0);
+  expect(restored.progress.value?.welcomeGift?.noticeShown).toBe(true);
   restored.end('skipped');
   restored.activate('new-user');
   expect(restored.progress.value?.status).toBe('skipped');
@@ -61,7 +64,7 @@ test('损坏存储不自动弹出，存储失败时会话保留进度', () => {
   tour.end('skipped');
   tour.activate('other');
   tour.activate('new');
-  expect(tour.progress.value).toEqual({ version: 1, step: 3, status: 'skipped' });
+  expect(tour.progress.value).toEqual({ version: 1, step: 3, status: 'skipped', welcomeGift: { amount: 50, noticeShown: false } });
 });
 
 function login(id = 'fresh') {
@@ -87,8 +90,13 @@ function button(text: string) {
   return found;
 }
 async function click(text: string) { button(text).click(); await settle(); }
+function gift() { return document.querySelector<HTMLElement>('[data-testid="welcome-gift"]'); }
+async function dismissGift() {
+  Array.from(gift()!.querySelectorAll('button')).find(b => b.textContent?.trim() === '我知道了')!.click();
+  await settle();
+}
 
-test('新用户五步跳转实际页面，空作品仍可绑定账号并切换数据入口', async () => {
+test('新用户四步跳转实际页面，我的作品后直接展示账号管理并完成引导', async () => {
   login();
   guideTour.enroll('fresh');
   const router = await open('/accounts');
@@ -110,29 +118,27 @@ test('新用户五步跳转实际页面，空作品仍可绑定账号并切换�
   expect(wrapper!.find('[data-tour="works-upload"]').text()).toContain('上传本地作品');
   expect(document.querySelector('.publish-animation')).not.toBeNull();
   await click('下一步');
-  expect(router.currentRoute.value.query).toEqual({ section: 'publish', tab: 'configure' });
-  expect(wrapper!.find('[aria-label="发布配置页面"]').exists()).toBe(true);
-  expect(wrapper!.text()).toContain('请先选择要发布的作品');
-  await wrapper!.find('[data-tour="bind-account"]').trigger('click');
-  await settle();
-  expect(document.body.textContent).toContain('连接 TikTok 帐号');
-  expect(document.body.textContent).toContain('前往 TikTok 授权');
-  // Close the real authorization dialog before moving on.
-  document.querySelector<HTMLButtonElement>('[aria-label="关闭"]')!.click();
-  await settle();
-  await click('下一步');
-  expect(router.currentRoute.value.query).toEqual({ section: 'analytics', report: 'content' });
-  expect(wrapper!.find('[data-tour="video-data"]').exists()).toBe(true);
-  expect(wrapper!.text()).toContain('暂无符合条件的内容');
-  expect(document.querySelector('.tour-bubble')?.textContent).toContain('尚未发布或采集');
-  await click('账号数据 ↗');
   expect(router.currentRoute.value.path).toBe('/accounts');
+  expect(document.querySelector('#guide-tour-title')?.textContent).toBe('账号管理');
+  expect(document.querySelector('.step-number')?.textContent?.replace(/\s/g, '')).toBe('04/04');
+  expect(document.querySelectorAll('.step-dots span')).toHaveLength(4);
+  expect(wrapper!.find('[aria-label="账号管理页面"]').exists()).toBe(true);
+  expect(wrapper!.find('[data-tour="accounts-nav"]').exists()).toBe(true);
   expect(wrapper!.find('[data-tour="account-data"]').exists()).toBe(true);
-  await click('视频数据 ↗');
-  expect(router.currentRoute.value.query.section).toBe('analytics');
+  expect(wrapper!.find('[data-tour="accounts-bind"]').text()).toContain('绑定账号');
+  expect(document.querySelector('.data-links')).toBeNull();
+  await click('上一步');
+  expect(router.currentRoute.value.query.tab).toBe('creations');
+  await click('下一步');
+  expect(router.currentRoute.value.path).toBe('/accounts');
   await click('开始使用');
   expect(document.querySelector('.tour-bubble')).toBeNull();
+  expect(router.currentRoute.value.path).toBe('/accounts');
   expect(guideTour.progress.value?.status).toBe('completed');
+  expect(gift()?.textContent).toContain('新用户赠送50积分已到账');
+  expect(gift()?.textContent).toContain('+50');
+  expect(creditsBalance.value).toBe(50);
+  await dismissGift();
   expect(studio.value.films).toHaveLength(0);
   expect(studio.value.tasks).toHaveLength(0);
   expect(studio.value.accounts).toHaveLength(0);
@@ -140,9 +146,12 @@ test('新用户五步跳转实际页面，空作品仍可绑定账号并切换�
   await settle();
   expect(router.currentRoute.value.path).toBe('/');
   expect(document.querySelector('#guide-tour-title')?.textContent).toBe('项目');
+  await click('跳过');
+  expect(gift()).toBeNull();
+  expect(creditsBalance.value).toBe(50);
 });
 
-test('已有项目和作品使用实际发布草稿与账号选择，上一步及刷新保持项目', async () => {
+test('已有作品后直接进入账号管理，上一步及刷新保持项目，不自动创建发布草稿', async () => {
   login();
   const project = createProject('实际项目');
   const film = { id: 'actual-film', projectId: project.id, title: '已完成的作品', type: '视频' as const, source: '本地上传' as const, createdAt: new Date().toISOString(), duration: '15', ratio: '9:16', quality: '1080P', brief: '', productIds: [], version: 1, mediaIds: [], inPublishing: false, attributes: blankAttributes() };
@@ -157,33 +166,35 @@ test('已有项目和作品使用实际发布草稿与账号选择，上一步�
   expect(studio.value.films[0]!.title).toBe('已完成的作品');
   expect(document.querySelector('.publish-animation')).toBeNull();
   await click('下一步');
-  const task = studio.value.tasks[0]!;
-  expect(router.currentRoute.value.query.task).toBe(task.id);
-  expect(task.filmId).toBe(film.id);
-  expect(task.status).toBe('待配置');
-  expect(wrapper!.find('[data-tour="publish-accounts"]').exists()).toBe(true);
-  const picker = wrapper!.find('[data-tour="publish-accounts"] [aria-label="选择发布帐号"]');
-  await picker.trigger('click');
-  await settle();
-  const choose = document.querySelector<HTMLButtonElement>('[aria-label="选择 @actual"]')!;
-  expect(choose).not.toBeNull();
-  choose.click();
-  await settle();
-  expect(studio.value.tasks[0]!.accountId).toBe('actual-account');
+  expect(router.currentRoute.value.path).toBe('/accounts');
+  expect(studio.value.tasks).toHaveLength(0);
   await click('上一步');
+  expect(router.currentRoute.value.path).toBe(`/projects/${project.id}`);
   expect(router.currentRoute.value.query.tab).toBe('creations');
   await click('下一步');
-  expect(studio.value.tasks).toHaveLength(1);
+  expect(studio.value.tasks).toHaveLength(0);
   wrapper!.unmount(); wrapper = undefined;
   const restoredRouter = await open('/');
-  expect(restoredRouter.currentRoute.value.path).toBe(`/projects/${project.id}`);
-  expect(restoredRouter.currentRoute.value.query.task).toBe(task.id);
-  expect(document.querySelector('#guide-tour-title')?.textContent).toBe('去发布');
-  await click('下一步');
-  await click('账号数据 ↗');
-  expect(restoredRouter.currentRoute.value.path).toBe('/accounts/actual-account');
+  expect(restoredRouter.currentRoute.value.path).toBe('/accounts');
+  expect(document.querySelector('#guide-tour-title')?.textContent).toBe('账号管理');
   expect(wrapper!.text()).toContain('@actual');
-  expect(studio.value.tasks.every(t => t.status === '待配置')).toBe(true);
+  expect(studio.value.tasks).toHaveLength(0);
+  await click('上一步');
+  expect(restoredRouter.currentRoute.value.path).toBe(`/projects/${project.id}`);
+  expect(restoredRouter.currentRoute.value.query.tab).toBe('creations');
+});
+
+test.each([3, 4])('旧进度索引 %s 刷新直接打开第四步账号管理，不依赖项目或账号数据', async (oldStep) => {
+  localStorage.setItem(tourKey('fresh'), JSON.stringify({ version: 1, step: oldStep, status: 'in-progress' }));
+  login();
+  const router = await open('/');
+  expect(router.currentRoute.value.path).toBe('/accounts');
+  expect(document.querySelector('#guide-tour-title')?.textContent).toBe('账号管理');
+  expect(guideTour.progress.value?.step).toBe(3);
+  expect(document.querySelector('.step-number')?.textContent?.replace(/\s/g, '')).toBe('04/04');
+  expect(wrapper!.find('[aria-label="账号管理页面"]').exists()).toBe(true);
+  expect(studio.value.projects).toHaveLength(0);
+  expect(studio.value.accounts).toHaveLength(0);
 });
 
 test('跳过不创建项目；Escape关闭且不锁定背景；用户切换隔离', async () => {
@@ -194,6 +205,8 @@ test('跳过不创建项目；Escape关闭且不锁定背景；用户切换隔�
   await settle();
   expect(guideTour.progress.value?.status).toBe('skipped');
   expect(studio.value.projects).toHaveLength(0);
+  expect(gift()?.textContent).toContain('新用户赠送50积分已到账');
+  await dismissGift();
   guideTour.start('fresh'); await settle();
   login('existing'); await settle();
   expect(document.querySelector('.tour-bubble')).toBeNull();
@@ -231,4 +244,112 @@ test('路由守卫阻止跳转时可重试，快速重复点击不会创建多�
   expect(router.currentRoute.value.query.section).toBe('gen');
   expect(wrapper!.find('[data-tour="create-console"]').exists()).toBe(true);
   expect(document.querySelector('.tour-error')).toBeNull();
+});
+
+test.each(['跳过', '跳过引导', '关闭', 'Escape'])('%s 结束首次引导后只提示一次，刷新及重新登录不重发', async (ending) => {
+  guideTour.enroll('fresh'); login();
+  await open();
+  expect(creditsBalance.value).toBe(50);
+  expect(gift()).toBeNull();
+  if (ending === '跳过引导') await click('下一步');
+  if (ending === '关闭') document.querySelector<HTMLButtonElement>('[aria-label="关闭新手引导"]')!.click();
+  else if (ending === 'Escape') document.querySelector('[aria-label="关闭新手引导"]')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  else button(ending).click();
+  await settle();
+  expect(document.querySelector('.tour-bubble')).toBeNull();
+  expect(gift()?.textContent).toContain('新用户赠送50积分已到账');
+  expect(guideTour.progress.value?.welcomeGift?.noticeShown).toBe(true);
+  spendCredits(10);
+  // Closing and Escape use the shared dialog's normal dismissal behavior.
+  if (ending === '关闭') gift()!.querySelector<HTMLButtonElement>('[aria-label="关闭"]')!.click();
+  else if (ending === 'Escape') gift()!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  else await dismissGift();
+  await settle();
+  expect(gift()).toBeNull();
+  wrapper!.unmount(); wrapper = undefined;
+  currentUser.value = null; login();
+  await open();
+  expect(gift()).toBeNull();
+  expect(creditsBalance.value).toBe(40);
+  guideTour.start('fresh'); await settle();
+  await click('跳过');
+  expect(gift()).toBeNull();
+  expect(creditsBalance.value).toBe(40);
+});
+
+test('切换账号关闭到账弹窗，每个新用户独立提示，老用户及演示账号无赠送提示', async () => {
+  guideTour.enroll('fresh'); login(); await open(); await click('跳过');
+  expect(gift()).not.toBeNull();
+  login('existing'); await settle();
+  expect(gift()).toBeNull();
+  expect(creditsBalance.value).toBe(100);
+  guideTour.start('existing'); await settle(); await click('跳过');
+  expect(gift()).toBeNull();
+  guideTour.enroll('second'); login('second'); await settle(); await click('跳过');
+  expect(gift()?.textContent).toContain('新用户赠送50积分已到账');
+  expect(creditsBalance.value).toBe(50);
+  login('demo'); await settle();
+  guideTour.start('demo'); await settle(); await click('跳过');
+  expect(gift()).toBeNull();
+  login(); await settle();
+  expect(gift()).toBeNull();
+});
+
+test('首次通知前刷新可恢复已结束的引导并显示到账提示，兼容旧引导记录', async () => {
+  localStorage.setItem(tourKey('legacy'), JSON.stringify({ version: 1, step: 4, status: 'completed' }));
+  login('legacy'); await open();
+  expect(gift()).toBeNull();
+  expect(creditsBalance.value).toBe(100);
+  guideTour.start('legacy'); await settle(); await click('跳过');
+  expect(gift()).toBeNull();
+  wrapper!.unmount(); wrapper = undefined;
+  guideTour.enroll('fresh'); login();
+  guideTour.activate('fresh'); guideTour.end('completed');
+  await open();
+  expect(gift()?.textContent).toContain('新用户赠送50积分已到账');
+  await dismissGift();
+  wrapper!.unmount(); wrapper = undefined;
+  await open();
+  expect(gift()).toBeNull();
+});
+
+test('积分写入失败不提示到账，恢复后重试只发50积分', async () => {
+  guideTour.enroll('fresh');
+  const setItem = Storage.prototype.setItem;
+  const write = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (this: Storage, key, value) {
+    if (key === 'chuhai-credits-v1:fresh') throw new Error('quota');
+    setItem.call(this, key, value);
+  });
+  login(); await open();
+  expect(creditsBalance.value).toBe(0);
+  await click('跳过');
+  expect(gift()?.textContent).toContain('赠送积分暂未确认到账');
+  expect(gift()?.textContent).not.toContain('新用户赠送50积分已到账');
+  expect(guideTour.progress.value?.welcomeGift?.noticeShown).toBe(false);
+  write.mockRestore();
+  Array.from(gift()!.querySelectorAll('button')).find(b => b.textContent?.trim() === '重试')!.click();
+  await settle();
+  expect(gift()?.textContent).toContain('新用户赠送50积分已到账');
+  expect(creditsBalance.value).toBe(50);
+  await dismissGift();
+  guideTour.start('fresh'); await settle(); await click('跳过');
+  expect(gift()).toBeNull();
+  expect(creditsBalance.value).toBe(50);
+});
+
+test('到账通知标记保存失败可重试，不会重复入账', async () => {
+  guideTour.enroll('fresh'); login(); await open();
+  const setItem = Storage.prototype.setItem;
+  const write = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (this: Storage, key, value) {
+    if (key === tourKey('fresh') && JSON.parse(value).welcomeGift?.noticeShown) throw new Error('quota');
+    setItem.call(this, key, value);
+  });
+  await click('跳过');
+  expect(gift()?.textContent).toContain('赠送积分暂未确认到账');
+  expect(creditsBalance.value).toBe(50);
+  write.mockRestore();
+  Array.from(gift()!.querySelectorAll('button')).find(b => b.textContent?.trim() === '重试')!.click();
+  await settle();
+  expect(gift()?.textContent).toContain('新用户赠送50积分已到账');
+  expect(creditsBalance.value).toBe(50);
 });

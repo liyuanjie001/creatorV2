@@ -4,7 +4,6 @@ import { useRoute, useRouter } from 'vue-router';
 import { Play, Send, Download, Pencil, LayoutGrid, List, Trash2, RotateCcw, Search } from 'lucide-vue-next';
 import { studio, startGeneration, retryGeneration } from '@/services/studio';
 import { getMedia } from '@/services/media';
-import { currentUser } from '@/services/identity';
 import { workspaceOwnerId } from '@/services/team';
 import { downloadFile } from '@/services/storage';
 import { toast } from 'vue-sonner';

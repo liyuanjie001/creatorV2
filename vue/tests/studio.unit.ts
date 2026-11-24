@@ -7,6 +7,8 @@ import App from '@/App.vue';
 import { ACCESS_STORAGE_KEY } from '@/lib/access';
 import { createAppRouter } from '@/router';
 import { currentUser, identityService, DEMO_CODE, sendCode } from '@/services/identity';
+import { creditsBalance, spendCredits } from '@/services/credits';
+import { guideTour } from '@/services/guideTour';
 import { authorize, blankAttributes, contentMetrics, createProject, ensurePublishTask, parseReference, studio, submitPublish, tickStudio, validatePublish } from '@/services/studio';
 import { uid } from '@/services/storage';
 import type { Film } from '@/types/studio';
@@ -60,6 +62,35 @@ const localValues=Array.from({length:localStorage.length},(_,index)=>localStorag
 identityService.demo();expect(studio.value.projects.some(p=>p.id===demoProject.id)).toBe(true);
 });
 test('注册验证码身份校验和冷却生效',()=>{expect(()=>sendCode('bad','email')).toThrow();sendCode('person@example.com','email');expect(()=>sendCode('person@example.com','email')).toThrow('倒计时');});
+
+test.each(['email', 'phone', 'google', 'googleQuick', 'newUser'] as const)('%s 新账号登记50积分赠送，后续登录不重置余额', async (method) => {
+  installMemoryIndexedDB();
+  vi.stubGlobal('File', NodeFile);
+  const email = `welcome-${crypto.randomUUID()}@example.com`;
+  const phone = '+8613812345678';
+  const password = 'welcome-pass-123';
+  let user;
+  if (method === 'email' || method === 'phone') {
+    const identity = method === 'phone' ? phone : email;
+    sendCode(identity, method);
+    user = await identityService.register(identity, method, password, DEMO_CODE, '');
+  } else if (method === 'google') user = await identityService.google(email);
+  else if (method === 'googleQuick') user = await identityService.googleQuick();
+  else user = await identityService.newUser();
+  expect(guideTour.read(user.id)?.welcomeGift).toEqual({ amount: 50, noticeShown: false });
+  expect(creditsBalance.value).toBe(50);
+  expect(JSON.parse(localStorage.getItem(`chuhai-credits-v1:${user.id}`)!)).toMatchObject({ balance: 50, total: 50, welcomeGift: 50 });
+  spendCredits(10);
+  identityService.logout();
+  if (method === 'google') await identityService.google(email);
+  else if (method === 'googleQuick') await identityService.googleQuick();
+  else if (method === 'newUser') {
+    sendCode(user.identity, 'email');
+    await identityService.login(user.identity, '', DEMO_CODE);
+  } else await identityService.login(user.identity, password);
+  expect(currentUser.value?.id).toBe(user.id);
+  expect(creditsBalance.value).toBe(40);
+});
 test('新用户快捷入口保留独立身份、空白工作空间和演示用户数据', async () => {
   installMemoryIndexedDB();
   vi.stubGlobal('File', NodeFile);

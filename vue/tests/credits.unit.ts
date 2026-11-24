@@ -1,12 +1,16 @@
 import { beforeEach, expect, test, vi } from 'vitest';
 import { nextTick } from 'vue';
 import { currentUser } from '@/services/identity';
+import { guideTour } from '@/services/guideTour';
 import {
   completeRecharge,
   createRechargeOrder,
   socialAccountsRemaining,
   creditsBalance,
   creditsTotal,
+  confirmWelcomeCredits,
+  refreshRechargeAccount,
+  spendCredits,
   currentPackage,
   purchasePacks,
   rechargePacks,
@@ -24,8 +28,56 @@ beforeEach(async () => {
   vi.restoreAllMocks();
   localStorage.clear();
   currentUser.value = null;
+  guideTour.activate(null);
   await nextTick();
   await login('one');
+});
+
+test('新登记账号初始50积分已持久化，消费后重新登录不重发', async () => {
+  guideTour.enroll('new-credit');
+  await login('new-credit');
+  expect(creditsBalance.value).toBe(50);
+  expect(creditsTotal.value).toBe(50);
+  expect(JSON.parse(localStorage.getItem('chuhai-credits-v1:new-credit')!)).toMatchObject({ balance: 50, total: 50, welcomeGift: 50 });
+  spendCredits(12);
+  await login('one'); await login('new-credit');
+  refreshRechargeAccount();
+  expect(confirmWelcomeCredits()).toBe(true);
+  expect(creditsBalance.value).toBe(38);
+  expect(creditsTotal.value).toBe(50);
+});
+
+test('已有账本不被50积分覆盖，也不误报新用户赠送到账', async () => {
+  const ledger = JSON.stringify({ balance: 876, total: 1000, orders: [], claims: [] });
+  localStorage.setItem('chuhai-credits-v1:existing-credit', ledger);
+  guideTour.enroll('existing-credit');
+  await login('existing-credit');
+  expect(creditsBalance.value).toBe(876);
+  expect(confirmWelcomeCredits()).toBe(false);
+  expect(localStorage.getItem('chuhai-credits-v1:existing-credit')).toBe(ledger);
+});
+
+test('损坏的新用户账本不能被初始赠送覆盖', async () => {
+  guideTour.enroll('bad-credit');
+  localStorage.setItem('chuhai-credits-v1:bad-credit', '{');
+  await login('bad-credit');
+  expect(creditsBalance.value).toBe(0);
+  expect(() => confirmWelcomeCredits()).toThrow();
+  expect(localStorage.getItem('chuhai-credits-v1:bad-credit')).toBe('{');
+});
+
+test('演示账号和团队成员不发放新用户积分，成员保持分配额度', async () => {
+  guideTour.enroll('demo');
+  await login('demo');
+  expect(confirmWelcomeCredits()).toBe(false);
+  expect(creditsBalance.value).toBe(100);
+  localStorage.setItem('chuhai-team-v1:one', JSON.stringify({ ownerId: 'one', members: [{ id: 'member', active: true, credits: 23, creditLimit: 30 }] }));
+  guideTour.enroll('team:one:member');
+  currentUser.value = { id: 'team:one:member', name: '成员', identity: 'member@test.com', method: 'email', bindings: ['team'], teamOwnerId: 'one', teamMemberId: 'member', teamRole: 'creator' };
+  expect(creditsBalance.value).toBe(23);
+  expect(creditsTotal.value).toBe(30);
+  expect(confirmWelcomeCredits()).toBe(false);
+  expect(localStorage.getItem('chuhai-credits-v1:team:one:member')).toBeNull();
 });
 for (const pack of Object.keys(purchasePacks) as PurchasePackKey[]) {
   test(`${pack} 按档位增加余额及总额度`, () => {

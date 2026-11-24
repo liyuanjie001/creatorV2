@@ -7,7 +7,6 @@ import {
   type RechargeOrder,
 } from './credits';
 import { studio } from './studio';
-import { currentUser } from './identity';
 import { writeJSON } from './storage';
 import type { StudioState } from '@/types/studio';
 import { recordSyncFailure } from './notifications';

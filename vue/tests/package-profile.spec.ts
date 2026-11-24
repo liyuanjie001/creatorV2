@@ -143,13 +143,13 @@ test('权益按分类平铺，个人版和团队版对应参考表，窄屏无�
     for (let i = 0; i < names.length; i++) {
       const card = page.getByRole('article', { name: `${names[i]}套餐` });
       const benefits = card.getByLabel('平台功能权益', { exact: true });
-      await expect(benefits.getByRole('heading')).toHaveText(edition === '个人版'
+      await expect(benefits.getByRole('heading', { level: 4 })).toHaveText(edition === '个人版'
         ? ['AI 创作', '账号与发布', '数据分析'] : ['团队协作', 'AI 创作', '账号与发布', '数据分析']);
-      await expect(benefits.getByRole('listitem')).toHaveCount(edition === '个人版' ? 18 : 23);
+      await expect(benefits.getByRole('listitem')).toHaveCount([11, 15, 18, 18][i]! + (edition === '团队版' ? 5 : 0));
       await expect(benefits.getByText(`可绑定发布账号的个数（${[2, 5, 10, 30][i]}个）`, { exact: true })).toBeVisible();
       await expect(benefits.getByText('可发布平台（全部平台）', { exact: true })).toBeVisible();
       await expect(benefits.getByText(`多任务并行（${['10个', '20个', '无限并行任务', '高级加速通道'][i]}）`, { exact: true })).toBeVisible();
-      await expect(benefits.locator('[data-supported="false"]')).toHaveCount([7, 3, 0, 0][i]!);
+      await expect(benefits.locator('[data-supported="false"]')).toHaveCount(0);
       const team = benefits.getByRole('region', { name: '团队协作', exact: true });
       if (edition === '团队版') {
         await expect(team.getByRole('listitem')).toHaveCount(5);

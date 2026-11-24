@@ -1,7 +1,7 @@
 import { computed } from 'vue';
 import { studio, createProject } from '@/services/studio';
 import type { Project } from '@/types/domain';
-import { visibleProjectIds, isTeamAdmin, canEditProject, requireTeamPermission } from '@/services/team';
+import { visibleProjectIds, isTeamAdmin, requireTeamPermission } from '@/services/team';
 const palette = ['#f472b6', '#11a3fd', '#f59e0b', '#10b981', '#8b5cf6'];
 export function resetHomeProjects() { studio.value.projects = []; }
 export function reloadHomeProjects() { return useHomeProjects().homeProjects.value; }

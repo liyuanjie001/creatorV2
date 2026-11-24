@@ -105,6 +105,15 @@ test('查询参数切换与旧地址重定向', async () => {
   expect(app.text()).toContain('两步验证已开启');
 });
 
+test('团队成员创建面板仅在点击邀请成员后打开', async () => {
+  const { app } = await open('/team');
+  expect(app.text()).not.toContain('创建成员账号');
+  await button('邀请成员').trigger('click');
+  await flushPromises();
+  expect(app.text()).toContain('创建成员账号');
+  expect(app.find('[aria-label="关闭创建成员面板"]').exists()).toBe(true);
+});
+
 test('创作控制台生成结果出现在我的创作', async () => {
   const { app } = await open('/create');
   await app.find('textarea').setValue('便携咖啡机露营场景');

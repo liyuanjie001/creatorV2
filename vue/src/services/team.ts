@@ -59,6 +59,8 @@ export const isTeamAdmin = computed(() => !isTeamMember.value || currentMember.v
 export const teamMembers = computed(() => team.value.members.filter(member => member.active));
 export const visibleProjectIds = computed(() => currentMember.value?.projectIds ?? null);
 export const visibleAccountIds = computed(() => currentMember.value?.accountIds ?? null);
+let transferWorkspaceAssets: ((memberId: string) => void) | undefined;
+export function registerTeamAssetTransfer(handler: (memberId: string) => void) { transferWorkspaceAssets = handler; }
 
 export function canManageTeam() { return isTeamAdmin.value; }
 export function canCreateContent() { return isTeamAdmin.value || currentMember.value?.role === 'creator'; }
@@ -190,6 +192,7 @@ export function removeMember(id: string) {
     for (const task of workspace.tasks ?? []) if (task.createdByMemberId === id) delete task.createdByMemberId;
     if (!writeJSON(workspaceKey, workspace)) throw new Error('资产归属转移失败，请稍后重试');
   }
+  transferWorkspaceAssets?.(id);
   commit({ ...team.value, members: team.value.members.map(value => value.id === id ? { ...value, active: false, credits: 0, projectIds: [], accountIds: [] } : value) });
   identityService.disableTeamMember(owner, id);
   return member;

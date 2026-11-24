@@ -48,6 +48,7 @@ import {
   matchesAuthorization,
 } from '@/services/accountManagement';
 import type { TKAccount } from '@/types/studio';
+import { canUseAccount, isTeamAdmin } from '@/services/team';
 const route = useRoute(),
   router = useRouter();
 function parameter(key: string) {
@@ -74,7 +75,7 @@ const group = computed(() =>
 );
 const status = computed(() => parameter('status'));
 const view = computed(() => (parameter('view') === 'grid' ? 'grid' : 'list'));
-const liveAccounts = computed(() => studio.value.accounts.filter((a) => !a.deleted));
+const liveAccounts = computed(() => studio.value.accounts.filter((a) => !a.deleted && (isTeamAdmin.value || canUseAccount(a.id))));
 const platformAccounts = computed(() =>
   liveAccounts.value.filter((a) => !parameter('platform') || accountPlatform(a) === parameter('platform')),
 );
@@ -307,7 +308,7 @@ async function refresh() {
         <option value="">全部分组</option>
         <option v-for="g in studio.groups" :key="g.id" :value="g.id">{{ g.name }}</option>
       </select>
-      <button class="studio-primary" @click="openAuth()">
+      <button data-tour="accounts-bind" class="studio-primary" @click="openAuth()">
         <Plus class="h-4 w-4" />
         绑定账号
       </button>

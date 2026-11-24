@@ -3,7 +3,6 @@ import type { ExpertSession } from '@/types/studio';
 import { studio, startGeneration } from './studio';
 import { blankAttributes } from './studio';
 import { now, uid, writeJSON, readJSON } from './storage';
-import { currentUser } from './identity';
 import { workspaceOwnerId } from './team';
 export const agentImage = (kind: string) => `/agent-${kind}.svg`;
 const f = (key: string, label: string, value: string, type: AgentField['type'] = 'textarea'): AgentField => ({

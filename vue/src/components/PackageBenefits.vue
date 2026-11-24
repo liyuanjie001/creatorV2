@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { Check, Info, X } from 'lucide-vue-next';
+import { Check, Info } from 'lucide-vue-next';
 import { TooltipProvider, TooltipRoot, TooltipTrigger, TooltipPortal, TooltipContent } from 'reka-ui';
 import { rechargeBenefitCategories, type RechargeBenefit } from '@/services/credits';
 
@@ -12,7 +12,7 @@ const sections = computed(() => {
     ? ['团队协作', ...rechargeBenefitCategories.filter(category => category !== '团队协作')]
     : rechargeBenefitCategories;
   return categories
-  .map(title => ({ title, items: props.benefits.filter(item => item.category === title) }))
+  .map(title => ({ title, items: props.benefits.filter(item => item.category === title && item.value !== false) }))
   .filter(section => section.items.length);
 });
 </script>
@@ -48,22 +48,18 @@ const sections = computed(() => {
         <li
           v-for="item in section.items"
           :key="item.label"
-          class="flex items-start gap-2 text-xs leading-5"
-          :class="item.value === false ? 'text-slate-400' : 'text-slate-700'"
-          :data-supported="item.value !== false"
+          class="flex items-start gap-2 text-xs leading-5 text-slate-700"
+          data-supported="true"
         >
-          <component
-            :is="item.value === false ? X : Check"
+          <Check
             aria-hidden="true"
-            class="mt-1 h-3 w-3 shrink-0"
-            :class="item.value === false ? 'text-slate-300' : 'text-sky-600'"
+            class="mt-1 h-3 w-3 shrink-0 text-sky-600"
             :stroke-width="2"
           />
           <span class="min-w-0 flex-1 break-words">
             {{ item.label }}<template v-if="inlineValueLabels.has(item.label)">（{{ item.label === '可绑定发布账号的个数' ? `${item.value}个` : item.value }}）</template>
           </span>
-          <span v-if="item.value === false" class="sr-only">不支持</span>
-          <span v-else-if="item.value !== true && !inlineValueLabels.has(item.label)" class="shrink-0 text-right font-medium tabular-nums text-slate-700">
+          <span v-if="item.value !== true && !inlineValueLabels.has(item.label)" class="shrink-0 text-right font-medium tabular-nums text-slate-700">
             {{ item.value }}
           </span>
         </li>

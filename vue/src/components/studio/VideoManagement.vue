@@ -34,7 +34,6 @@ import {
   type VideoRow,
 } from '@/services/videoManagement';
 import { getMedia } from '@/services/media';
-import { currentUser } from '@/services/identity';
 import { workspaceOwnerId } from '@/services/team';
 import type { StudioState } from '@/types/studio';
 import { downloadFile, writeJSON } from '@/services/storage';

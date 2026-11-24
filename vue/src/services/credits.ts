@@ -1,6 +1,7 @@
 import { computed, ref, watch } from 'vue';
 import { DateTime } from 'luxon';
 import { currentUser } from './identity';
+import { guideTour } from './guideTour';
 import { now, readJSON, uid, writeJSON } from './storage';
 import { assertCreditSpend, commitCreditSpend, currentMember, isTeamMember, workspaceOwnerId } from './team';
 import type { SocialPlatform, StudioState, TKAccount } from '@/types/studio';
@@ -278,11 +279,26 @@ export type AccountClaim = {
   items?: AccountClaimItem[];
   accounts: TKAccount[];
 };
-type CreditAccount = { balance: number; total: number; orders: RechargeOrder[]; claims: AccountClaim[] };
-const initial = (): CreditAccount => ({ balance: 100, total: 100, orders: [], claims: [] });
+type CreditAccount = { balance: number; total: number; orders: RechargeOrder[]; claims: AccountClaim[]; welcomeGift?: 50 };
+const initial = (balance = 100): CreditAccount => ({ balance, total: balance, orders: [], claims: [] });
 const key = (userId: string) => `chuhai-credits-v1:${userId}`;
 const account = ref<CreditAccount>(initial());
 function read(userId: string): CreditAccount {
+  const tour = guideTour.owner.value === userId ? guideTour.progress.value : guideTour.read(userId);
+  if (tour?.welcomeGift) {
+    // Only newly enrolled accounts get 50. Never replace an existing or unreadable ledger.
+    const raw = localStorage.getItem(key(userId));
+    if (raw === null) {
+      const value: CreditAccount = { ...initial(50), welcomeGift: 50 };
+      save(userId, value);
+      return value;
+    }
+    const value: CreditAccount = JSON.parse(raw);
+    if (!value || !Number.isFinite(value.balance) || !Number.isFinite(value.total) ||
+      !Array.isArray(value.orders) || (value.claims !== undefined && !Array.isArray(value.claims)))
+      throw new Error('积分读取失败，请检查浏览器存储后重试');
+    return { ...value, claims: value.claims ?? [] };
+  }
   const value = readJSON<CreditAccount>(key(userId), initial);
   return { ...value, claims: value.claims ?? [] };
 }
@@ -293,7 +309,12 @@ function save(userId: string, value: CreditAccount) {
 watch(
   () => currentUser.value ? workspaceOwnerId() : null,
   (ownerId) => {
-    account.value = ownerId ? read(ownerId) : initial();
+    try {
+      account.value = ownerId ? read(ownerId) : initial();
+    } catch {
+      // A failed welcome grant must not appear as a usable default balance.
+      account.value = initial(0);
+    }
   },
   { immediate: true, flush: 'sync' },
 );
@@ -301,13 +322,22 @@ export const creditsBalance = computed(() => isTeamMember.value ? currentMember.
 export const creditsTotal = computed(() => isTeamMember.value ? currentMember.value?.creditLimit ?? 0 : account.value.total);
 export const rechargeOrders = computed(() => account.value.orders);
 export const rechargeAccountClaims = computed(() => account.value.claims);
+export function confirmWelcomeCredits() {
+  const user = currentUser.value;
+  if (!user || user.id === 'demo' || user.teamOwnerId) return false;
+  const tour = guideTour.owner.value === user.id ? guideTour.progress.value : guideTour.read(user.id);
+  if (!tour?.welcomeGift) return false;
+  const value = read(user.id);
+  account.value = value;
+  return value.welcomeGift === 50;
+}
 // Reload persisted snapshots without settling pending orders or changing balances.
 export function refreshRechargeAccount() {
   if (isTeamMember.value) throw new Error('仅管理员可以查看团队充值账本');
   const owner = userId();
   try {
     const raw = localStorage.getItem(key(owner));
-    const value: CreditAccount = raw === null ? initial() : JSON.parse(raw);
+    const value: CreditAccount = raw === null ? read(owner) : JSON.parse(raw);
     if (
       !value ||
       !Number.isFinite(value.balance) ||
@@ -623,7 +653,8 @@ export function reserveSocialAccounts(requestId: string, input: AccountClaimInpu
   return claim;
 }
 export function recoverPurchasedAccounts(state: StudioState, owner: string) {
-  const delivered = read(owner).claims.flatMap((claim) => claim.accounts);
+  // Recover stored deliveries without initializing a wallet during workspace loading.
+  const delivered = (readJSON<CreditAccount>(key(owner), initial).claims ?? []).flatMap((claim) => claim.accounts);
   // Existing soft-deleted accounts are tombstones, so they are never restored.
   const missing = delivered.filter((item) => !state.accounts.some((existing) => existing.id === item.id));
   if (!missing.length) return false;

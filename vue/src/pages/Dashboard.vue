@@ -32,6 +32,7 @@ import { useHomeProjects } from '@/composables/useHomeProjects';
 import type { Project } from '@/types/domain';
 
 import { studio } from '@/services/studio';
+import { isTeamAdmin } from '@/services/team';
 
 const router = useRouter();
 const { homeProjects, addHomeProject, renameHomeProject, removeHomeProject } = useHomeProjects();
@@ -39,6 +40,7 @@ const createOpen = ref(false);
 const projectName = ref('');
 const creating = ref(false);
 const empty = computed(() => homeProjects.value.length === 0);
+const archivedProjects = computed(() => studio.value.projects.filter(project => project.archived));
 
 const renameOpen = ref(false);
 const renameTarget = ref<Project | null>(null);
@@ -128,10 +130,10 @@ function confirmDelete() {
 <template>
   <div data-tour="project-list" class="relative flex min-h-[calc(100vh-72px)] flex-col">
     <div class="flex-1 pb-6">
-    <details v-if="studio.projects.some(p => p.archived)" class="mb-5 rounded-xl border border-slate-200 p-4 text-xs text-slate-500"><summary class="cursor-pointer">已归档项目（{{ studio.projects.filter(p=>p.archived).length }}）</summary><div v-for="p in studio.projects.filter(p=>p.archived)" :key="p.id" class="mt-3 flex justify-between"><span>{{p.name}}</span><button class="text-sky-600" @click="p.archived=false">恢复项目</button></div></details>
+    <details v-if="isTeamAdmin && archivedProjects.length" class="mb-5 rounded-xl border border-slate-200 p-4 text-xs text-slate-500"><summary class="cursor-pointer">已归档项目（{{ archivedProjects.length }}）</summary><div v-for="p in archivedProjects" :key="p.id" class="mt-3 flex justify-between"><span>{{p.name}}</span><button class="text-sky-600" @click="p.archived=false">恢复项目</button></div></details>
     <section v-if="empty">
       <PageHeader title="项目" desc="创建和管理项目，使用 AI 创作出海视频" />
-      <Card class="gap-0 overflow-hidden rounded-2xl border-slate-200 bg-white py-0 shadow-none">
+      <Card v-if="isTeamAdmin" class="gap-0 overflow-hidden rounded-2xl border-slate-200 bg-white py-0 shadow-none">
         <div class="grid grid-cols-2 items-center gap-12 px-10 py-14">
           <div>
             <span
@@ -215,12 +217,13 @@ function confirmDelete() {
           </div>
         </div>
       </Card>
+      <Card v-else class="border-slate-200 p-10 text-center text-sm text-slate-500">你暂未获分配项目，请联系团队管理员。</Card>
     </section>
 
     <section v-else>
       <PageHeader title="我的项目" desc="创建和管理项目，使用 AI 创作出海视频">
         <template #extra>
-          <div class="flex items-center gap-2">
+          <div v-if="isTeamAdmin" class="flex items-center gap-2">
             <Button
               variant="outline"
               size="sm"
@@ -251,7 +254,7 @@ function confirmDelete() {
               {{ project.name }}
             </div>
           </button>
-          <div class="absolute right-2.5 top-[176px]">
+          <div v-if="isTeamAdmin" class="absolute right-2.5 top-[176px]">
             <DropdownMenu>
               <DropdownMenuTrigger as-child>
                 <button
@@ -282,7 +285,7 @@ function confirmDelete() {
             </DropdownMenu>
           </div>
         </div>
-        <button
+        <button v-if="isTeamAdmin"
           class="flex h-[220px] w-[280px] shrink-0 flex-none flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white text-slate-400 transition hover:border-sky-300 hover:text-sky-600"
           @click="createProject"
         >

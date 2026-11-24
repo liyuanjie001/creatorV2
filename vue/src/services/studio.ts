@@ -9,7 +9,7 @@ import type { ContentAttributes, Film, GenerationJob, PlatformContent, PublishTa
 import { currentUser } from './identity';
 import { now, readJSON, uid, writeJSON } from './storage';
 import { getMedia, saveMedia } from './media';
-import { canAuthorizeAccounts, canCreateContent, canEditProject, canPublish, canUseAccount, isTeamAdmin, requireTeamPermission, workspaceOwnerId } from './team';
+import { canAuthorizeAccounts, canCreateContent, canEditProject, canPublish, canUseAccount, isTeamAdmin, registerTeamAssetTransfer, requireTeamPermission, workspaceOwnerId } from './team';
 export const blankAttributes = (): ContentAttributes => ({ theme: '商品种草', product: '未分类', hook: '问题开场', scene: '日常生活', format: '产品展示', confirmed: false });
 function seed(owner: string): StudioState {
   const demo = owner === 'demo';
@@ -84,6 +84,10 @@ function load(owner: string) {
 }
 export const studio = ref<StudioState>(load(workspaceOwnerId()));
 export const storageError = ref('');
+registerTeamAssetTransfer((memberId) => {
+  studio.value.films.forEach(film => { if (film.createdByMemberId === memberId) delete film.createdByMemberId; });
+  studio.value.tasks.forEach(task => { if (task.createdByMemberId === memberId) delete task.createdByMemberId; });
+});
 watch(currentUser, () => { studio.value = load(workspaceOwnerId()); }, { flush: 'sync' });
 watch(studio, value => { if (!writeJSON(`chuhai-studio-v1:${workspaceOwnerId()}`, value)) storageError.value = '本地存储不可用，当前修改只能保留在本次会话'; else storageError.value = ''; }, { deep: true, flush: 'sync' });
 export function createProject(name: string, desc = '', color = '#11a3fd'): StudioProject {
