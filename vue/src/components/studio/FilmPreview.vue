@@ -2,6 +2,7 @@
 import { onBeforeUnmount, ref, watch } from 'vue';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui';
 import { currentUser } from '@/services/identity';
+import { workspaceOwnerId } from '@/services/team';
 import { getMedia } from '@/services/media';
 import type { Film } from '@/types/studio';
 const props = defineProps<{ film: Film | null }>();
@@ -14,7 +15,7 @@ watch(() => props.film, async film => {
   const request = ++revision;
   clear(); error.value = '';
   if (!film || !currentUser.value) return;
-  const owner = currentUser.value.id;
+  const owner = workspaceOwnerId();
   try {
     const blobs = await Promise.all(film.mediaIds.map(id => getMedia(owner, id)));
     if (request !== revision) return;

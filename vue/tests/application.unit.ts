@@ -302,7 +302,7 @@ test('离开灵感对话会取消尚未完成的生成', async () => {
   expect(loadIdeaNotes()).toHaveLength(before);
 });
 
-test('第一版创建校验项目名并进入工作区，返回首页展示项目卡', async () => {
+test('创建项目校验项目名并进入工作区，返回首页展示项目卡', async () => {
   const { projects } = await import('@/data/mock');
   const { resetHomeProjects } = await import('@/composables/useHomeProjects');
   const snapshot = [...projects];
@@ -313,16 +313,16 @@ test('第一版创建校验项目名并进入工作区，返回首页展示项�
     expect(app.text()).toContain('还没有项目');
     expect(app.text()).not.toContain('从模板新建');
     expect(app.text()).not.toContain('我参与的项目');
-    await button('创建项目').trigger('click');
+    await button('通过品牌创建').trigger('click');
     await flushPromises();
     expect(router.currentRoute.value.path).toBe('/projects/new');
     await router.push('/');
     await flushPromises();
-    await button('第一版创建').trigger('click');
+    await button('创建项目').trigger('click');
     await flushPromises();
-    expect(document.body.textContent).toContain('填写项目名称即可进入工作区');
+    expect(document.body.textContent).toContain('填写项目名称，创建后即可开始创作视频');
     const confirm = Array.from(document.querySelectorAll('button')).find(
-      (item) => item.textContent?.trim() === '创建',
+      (item) => item.textContent?.trim() === '创建并开始创作',
     );
     if (!confirm) throw new Error('创建按钮不存在');
     confirm.click();
@@ -401,22 +401,24 @@ test('离开首页再返回仍展示已创建的项目卡', async () => {
   }
 });
 
-test('项目页底部展示爆款视频，可查看更多与隐藏推荐', async () => {
+test('项目首页移除开始使用提示和爆款推荐，保留侧栏入口与项目创建', async () => {
   const { app, router } = await open('/');
-  expect(app.text()).toContain('爆款视频');
-  expect(app.text()).toContain('隐藏推荐');
-  expect(app.text()).toContain('查看更多');
-  expect(app.text()).toContain('精华实测');
-  await button('查看更多').trigger('click');
+  expect(app.text()).not.toContain('开始使用：');
+  expect(app.text()).not.toContain('隐藏推荐');
+  expect(app.text()).not.toContain('显示爆款推荐');
+  expect(app.text()).not.toContain('海外高热内容，可翻拍为项目素材');
+  expect(app.text()).toContain('创建项目');
+  const inspiration = app.get('a[aria-label="爆款视频"]');
+  await inspiration.trigger('click');
   await flushPromises();
   expect(router.currentRoute.value.path).toBe('/inspiration');
+  const { addHomeProject } = await import('@/composables/useHomeProjects');
+  addHomeProject({ name: '已有项目' });
   await router.push('/');
   await flushPromises();
-  await button('隐藏推荐').trigger('click');
-  await flushPromises();
+  expect(app.text()).toContain('已有项目');
   expect(app.text()).not.toContain('隐藏推荐');
-  expect(app.text()).toContain('显示爆款推荐');
-  expect(localStorage.getItem('chuhai-hide-home-hot-videos')).toBe('1');
+  expect(app.text()).not.toContain('海外高热内容，可翻拍为项目素材');
 });
 
 test('项目卡支持重命名与删除，删空后回到缺省页', async () => {

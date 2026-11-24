@@ -26,7 +26,6 @@ import {
   Input,
 } from '@/components/ui';
 import { PageHeader } from '@/components/shared';
-import ShowcaseCarousel from '@/components/ShowcaseCarousel.vue';
 import { toast } from 'vue-sonner';
 import { computed, ref } from 'vue';
 import { useHomeProjects } from '@/composables/useHomeProjects';
@@ -47,14 +46,6 @@ const renameName = ref('');
 
 const deleteOpen = ref(false);
 const deleteTarget = ref<Project | null>(null);
-
-const hotHidden = computed(() => studio.value.hiddenHot);
-function hideHotVideos() { studio.value.hiddenHot = true; try { localStorage.setItem('chuhai-hide-home-hot-videos', '1'); } catch { toast.error('浏览器存储不可用，推荐显示设置未保存'); } toast.success('已隐藏爆款推荐'); }
-function showHotVideos() { studio.value.hiddenHot = false; try { localStorage.removeItem('chuhai-hide-home-hot-videos'); } catch { toast.error('浏览器存储不可用，推荐显示设置未保存'); } }
-
-function openInspiration() {
-  void router.push('/inspiration');
-}
 
 function coverStyle(color: string) {
   return {
@@ -135,12 +126,11 @@ function confirmDelete() {
 </script>
 
 <template>
-  <div class="relative flex min-h-[calc(100vh-72px)] flex-col">
+  <div data-tour="project-list" class="relative flex min-h-[calc(100vh-72px)] flex-col">
     <div class="flex-1 pb-6">
     <details v-if="studio.projects.some(p => p.archived)" class="mb-5 rounded-xl border border-slate-200 p-4 text-xs text-slate-500"><summary class="cursor-pointer">已归档项目（{{ studio.projects.filter(p=>p.archived).length }}）</summary><div v-for="p in studio.projects.filter(p=>p.archived)" :key="p.id" class="mt-3 flex justify-between"><span>{{p.name}}</span><button class="text-sky-600" @click="p.archived=false">恢复项目</button></div></details>
-<div v-if="empty" class="mb-5 flex items-center justify-between rounded-xl bg-sky-50 p-4 text-xs text-sky-700"><span>开始使用：① 创建项目 → ② 授权 TK 帐号 → ③ 创作并发布</span><button class="underline" @click="router.push('/accounts')">授权帐号 →</button></div>
     <section v-if="empty">
-      <PageHeader title="项目" desc="创建和管理出海内容工作区，从第一版开始跑起来" />
+      <PageHeader title="项目" desc="创建和管理项目，使用 AI 创作出海视频" />
       <Card class="gap-0 overflow-hidden rounded-2xl border-slate-200 bg-white py-0 shadow-none">
         <div class="grid grid-cols-2 items-center gap-12 px-10 py-14">
           <div>
@@ -152,14 +142,14 @@ function confirmDelete() {
             <h2 class="mt-5 text-3xl font-semibold leading-snug tracking-tight text-slate-800">
               还没有项目，
               <br />
-              从这里开始创作
+              从这里开始创作视频
             </h2>
             <p class="mt-4 max-w-sm text-[13px] leading-7 text-slate-500">
-              填写项目名称即可进入工作区。产品卡、素材和账号可以之后再补，先把第一版跑起来。
+              为项目起个名字，即可进入工作区创作视频。产品卡、素材和发布账号可稍后添加。
             </p>
             <div class="mt-7 flex items-center gap-3">
               <Button class="brand-gradient text-white" @click="openCreate">
-                第一版创建
+                创建项目
                 <ArrowRight class="h-4 w-4" />
               </Button>
               <Button
@@ -167,10 +157,10 @@ function confirmDelete() {
                 class="border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-800"
                 @click="createProject"
               >
-                创建项目
+                通过品牌创建
               </Button>
             </div>
-            <p class="mt-3 text-[11px] text-slate-400">演示模式 · 创建后可立即进入工作区</p>
+            <p class="mt-3 text-[11px] text-slate-400">创建后即可进入工作区，开始视频创作</p>
           </div>
           <div class="relative rounded-2xl border border-sky-100 bg-gradient-to-br from-sky-50 via-white to-blue-50 p-6">
             <div class="mb-5 flex items-center gap-2 border-b border-sky-100 pb-4">
@@ -210,9 +200,9 @@ function confirmDelete() {
         <div class="grid grid-cols-3 border-t border-slate-100 bg-slate-50/60 px-10 py-6">
           <div
             v-for="(step, i) in [
-              { title: '填写项目名', desc: '第一版只需一个名称，即可生成工作区' },
-              { title: '进入工作区', desc: '打开自由创作，用 AI 对话框生成内容' },
-              { title: '补充项目资产', desc: '再添加产品卡、素材库和发布账号' },
+              { title: '创建项目', desc: '填写项目名称，开启创作工作区' },
+              { title: '创作视频', desc: '进入自由创作，告诉 AI 你的视频想法' },
+              { title: '完善项目资料', desc: '按需添加产品卡、素材和发布账号' },
             ]"
             :key="step.title"
             class="flex gap-3"
@@ -228,7 +218,7 @@ function confirmDelete() {
     </section>
 
     <section v-else>
-      <PageHeader title="我的项目" desc="创建和管理出海内容工作区，从第一版开始跑起来">
+      <PageHeader title="我的项目" desc="创建和管理项目，使用 AI 创作出海视频">
         <template #extra>
           <div class="flex items-center gap-2">
             <Button
@@ -237,11 +227,11 @@ function confirmDelete() {
               class="border-slate-200 text-slate-600 hover:text-slate-800"
               @click="createProject"
             >
-              创建项目
+              通过品牌创建
             </Button>
             <Button size="sm" class="brand-gradient gap-1.5 text-white hover:opacity-90" @click="openCreate">
               <Sparkles class="h-3.5 w-3.5" />
-              第一版创建
+              创建项目
             </Button>
           </div>
         </template>
@@ -303,49 +293,11 @@ function confirmDelete() {
     </section>
     </div>
 
-    <section v-if="!hotHidden" class="mt-auto bg-white pt-6">
-      <div class="mb-2 flex items-center justify-between">
-        <div>
-          <h2 class="text-[14px] font-medium text-slate-800">爆款视频</h2>
-          <p class="text-[11px] text-slate-400">海外高热内容，可翻拍为项目素材</p>
-        </div>
-        <div class="flex items-center gap-3">
-          <button
-            type="button"
-            class="text-[12px] text-slate-400 transition hover:text-slate-600"
-            @click="hideHotVideos"
-          >
-            隐藏推荐
-          </button>
-          <button
-            type="button"
-            class="inline-flex items-center gap-1 text-[12px] text-sky-600 transition hover:text-sky-700"
-            @click="openInspiration"
-          >
-            查看更多
-            <ArrowRight class="h-3.5 w-3.5" />
-          </button>
-        </div>
-      </div>
-      <div class="-mx-6">
-        <ShowcaseCarousel @select="openInspiration" />
-      </div>
-    </section>
-    <div v-else class="mt-auto flex justify-end pt-3">
-      <button
-        type="button"
-        class="text-[12px] text-slate-400 transition hover:text-sky-600"
-        @click="showHotVideos"
-      >
-        显示爆款推荐
-      </button>
-    </div>
-
     <Dialog :open="createOpen" @update:open="createOpen = $event">
       <DialogContent class="max-w-md rounded-2xl border-slate-200 bg-white">
-        <DialogTitle>第一版创建</DialogTitle>
+        <DialogTitle>创建项目</DialogTitle>
         <DialogDescription class="text-[13px] leading-6 text-slate-500">
-          填写项目名称即可进入工作区，其他信息可以稍后补充。
+          填写项目名称，创建后即可开始创作视频。其他资料可稍后补充。
         </DialogDescription>
         <label class="block text-[12px] font-medium text-slate-600">
           项目名称
@@ -358,7 +310,7 @@ function confirmDelete() {
         </label>
         <DialogFooter>
           <Button variant="outline" class="border-slate-200" @click="createOpen = false">取消</Button>
-          <Button class="brand-gradient text-white hover:opacity-90" @click="createFirstVersion">创建</Button>
+          <Button class="brand-gradient text-white hover:opacity-90" @click="createFirstVersion">创建并开始创作</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

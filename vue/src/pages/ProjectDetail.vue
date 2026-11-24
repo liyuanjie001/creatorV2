@@ -51,12 +51,12 @@ function select(key: string, mode = 'normal') { void router.push({query:{...rout
       </div>
       <nav aria-label="项目导航">
         <p class="mb-2 px-3 text-[11px] font-medium text-slate-400">创作</p>
-        <button v-for="n in creationNav" :key="n.mode" class="mb-1 flex w-full items-center gap-3 rounded-xl px-3 py-3 text-[13px]" :class="section==='gen' && (route.query.mode==='expert'?'expert':'normal')===n.mode ? 'bg-sky-50 font-medium text-sky-600':'text-slate-500 hover:bg-slate-50'" :aria-current="section==='gen' && (route.query.mode==='expert'?'expert':'normal')===n.mode ? 'page':undefined" @click="select('gen', n.mode)">
+        <button v-for="n in creationNav" :key="n.mode" :data-tour="n.mode === 'normal' ? 'create-nav' : undefined" class="mb-1 flex w-full items-center gap-3 rounded-xl px-3 py-3 text-[13px]" :class="section==='gen' && (route.query.mode==='expert'?'expert':'normal')===n.mode ? 'bg-sky-50 font-medium text-sky-600':'text-slate-500 hover:bg-slate-50'" :aria-current="section==='gen' && (route.query.mode==='expert'?'expert':'normal')===n.mode ? 'page':undefined" @click="select('gen', n.mode)">
           <component :is="n.icon" class="h-4 w-4" />{{n.label}}
         </button>
         <p class="mb-2 mt-7 px-3 text-[11px] font-medium text-slate-400">管理</p>
         <template v-for="n in managementNav" :key="n.key">
-          <button :data-video-management="n.key === 'publish' ? '' : undefined" class="mb-1 flex w-full items-center gap-3 rounded-xl px-3 py-3 text-[13px]" :class="section===n.key?'bg-sky-50 font-medium text-sky-600':'text-slate-500 hover:bg-slate-50'" :aria-current="section===n.key?'page':undefined" @click="select(n.key)">
+          <button :data-tour="n.key === 'publish' ? 'works-nav' : undefined" :data-video-management="n.key === 'publish' ? '' : undefined" class="mb-1 flex w-full items-center gap-3 rounded-xl px-3 py-3 text-[13px]" :class="section===n.key?'bg-sky-50 font-medium text-sky-600':'text-slate-500 hover:bg-slate-50'" :aria-current="section===n.key?'page':undefined" @click="select(n.key)">
             <component :is="n.icon" class="h-4 w-4" />{{n.label}}
           </button>
         </template>

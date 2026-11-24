@@ -9,6 +9,7 @@ import { eventValue } from '@/lib/events';
 import { useAssetFavorites } from '@/composables/useAssetFavorites';
 import { saveMedia } from '@/services/media';
 import { currentUser } from '@/services/identity';
+import { workspaceOwnerId } from '@/services/team';
 import { uid } from '@/services/storage';
 
 const { projectName } = defineProps<{
@@ -66,7 +67,7 @@ async function addFiles(files: FileList | File[]) {
   }
   try {
     for (const file of accepted) {
-      const mediaId = await saveMedia(currentUser.value.id, file);
+      const mediaId = await saveMedia(workspaceOwnerId(), file);
       emit('upload', {
         id: uid(),
         name: file.name,

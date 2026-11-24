@@ -1,3 +1,9 @@
+// Node 25 exposes its own incomplete Web Storage in workers. Use the browser
+// storage supplied by jsdom so these tests exercise the same API as the app.
+const browserWindow = (globalThis as unknown as { jsdom: { window: Window } }).jsdom.window;
+Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: browserWindow.localStorage });
+Object.defineProperty(globalThis, 'sessionStorage', { configurable: true, value: browserWindow.sessionStorage });
+
 Object.defineProperties(HTMLElement.prototype, {
   clientWidth: {
     configurable: true,

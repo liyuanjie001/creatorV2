@@ -6,6 +6,7 @@ import { formatSchedule } from '@/services/timeZones';
 import { studio } from '@/services/studio';
 import { getMedia } from '@/services/media';
 import { currentUser } from '@/services/identity';
+import { workspaceOwnerId } from '@/services/team';
 import { isSubmittedTask, dateTime, privacyName, sourceName, workPublishStatus, type VideoRow } from '@/services/videoManagement';
 import PlatformViewButtons from './PlatformViewButtons.vue';
 import VideoStatus from './VideoStatus.vue';
@@ -36,7 +37,7 @@ watch(
     if (!row || !currentUser.value) return;
     try {
       const mediaIds = row.content?.imageMediaIds ?? row.task?.imageMediaIds ?? row.film?.mediaIds ?? [];
-      const blobs = await Promise.all(mediaIds.map((id) => getMedia(currentUser.value!.id, id)));
+      const blobs = await Promise.all(mediaIds.map((id) => getMedia(workspaceOwnerId(), id)));
       if (request !== revision) return;
       if (blobs.some((blob) => !blob)) error.value = '本地媒体已丢失，请重新上传';
       urls.value = blobs.filter((blob): blob is Blob => !!blob).map((blob) => URL.createObjectURL(blob));

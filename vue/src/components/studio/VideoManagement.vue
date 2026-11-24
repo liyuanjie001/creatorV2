@@ -35,6 +35,7 @@ import {
 } from '@/services/videoManagement';
 import { getMedia } from '@/services/media';
 import { currentUser } from '@/services/identity';
+import { workspaceOwnerId } from '@/services/team';
 import type { StudioState } from '@/types/studio';
 import { downloadFile, writeJSON } from '@/services/storage';
 import { toast } from 'vue-sonner';
@@ -201,7 +202,7 @@ watch(
           try {
             const mediaIds = row.content?.imageMediaIds ?? row.task?.imageMediaIds ?? row.film?.mediaIds ?? [];
             const key = row.film?.id || row.content?.id || row.id;
-            const blobs = await Promise.all(mediaIds.map((id) => getMedia(currentUser.value!.id, id)));
+            const blobs = await Promise.all(mediaIds.map((id) => getMedia(workspaceOwnerId(), id)));
             missing[key] = !mediaIds.length || blobs.some((b) => !b);
             if ((row.film?.type === '图文' || row.content?.type === '图文') && blobs[0]) covers[key] = URL.createObjectURL(blobs[0]);
           } catch {
@@ -307,7 +308,7 @@ async function download(rows: VideoRow[]) {
       if (reason) throw new Error(reason);
       const film = row.film!;
       if (film.mediaIds.length) {
-        const blobs = await Promise.all(film.mediaIds.map((id) => getMedia(currentUser.value!.id, id)));
+        const blobs = await Promise.all(film.mediaIds.map((id) => getMedia(workspaceOwnerId(), id)));
         if (blobs.some((b) => !b)) throw new Error('本地媒体已丢失，请重新上传');
         blobs.forEach((blob, i) =>
           downloadFile(
@@ -347,7 +348,7 @@ function remove() {
       if (content) content.projectIds=content.projectIds.filter(id=>id!==props.projectId);
     }
   }
-  if (!writeJSON('chuhai-studio-v1:'+(currentUser.value?.id ?? 'guest'),next)) { toast.error('删除保存失败，请重试'); return; }
+  if (!writeJSON(`chuhai-studio-v1:${workspaceOwnerId()}`,next)) { toast.error('删除保存失败，请重试'); return; }
   studio.value=next;
   selected.value=[]; deleting.value=false; details.value=null;
   toast.success('已移除本地记录，平台内容与发布历史保留');
@@ -416,7 +417,7 @@ function togglePage() {
       <nav v-if="published" class="flex flex-wrap gap-1" aria-label="发布平台分类">
         <button v-for="item in [{value:'',label:'全部平台'},{value:'tiktok',label:'TikTok'},{value:'instagram',label:'Instagram'},{value:'facebook',label:'Facebook'}]" :key="item.value || 'all'" type="button" class="studio-tab" :class="param('platform') === item.value && 'studio-active'" :aria-pressed="param('platform') === item.value" @click="setParam('platform',item.value)">{{ item.label }}</button>
       </nav>
-      <div class="flex flex-wrap items-center gap-2" data-testid="video-search-upload">
+      <div data-tour="works-upload" class="flex flex-wrap items-center gap-2" data-testid="video-search-upload">
       <label class="relative w-full sm:w-56">
         <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
         <input

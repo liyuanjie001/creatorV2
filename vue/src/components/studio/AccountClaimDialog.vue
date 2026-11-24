@@ -11,7 +11,7 @@ import {
 import { claimSocialAccounts } from '@/services/purchasedAccounts';
 import { currentUser } from '@/services/identity';
 import { uid } from '@/services/storage';
-import { platforms, platformName } from '@/services/accounts';
+import { publishingPlatforms as platforms, platformName } from '@/services/accounts';
 import { countryName } from '@/services/countries';
 import CountrySelect from './CountrySelect.vue';
 import AccountPurchaseInfo from './AccountPurchaseInfo.vue';

@@ -9,7 +9,7 @@ const token = createHash('sha256')
 const accountHelp = [
   '美国 TikTok 账号，付款后自动到账',
   '可直接通过本平台发布视频、图文等作品',
-  '购买套餐时，可选择是否勾选账号使用权',
+  '购买套餐时，可按需增减账号使用权数量',
 ];
 const bundleExpectations = [
   {
@@ -17,274 +17,73 @@ const bundleExpectations = [
     name: '基础版',
     description: '轻量运营',
     amount: 500,
-    credits: 933,
-    videos: 84,
+    credits: 961,
     accounts: 2,
-    maintenance: 50,
-    members: 0,
+    accountPrice: 42,
   },
   {
     price: '¥1,000',
     name: '专业版',
     description: '个人运营',
     amount: 1000,
-    credits: 1895,
-    videos: 172,
+    credits: 2272,
     accounts: 5,
-    maintenance: 120,
-    members: 10,
+    accountPrice: 40,
   },
   {
     price: '¥2,000',
     name: '商业版',
     description: '多账号运营',
     amount: 2000,
-    credits: 3945,
-    videos: 358,
+    credits: 5000,
     accounts: 10,
-    maintenance: 260,
-    members: 20,
+    accountPrice: 36,
   },
   {
     price: '¥5,000',
     name: '企业版',
     description: '团队矩阵运营',
     amount: 5000,
-    credits: 10095,
-    videos: 917,
+    credits: 12820,
     accounts: 30,
-    maintenance: 700,
-    members: 50,
+    accountPrice: 30,
   },
 ];
 const commonBenefits = [
   '视频一键发布',
   '快速创作',
-  '智能创作（Agent 多任务并行）',
-  '账号数据通解',
+  '智能创作',
+  '账号数据同步',
   '发布结果统计',
-  '项目管理（不限项目数）',
+  '项目管理（不限制项目个数）',
   '产品卡创建',
   '素材库管理',
 ];
-const standardBenefits = ['图文一键发布', '视频／图文 BGM', '定时发布', '爆款视频复刻', '团队权限管理'];
-const advancedBenefits = ['批量发布', '批量内容生成', '内容数据分析'];
+const standardBenefits = ['图文一键发布', '配置视频/图文 BGM', '定时发布', '爆款视频复刻'];
+const advancedBenefits = ['批量发布视频', '批量生成视频', '内容数据分析'];
 const creditsOnlyExpectations = [
-  {
-    amount: 500,
-    price: '¥500',
-    included: 933,
-    count: 2,
-    credits: 1041,
-    videos: 94,
-    originalVideos: 84,
-    key: 'p500',
-    creditKey: 'credit500',
-  },
-  {
-    amount: 1000,
-    price: '¥1,000',
-    included: 1895,
-    count: 5,
-    credits: 2173,
-    videos: 197,
-    originalVideos: 172,
-    key: 'p1000',
-    creditKey: 'credit1000',
-  },
-  {
-    amount: 2000,
-    price: '¥2,000',
-    included: 3945,
-    count: 10,
-    credits: 4545,
-    videos: 413,
-    originalVideos: 358,
-    key: 'p2000',
-    creditKey: 'credit2000',
-  },
-  {
-    amount: 5000,
-    price: '¥5,000',
-    included: 10095,
-    count: 30,
-    credits: 11904,
-    videos: 1082,
-    originalVideos: 917,
-    key: 'p5000',
-    creditKey: 'credit5000',
-  },
+  { price: '¥500', credits: 1041, videos: 94 },
+  { price: '¥1,000', credits: 2173, videos: 197 },
+  { price: '¥2,000', credits: 4545, videos: 413 },
+  { price: '¥5,000', credits: 11904, videos: 1082 },
 ];
-
 for (const pack of creditsOnlyExpectations) {
-  for (const mode of ['套餐兑换', '积分充值'] as const) {
-    test(`${pack.price} ${mode} 按确认额度到账且不新增账号`, async ({ page }, info) => {
-      await page.goto(mode === '积分充值' ? '/#/purchase?tab=credits' : '/#/purchase');
-      const card = page.getByLabel(`${pack.price} ${mode === '套餐兑换' ? '套餐' : '积分充值'}`, {
-        exact: true,
-      });
-      if (mode === '套餐兑换') {
-        const checkbox = card.getByRole('checkbox', { name: `包含 ${pack.count} 个账号使用权`, exact: true });
-        await expect(checkbox).toBeChecked();
-        await expect(card).toContainText(`${pack.included.toLocaleString()} 个积分`);
-        await checkbox.uncheck();
-        await expect(card.getByRole('status')).toHaveText('账号已兑换为积分');
-        await expect(card.getByRole('button', { name: '账号购买说明' })).toHaveCount(0);
-        await expect(card).not.toContainText('付款后自动到账');
-        await expect(card.getByLabel('平台功能权益')).toContainText(`可绑定发布账号数 ${pack.count} 个`);
-        await checkbox.check();
-        await expect(card).toContainText(`${pack.included.toLocaleString()} 个积分`);
-        await expect(card).toContainText(`约可生成视频 ${pack.originalVideos} 个`);
-        await checkbox.uncheck();
-        await expect(page.getByRole('checkbox', { checked: true })).toHaveCount(3);
-      }
-      await expect(card).toContainText(`${pack.credits.toLocaleString()} 个积分`);
-      await expect(card).toContainText(`约可生成视频 ${pack.videos.toLocaleString()} 个`);
-      await expect(card).not.toContainText(/所有权|配套 IP|养护|单价|／积分/);
-      if (pack.amount === 2000 && mode === '套餐兑换') {
-        await page.setViewportSize({ width: 390, height: 844 });
-        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
-          true,
-        );
-        await page.screenshot({ path: info.outputPath('credits-conversion-mobile.png'), fullPage: true });
-      }
-      await card
-        .getByRole('button', { name: mode === '套餐兑换' ? '购买套餐' : '立即充值', exact: true })
-        .click();
-      const dialog = page.getByRole('dialog');
-      await expect(dialog).toContainText(`¥${pack.amount}`);
-      await expect(dialog).toContainText(`到账 ${pack.credits.toLocaleString()} 积分`);
-      await expect(dialog).not.toContainText(/单价|／积分/);
-      if (mode === '套餐兑换') {
-        const checkbox = dialog.getByRole('checkbox', {
-          name: `包含 ${pack.count} 个账号使用权`,
-          exact: true,
-        });
-        await expect(checkbox).not.toBeChecked();
-        await checkbox.check();
-        await expect(dialog).toContainText(`到账 ${pack.included.toLocaleString()} 积分`);
-        await expect(dialog).toContainText('美国 TikTok 账号，付款后自动到账');
-        await expect(card.getByRole('checkbox', { includeHidden: true })).toBeChecked();
-        await checkbox.uncheck();
-        await expect(dialog).toContainText(`到账 ${pack.credits.toLocaleString()} 积分`);
-        await expect(dialog.getByRole('status')).toHaveText('账号已兑换为积分');
-        await expect(dialog).not.toContainText('付款后自动到账');
-        await expect(card.getByRole('checkbox', { includeHidden: true })).not.toBeChecked();
-        if (pack.amount === 2000) {
-          await page.screenshot({ path: info.outputPath('payment-options-mobile.png') });
-        }
-      } else {
-        await expect(dialog).not.toContainText(/账号|自动到账/);
-        await expect(dialog.getByRole('checkbox')).toHaveCount(0);
-      }
-      expect(await purchasedAccounts(page)).toHaveLength(0);
-      await expect(page.getByLabel('积分余额', { exact: true })).toHaveText('100');
-      await dialog.getByRole('button', { name: '模拟支付成功', exact: true }).click();
-      await expect(dialog).toContainText(`已到账 ${pack.credits.toLocaleString()} 积分`);
-      await expect(dialog.getByRole('button', { name: '查看账号', exact: true })).toHaveCount(0);
-      await dialog.getByRole('button', { name: '完成', exact: true }).click();
-      await page.reload();
-      await expect(page.getByLabel('积分余额', { exact: true })).toHaveText(
-        (100 + pack.credits).toLocaleString(),
-      );
-      expect(await purchasedAccounts(page)).toHaveLength(0);
-      const ledger = await page.evaluate(() => JSON.parse(localStorage.getItem('chuhai-credits-v1:demo')!));
-      expect(ledger.claims).toHaveLength(0);
-      expect(ledger.orders.find((order: { status: string }) => order.status === 'completed')).toMatchObject({
-        pack: mode === '套餐兑换' ? pack.key : pack.creditKey,
-        credits: pack.credits,
-        accountCount: 0,
-        status: 'completed',
-      });
-      expect(ledger.orders[0].deliveryMode).toBeUndefined();
-      if (mode === '套餐兑换') {
-        expect(ledger.orders[0].purchaseMode).toBe('creditsOnly');
-        await expect(page.getByRole('checkbox', { checked: true })).toHaveCount(4);
-      }
-    });
-  }
-}
-
-test('两千元套餐和弹窗双向同步账号选择，旧待支付订单保留快照', async ({ page }) => {
-  await page.goto('/#/purchase');
-  const card = page.getByLabel('¥2,000 套餐', { exact: true });
-  const checkbox = card.getByRole('checkbox', { name: '包含 10 个账号使用权', exact: true });
-  await checkbox.uncheck();
-  await page
-    .getByLabel('¥2,000 套餐', { exact: true })
-    .getByRole('button', { name: '购买套餐', exact: true })
-    .click();
-  const dialog = page.getByRole('dialog');
-  await expect(dialog).toContainText('到账 4,545 积分');
-  await expect(dialog.getByRole('checkbox')).not.toBeChecked();
-  await expect(dialog).not.toContainText('付款后自动到账');
-  await page.keyboard.press('Escape');
-  await checkbox.check();
-  await page
-    .getByLabel('¥2,000 套餐', { exact: true })
-    .getByRole('button', { name: '购买套餐', exact: true })
-    .click();
-  await expect(dialog).toContainText('到账 3,945 积分');
-  await expect(dialog).toContainText('10 个账号');
-  const orders = await page.evaluate(
-    () => JSON.parse(localStorage.getItem('chuhai-credits-v1:demo')!).orders,
-  );
-  expect(orders[0]).toMatchObject({
-    credits: 4545,
-    accountCount: 0,
-    purchaseMode: 'creditsOnly',
-    status: 'pending',
+  test(`${pack.price} 独立积分充值按确认额度到账且不新增账号`, async ({ page }) => {
+    await page.goto('/#/purchase?tab=credits');
+    const card = page.getByLabel(`${pack.price} 积分充值`, { exact: true });
+    await expect(card).toContainText(`${pack.credits.toLocaleString()} 个积分`);
+    await expect(card).toContainText(`约可生成视频 ${pack.videos.toLocaleString()} 个`);
+    await card.getByRole('button', { name: '立即充值' }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toContainText(pack.price);
+    await expect(dialog).toContainText(`到账 ${pack.credits.toLocaleString()} 积分`);
+    await expect(dialog).not.toContainText(/单价|账号使用权/);
+    await dialog.getByRole('button', { name: '模拟支付成功' }).click();
+    await expect(dialog).toContainText(`已到账 ${pack.credits.toLocaleString()} 积分`);
+    await dialog.getByRole('button', { name: '完成' }).click();
+    await expect(page.getByLabel('积分余额', { exact: true })).toHaveText((100 + pack.credits).toLocaleString());
+    expect(await purchasedAccounts(page)).toHaveLength(0);
   });
-  expect(orders[1]).toMatchObject({
-    credits: 3945,
-    accountCount: 10,
-    purchaseMode: 'withAccounts',
-    status: 'pending',
-  });
-  await expect(page.getByLabel('积分余额', { exact: true })).toHaveText('100');
-  expect(await purchasedAccounts(page)).toHaveLength(0);
-  const paymentCheckbox = dialog.getByRole('checkbox', { name: '包含 10 个账号使用权', exact: true });
-  await paymentCheckbox.uncheck();
-  await expect(dialog).toContainText('到账 4,545 积分');
-  await expect(card.getByRole('checkbox', { includeHidden: true })).not.toBeChecked();
-  await dialog.getByRole('button', { name: '微信支付', exact: true }).click();
-  await paymentCheckbox.check();
-  await expect(dialog).toContainText('到账 3,945 积分');
-  await expect(card.getByRole('checkbox', { includeHidden: true })).toBeChecked();
-  await expect(dialog.getByRole('button', { name: '微信支付', exact: true })).toHaveAttribute(
-    'aria-pressed',
-    'true',
-  );
-  await dialog.getByRole('button', { name: '模拟支付成功', exact: true }).click();
-  await expect(dialog).toContainText('已到账 10 个账号');
-  await expect(dialog.getByRole('checkbox')).toHaveCount(0);
-  await expect(page.getByLabel('积分余额', { exact: true })).toHaveText('4,045');
-  expect(await purchasedAccounts(page)).toHaveLength(10);
-  await page.reload();
-  await expect(page.getByLabel('积分余额', { exact: true })).toHaveText('4,045');
-  expect(await purchasedAccounts(page)).toHaveLength(10);
-  const savedOrders = await page.evaluate(
-    () => JSON.parse(localStorage.getItem('chuhai-credits-v1:demo')!).orders,
-  );
-  expect(savedOrders.filter((order: { status: string }) => order.status === 'completed')).toHaveLength(1);
-  expect(savedOrders.slice(0, 2)).toEqual(orders);
-});
-
-async function setClaimRow(
-  page: Page,
-  index: number,
-  platform: string,
-  country: string,
-  option: string,
-  quantity: number,
-) {
-  const dialog = page.getByRole('dialog');
-  await dialog.getByLabel(`第 ${index} 组平台`, { exact: true }).selectOption(platform);
-  const input = dialog.getByRole('combobox', { name: `第 ${index} 组国家地区`, exact: true });
-  await input.click();
-  await input.fill(country);
-  await page.getByRole('option', { name: option, exact: true }).click();
-  await dialog.getByLabel(`第 ${index} 组领取数量`, { exact: true }).fill(String(quantity));
 }
 
 async function purchasedAccounts(page: Page) {
@@ -316,7 +115,8 @@ async function seedHistorical(page: Page, quantity: number) {
   }, quantity);
   await page.goto('/#/accounts');
   await page.reload();
-  await expect(page.getByLabel('待领取帐号提示')).toContainText(`历史待领取账号：${quantity} 个`);
+  await expect(page.getByLabel('待领取帐号提示')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '领取历史账号', exact: true })).toHaveCount(0);
 }
 
 async function publishPurchasedAccounts(
@@ -367,59 +167,45 @@ test.beforeEach(async ({ page }) => {
     );
   }, token);
 });
-test('套餐数据、自动到账、帐号凭据、跨项目发布与历史领取共存', async ({ page, context }, info) => {
+test('套餐数据、自动到账、帐号凭据、跨项目发布与历史余额保留', async ({ page, context }, info) => {
   test.setTimeout(120000);
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.goto('/#/purchase');
   const cards = page.getByLabel('购买与充值');
-  for (const text of ['¥500', '¥1,000', '¥2,000', '¥5,000', '933', '1,895', '3,945', '10,095', '917'])
-    await expect(cards).toContainText(text);
-  await expect(cards.getByLabel('套餐社媒帐号权益').last()).toContainText('30 个账号');
-  const accountBenefit = cards.getByLabel('套餐社媒帐号权益').first();
-  await expect(accountBenefit).toContainText('2 个账号');
-  await expect(accountBenefit).toContainText('美国 TikTok 账号，付款后自动到账');
-  await expect(accountBenefit).toContainText('账号使用权');
-  await expect(cards).toContainText('933 个积分');
+  await expect(page.getByRole('article', { name: /版套餐$/ })).toHaveCount(4);
   for (const pack of bundleExpectations) {
-    const card = cards.getByLabel(`${pack.price} 套餐`, { exact: true });
+    const card = cards.getByLabel(`${pack.name}套餐`, { exact: true });
     await expect(card.getByRole('heading', { name: pack.name, exact: true })).toBeVisible();
     await expect(card).toContainText(pack.description);
-    await expect(card).toContainText(`${pack.credits.toLocaleString()} 个积分`);
-    await expect(card).toContainText(`约可生成视频 ${pack.videos} 个`);
-    await expect(card).not.toContainText(/单价|／积分/);
-    const accountEntitlements = card.getByLabel('套餐社媒帐号权益');
-    await expect(accountEntitlements).toContainText(`${pack.accounts} 个账号`);
-    await expect(accountEntitlements).not.toContainText(/配套 IP|养护|所有权/);
+    await expect(card.getByText(`¥${pack.accountPrice}/个`, { exact: true })).toBeVisible();
+    await expect(card.getByText(pack.credits.toLocaleString(), { exact: true })).toBeVisible();
+    await expect(card.getByText('积分 / 季', { exact: true })).toBeVisible();
+    await expect(card.getByLabel('账号使用权数量', { exact: true })).toHaveText(`${pack.accounts} 个`);
     const list = card.getByLabel('平台功能权益');
-    await expect(list.getByRole('listitem')).toHaveCount(
-      pack.amount === 500 ? 10 : pack.amount === 1000 ? 16 : 19,
-    );
     for (const label of commonBenefits) await expect(list.getByText(label, { exact: true })).toBeVisible();
     for (const label of standardBenefits)
-      await expect(list.getByText(label, { exact: true })).toHaveCount(pack.amount >= 1000 ? 1 : 0);
+      await expect(list.getByText(label, { exact: true }).locator('..')).toHaveAttribute('data-supported', String(pack.amount >= 1000));
     for (const label of advancedBenefits)
-      await expect(list.getByText(label, { exact: true })).toHaveCount(pack.amount >= 2000 ? 1 : 0);
-    await expect(list).toContainText(`可绑定发布账号数 ${pack.accounts} 个`);
-    await expect(list).toContainText('可发布平台 全部平台');
-    if (pack.members) await expect(list).toContainText(`团队协作成员 ${pack.members} 人`);
-    else await expect(list).not.toContainText('团队协作成员');
-    await expect(list).not.toContainText('不支持');
-    await expect(list.getByRole('heading', { name: '管理与协作', exact: true })).toBeVisible();
+      await expect(list.getByText(label, { exact: true }).locator('..')).toHaveAttribute('data-supported', String(pack.amount >= 2000));
+    await expect(list.getByRole('listitem').filter({ hasText: '可绑定发布账号的个数' })).toHaveText(`可绑定发布账号的个数（${pack.accounts}个）`);
+    await expect(list.getByRole('listitem').filter({ hasText: '可发布平台' })).toHaveText('可发布平台（全部平台）');
+    await expect(list).not.toContainText('团队协作成员');
+    await expect(list.getByRole('heading')).toHaveText(['AI 创作', '账号与发布', '数据分析']);
   }
   await expect(cards).not.toContainText(/成本|利润率|限时优惠|Seedance|480P|¥490/);
-  await expect(cards.locator('.line-through')).toHaveCount(0);
+  await expect(cards.getByLabel('套餐原价', { exact: true })).toHaveCount(3);
   await cards.getByRole('button', { name: '账号购买说明', exact: true }).first().hover();
   for (const text of accountHelp) await expect(page.getByRole('tooltip')).toContainText(text);
   await page.getByRole('heading', { name: '套餐购买', exact: true }).hover();
   await page.screenshot({ path: info.outputPath('recharge-packages.png'), fullPage: true });
   await page
-    .getByLabel('¥2,000 套餐', { exact: true })
-    .getByRole('button', { name: '购买套餐', exact: true })
+    .getByLabel('商业版套餐', { exact: true })
+    .getByRole('button', { name: '订阅套餐', exact: true })
     .click();
   const dialog = page.getByRole('dialog');
-  await expect(dialog).toContainText('10 个账号');
+  await expect(dialog).toContainText('账号使用权 10 个');
   await expect(dialog).toContainText('美国 TikTok 账号，付款后自动到账');
   await dialog.getByRole('button', { name: '账号购买说明', exact: true }).hover();
   for (const text of accountHelp) await expect(page.getByRole('tooltip')).toContainText(text);
@@ -490,29 +276,26 @@ test('套餐数据、自动到账、帐号凭据、跨项目发布与历史领�
   await expect(page.getByText('所有项目可用', { exact: true })).toHaveCount(10);
   await seedHistorical(page, 7);
   await page.goto('/#/accounts');
-  await expect(page.getByLabel('待领取帐号提示')).toContainText('历史待领取账号：7 个');
-  await page.getByRole('button', { name: '领取历史账号', exact: true }).click();
-  await setClaimRow(page, 1, 'instagram', 'FR', '法国 FR', 2);
-  await page.getByRole('button', { name: '确认领取' }).click();
-  await expect(page.getByRole('dialog')).toContainText('已领取 2 个帐号');
-  await page.keyboard.press('Escape');
+  await expect(page.getByLabel('待领取帐号提示')).toHaveCount(0);
   await page.reload();
   await page.goto('/#/purchase');
-  await expect(page.getByLabel('积分余额', { exact: true })).toHaveText('4,045');
+  await expect(page.getByLabel('积分余额', { exact: true })).toHaveText('5,100');
   await expect(page.getByText('我购买的账号', { exact: true })).toHaveCount(0);
   await page.goto('/#/accounts');
-  const deletableHandle = await page.evaluate(
-    () =>
-      JSON.parse(localStorage.getItem('chuhai-studio-v1:demo')!).accounts.find(
-        (a: { source?: string; countryCode?: string }) => a.source === 'recharge' && a.countryCode === 'FR',
-      ).handle as string,
-  );
+  const deletableHandle = delivered.at(-1)!.handle;
   const accountRow = page.getByRole('row').filter({ hasText: deletableHandle });
-  await accountRow.getByRole('button', { name: '删除', exact: true }).click();
+  await accountRow.getByRole('button', { name: '更多操作', exact: false }).click();
+  await page.getByRole('menuitem', { name: '删除', exact: true }).click();
   await page.getByRole('button', { name: '确认删除帐号', exact: true }).click();
   await page.reload();
   await expect(page.getByRole('row').filter({ hasText: deletableHandle })).toHaveCount(0);
-  await expect(page.getByLabel('待领取帐号提示')).toContainText('5 个');
+  await expect(page.getByLabel('待领取帐号提示')).toHaveCount(0);
+  const historicalOrder = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem('chuhai-credits-v1:demo')!).orders.find(
+      (order: { id: string }) => order.id === 'legacy-order',
+    ),
+  );
+  expect(historicalOrder.accountCount).toBe(7);
   expect(errors).toEqual([]);
 });
 
@@ -520,13 +303,13 @@ for (const pack of bundleExpectations) {
   test(`${pack.price} 套餐支付前不入账、支付后额度准确且刷新保留`, async ({ page }) => {
     await page.goto('/#/purchase');
     await page
-      .getByLabel(`${pack.price} 套餐`, { exact: true })
-      .getByRole('button', { name: '购买套餐', exact: true })
+      .getByLabel(`${pack.name}套餐`, { exact: true })
+      .getByRole('button', { name: '订阅套餐', exact: true })
       .click();
     const dialog = page.getByRole('dialog');
-    await expect(dialog).toContainText(`¥${pack.amount}`);
+    await expect(dialog).toContainText(`¥${(pack.amount + pack.accountPrice * pack.accounts).toLocaleString()}`);
     await expect(dialog).toContainText(`到账 ${pack.credits.toLocaleString()} 积分`);
-    await expect(dialog).toContainText(`${pack.accounts} 个账号`);
+    await expect(dialog).toContainText(`可绑定发布账号的个数（${pack.accounts}个）`);
     await expect(page.getByLabel('积分余额', { exact: true })).toHaveText('100');
     await dialog.getByRole('button', { name: '模拟支付成功', exact: true }).click();
     await expect(dialog).toContainText(`已到账 ${pack.credits.toLocaleString()} 积分`);
@@ -542,7 +325,7 @@ for (const pack of bundleExpectations) {
     await expect(page.getByLabel('待领取帐号提示')).toHaveCount(0);
   });
 }
-test('展示套餐和积分充值页签，保留个人中心入口、说明内容及独立积分充值', async ({ page }, info) => {
+test('展示积分充值和套餐页签，保留个人中心入口、说明内容及独立积分充值', async ({ page }, info) => {
   await page.goto('/#/purchase');
   await page.getByRole('button', { name: '账号购买说明', exact: true }).first().hover();
   const tip = page.getByRole('tooltip');
@@ -552,26 +335,25 @@ test('展示套餐和积分充值页签，保留个人中心入口、说明内�
   await page.getByRole('heading', { name: '套餐购买', exact: true }).hover();
   await expect(tip).toBeHidden();
   await expect(page.getByRole('tab')).toHaveCount(2);
-  const bundleTab = page.getByRole('tab', { name: '套餐', exact: true });
-  const creditsTab = page.getByRole('tab', { name: '积分充值', exact: true });
-  await expect(bundleTab).toHaveAttribute('aria-selected', 'true');
-  await creditsTab.click();
-  await expect(creditsTab).toHaveAttribute('aria-selected', 'true');
+  const bundleEntry = page.getByRole('tab', { name: '套餐', exact: true });
+  const creditsEntry = page.getByRole('tab', { name: '积分充值', exact: true });
+  await expect(page.getByRole('radio', { name: '个人版' })).toBeChecked();
+  await creditsEntry.press('Enter');
+  await expect(creditsEntry).toBeFocused();
+  await expect(creditsEntry).toHaveAttribute('aria-selected', 'true');
   await expect(page).toHaveURL(/#\/purchase\?tab=credits$/);
-  await expect(page.getByRole('tabpanel')).toHaveAccessibleName('积分充值');
-  await creditsTab.press('ArrowLeft');
-  await expect(bundleTab).toBeFocused();
-  await expect(bundleTab).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('tabpanel', { name: '积分充值', exact: true })).toBeVisible();
+  await creditsEntry.press('ArrowLeft');
+  await expect(bundleEntry).toBeFocused();
+  await expect(bundleEntry).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('radio', { name: '个人版' })).toBeChecked();
   const benefits = page.getByLabel('平台功能权益');
   await expect(benefits).toHaveCount(4);
-  for (let index = 0; index < 4; index++)
-    await expect(benefits.nth(index).getByRole('listitem')).toHaveCount([10, 16, 19, 19][index]!);
   await page.getByRole('button', { name: '个人中心', exact: true }).click();
   await page.getByRole('button', { name: '积分充值', exact: true }).click();
   await expect(page.getByRole('heading', { name: '积分充值', exact: true })).toBeVisible();
-  await expect(page.getByRole('tab')).toHaveCount(2);
-  await expect(creditsTab).toHaveAttribute('aria-selected', 'true');
-  const panel = page.getByLabel('购买与充值');
+  await expect(bundleEntry).toBeVisible();
+  const panel = page.getByRole('tabpanel', { name: '积分充值', exact: true });
   await expect(panel.getByLabel('套餐社媒帐号权益')).toHaveCount(0);
   await expect(panel.getByLabel('平台功能权益')).toHaveCount(0);
   await panel.getByRole('button', { name: '立即充值', exact: true }).first().click();
@@ -589,22 +371,20 @@ test('展示套餐和积分充值页签，保留个人中心入口、说明内�
   await expect(page.getByLabel('积分余额', { exact: true })).toHaveText('1,141');
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.getByRole('heading', { name: '积分充值', exact: true })).toBeVisible();
-  await expect(creditsTab).toBeVisible();
-  await expect(creditsTab).toHaveAttribute('aria-selected', 'true');
+  await expect(bundleEntry).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-  await bundleTab.click();
+  await bundleEntry.click();
   await expect(page).toHaveURL(/#\/purchase$/);
   await expect(page.getByRole('heading', { name: '套餐购买', exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.screenshot({ path: info.outputPath('purchase-tabs-mobile.png'), fullPage: true });
 });
 
-test('窄屏套餐、自动到账和历史领取表单没有横向溢出', async ({ page }, info) => {
+test('窄屏套餐与自动到账没有横向溢出，历史余额不显示领取入口', async ({ page }, info) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/#/purchase');
   const infoButton = page
-    .getByLabel('套餐社媒帐号权益')
-    .first()
+    .getByRole('article', { name: '基础版套餐' })
     .getByRole('button', { name: '账号购买说明', exact: true });
   await infoButton.dispatchEvent('pointerdown', { pointerType: 'touch' });
   await infoButton.dispatchEvent('pointerup', { pointerType: 'touch' });
@@ -615,8 +395,8 @@ test('窄屏套餐、自动到账和历史领取表单没有横向溢出', async
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.getByLabel('购买与充值').screenshot({ path: info.outputPath('package-benefits-mobile.png') });
   await page
-    .getByLabel('¥2,000 套餐', { exact: true })
-    .getByRole('button', { name: '购买套餐', exact: true })
+    .getByLabel('商业版套餐', { exact: true })
+    .getByRole('button', { name: '订阅套餐', exact: true })
     .click();
   await page.getByRole('button', { name: '模拟支付成功' }).click();
   await expect(page.getByRole('dialog')).toContainText('已到账 10 个账号');
@@ -624,68 +404,18 @@ test('窄屏套餐、自动到账和历史领取表单没有横向溢出', async
   await page.getByRole('button', { name: '查看账号', exact: true }).click();
   await expect(page.getByLabel('待领取帐号提示')).toHaveCount(0);
   await seedHistorical(page, 10);
-  await page.getByRole('button', { name: '领取历史账号', exact: true }).click();
-  const dialog = page.getByRole('dialog');
-  await expect(dialog).toBeVisible();
-  await setClaimRow(page, 1, 'instagram', 'JP', '日本 JP', 1);
-  await dialog.getByRole('button', { name: '添加组合' }).click();
-  await setClaimRow(page, 2, 'facebook', '英国', '英国 GB', 1);
-  const box = await dialog.boundingBox();
-  expect(box!.width).toBeLessThanOrEqual(390);
-  expect(await dialog.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
-  await page.screenshot({ path: info.outputPath('claim-mobile.png'), fullPage: true });
-});
-
-test('领取组合增删、数量校验、重复组合合并与交付失败重试锁定', async ({ page }) => {
-  await page.goto('/#/accounts');
-  await seedHistorical(page, 10);
-  await page.getByRole('button', { name: '领取历史账号', exact: true }).click();
-  const dialog = page.getByRole('dialog');
-  await expect(dialog.getByLabel('删除第 1 组', { exact: true })).toBeDisabled();
-  await dialog.getByRole('button', { name: '添加组合' }).click();
-  await dialog.getByLabel('删除第 2 组', { exact: true }).click();
-  await expect(dialog.getByLabel('第 2 组平台', { exact: true })).toHaveCount(0);
-  for (const invalid of ['-1', '0.5', '11']) {
-    await dialog.getByLabel('第 1 组领取数量', { exact: true }).fill(invalid);
-    await expect(dialog.getByRole('button', { name: '确认领取', exact: true })).toBeDisabled();
-  }
-  await setClaimRow(page, 1, 'instagram', 'Japan', '日本 JP', 1);
-  await dialog.getByRole('button', { name: '添加组合' }).click();
-  await setClaimRow(page, 2, 'instagram', 'JP', '日本 JP', 1);
-  await page.evaluate(() => {
-    const original = Storage.prototype.setItem;
-    Storage.prototype.setItem = function (key, value) {
-      if (key.startsWith('chuhai-studio-v1:')) throw new Error('simulated storage quota');
-      original.call(this, key, value);
-    };
-    Object.assign(window, {
-      restoreClaimStorage: () => {
-        Storage.prototype.setItem = original;
-      },
-    });
-  });
-  await dialog.getByRole('button', { name: '确认领取', exact: true }).click();
-  await expect(dialog.getByRole('alert')).toContainText('领取记录已保存');
-  await expect(dialog.getByLabel('第 1 组平台', { exact: true })).toBeDisabled();
-  await expect(dialog.getByRole('combobox', { name: '第 1 组国家地区', exact: true })).toBeDisabled();
-  await expect(dialog.getByRole('button', { name: '添加组合', exact: true })).toBeDisabled();
-  await page.evaluate(() => (window as unknown as { restoreClaimStorage: () => void }).restoreClaimStorage());
-  await dialog.getByRole('button', { name: '重试帐号交付', exact: true }).click();
-  await expect(dialog).toContainText('已领取 2 个帐号');
-  await expect(dialog.getByLabel('领取组合汇总')).toHaveText('Instagram · 日本 × 2');
   await page.reload();
-  const ledger = await page.evaluate(() => JSON.parse(localStorage.getItem('chuhai-credits-v1:demo')!));
-  expect(ledger.claims).toHaveLength(1);
-  expect(ledger.claims[0].accounts).toHaveLength(2);
-  await expect(page.getByLabel('待领取帐号提示')).toContainText('8 个');
+  await expect(page.getByRole('button', { name: '领取历史账号', exact: true })).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: info.outputPath('accounts-mobile.png'), fullPage: true });
 });
 
 for (const recovery of ['retry', 'reload'] as const) {
   test(`自动到账保存失败后通过 ${recovery} 恢复，支付只完成一次`, async ({ page }) => {
     await page.goto('/#/purchase');
     await page
-      .getByLabel('¥2,000 套餐', { exact: true })
-      .getByRole('button', { name: '购买套餐', exact: true })
+      .getByLabel('商业版套餐', { exact: true })
+      .getByRole('button', { name: '订阅套餐', exact: true })
       .click();
     await page.evaluate(() => {
       const original = Storage.prototype.setItem;
@@ -704,7 +434,7 @@ for (const recovery of ['retry', 'reload'] as const) {
     await expect(dialog.getByRole('heading')).toHaveText('支付已完成');
     await expect(dialog.getByRole('alert')).toContainText('支付已完成，账号同步失败');
     await expect(dialog.getByRole('button', { name: '查看账号', exact: true })).toHaveCount(0);
-    await expect(page.getByLabel('积分余额', { exact: true })).toHaveText('4,045');
+    await expect(page.getByLabel('积分余额', { exact: true })).toHaveText('5,100');
     const snapshot = await page.evaluate(() => localStorage.getItem('chuhai-credits-v1:demo'));
     const ledger = JSON.parse(snapshot!);
     expect(ledger.claims).toHaveLength(1);

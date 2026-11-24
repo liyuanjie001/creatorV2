@@ -12,19 +12,14 @@ import {
 } from '@/services/feedback';
 import { toast } from 'vue-sonner';
 import { feedbackImageLimit, prepareFeedbackImage, type FeedbackImage } from '@/services/feedbackImages';
+import { purchaseFaqs } from '@/data/purchaseFaqs';
 const categories = ['全部', '套餐', '积分', '账号使用权', '创作发布', '账号安全'];
 const faqs = [
+  ...purchaseFaqs.map((faq) => ({ ...faq, category: '套餐' })),
   {
     category: '套餐',
     question: '如何查看和升级我的套餐？',
-    answer:
-      '在“我的权益”查看当前版本，点击“升级套餐”前往套餐购买页。已完成的套餐订单决定当前版本，购买较低版本不会降级，单独充值积分不会改变版本。',
-  },
-  {
-    category: '套餐',
-    question: '可以选择不包含账号吗？',
-    answer:
-      '可以。在套餐卡片或支付弹窗取消勾选账号使用权，整档账号将兑换为对应积分，支付金额保持不变，不支持部分兑换。',
+    answer: '在“我的权益”查看当前版本及订阅日期，前往套餐购买页升级或手动续购。当前版本按生效中订阅的最高档展示，同档选择最近生效的一期；无有效订阅时沿用历史套餐。',
   },
   {
     category: '积分',
@@ -47,7 +42,7 @@ const faqs = [
     category: '账号使用权',
     question: '历史待领取账号如何处理？',
     answer:
-      '历史订单继续保留原领取方式。存在历史剩余额度时，“帐号管理”会显示历史领取入口，可选择平台、国家地区和数量。',
+      '历史订单及已领取账号记录继续保留，可在购买记录中查看订单。帐号管理不再展示历史待领取提示和领取入口。',
   },
   {
     category: '账号使用权',

@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router';
 import { ArrowRight, Link, Plus } from 'lucide-vue-next';
 import RemakeProjectPicker from './RemakeProjectPicker.vue';
 import { currentUser } from '@/services/identity';
+import { workspaceOwnerId } from '@/services/team';
 import { saveMedia } from '@/services/media';
 import { parseReference, studio } from '@/services/studio';
 import type { Reference } from '@/types/studio';
@@ -44,7 +45,7 @@ async function upload(event: Event) {
   try {
     if (!file.type.startsWith('video/')) throw new Error('请选择视频文件');
     if (!currentUser.value) throw new Error('请先登录后再上传视频');
-    const id = await saveMedia(currentUser.value.id, file);
+    const id = await saveMedia(workspaceOwnerId(), file);
     parsed.value = {
       id,
       title: file.name,

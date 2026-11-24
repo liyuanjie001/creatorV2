@@ -310,8 +310,8 @@ test('feedback images validate, preview, survive tabs and restore after saving',
 test('purchase messages are real, read state persists and details navigate', async ({ page }, info) => {
   await page.goto('/#/purchase');
   await page
-    .getByLabel('¥500 套餐', { exact: true })
-    .getByRole('button', { name: '购买套餐', exact: true })
+    .getByLabel('基础版套餐', { exact: true })
+    .getByRole('button', { name: /订阅套餐|续购套餐/, exact: true })
     .click();
   const dialog = page.getByRole('dialog');
   await dialog.getByRole('button', { name: '模拟支付成功', exact: true }).click();
@@ -348,6 +348,7 @@ test('registered account nickname and verified password change survive login', a
   await page.locator('#auth-code').fill('123456');
   await page.locator('#auth-password').fill('Original123');
   await page.getByRole('button', { name: '注册并进入', exact: true }).click();
+  await page.getByRole('button', { name: '关闭新手引导', exact: true }).click();
   await page.getByRole('button', { name: '个人中心', exact: true }).click();
   await page.getByRole('link', { name: '账号中心', exact: true }).click();
   await page.getByLabel('昵称', { exact: true }).fill('独立创作者');
@@ -393,8 +394,8 @@ test('corrupt local records show errors without overwriting data', async ({ page
 test('sync failure messages recover without duplicate payment or delivery', async ({ page }) => {
   await page.goto('/#/purchase');
   await page
-    .getByLabel('¥500 套餐', { exact: true })
-    .getByRole('button', { name: '购买套餐', exact: true })
+    .getByLabel('基础版套餐', { exact: true })
+    .getByRole('button', { name: /订阅套餐|续购套餐/, exact: true })
     .click();
   await page.evaluate(() => {
     const original = Storage.prototype.setItem;
@@ -433,5 +434,5 @@ test('sync failure messages recover without duplicate payment or delivery', asyn
   await page.reload();
   await page.getByRole('button', { name: '购买', exact: true }).click();
   await expect(page.getByRole('article')).toHaveCount(4);
-  await expect(page.getByLabel('积分余额', { exact: true })).toHaveText('1,033');
+  await expect(page.getByLabel('积分余额', { exact: true })).toHaveText('1,061');
 });

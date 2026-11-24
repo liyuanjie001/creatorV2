@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import { File as NodeFile } from 'node:buffer';
 
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { createMemoryHistory } from 'vue-router';
 import App from '@/App.vue';
 import { ACCESS_STORAGE_KEY } from '@/lib/access';
 import { createAppRouter } from '@/router';
-import { identityService, DEMO_CODE, sendCode } from '@/services/identity';
+import { currentUser, identityService, DEMO_CODE, sendCode } from '@/services/identity';
 import { authorize, blankAttributes, contentMetrics, createProject, ensurePublishTask, parseReference, studio, submitPublish, tickStudio, validatePublish } from '@/services/studio';
 import { uid } from '@/services/storage';
 import type { Film } from '@/types/studio';
@@ -59,6 +60,36 @@ const localValues=Array.from({length:localStorage.length},(_,index)=>localStorag
 identityService.demo();expect(studio.value.projects.some(p=>p.id===demoProject.id)).toBe(true);
 });
 test('注册验证码身份校验和冷却生效',()=>{expect(()=>sendCode('bad','email')).toThrow();sendCode('person@example.com','email');expect(()=>sendCode('person@example.com','email')).toThrow('倒计时');});
+test('新用户快捷入口保留独立身份、空白工作空间和演示用户数据', async () => {
+  installMemoryIndexedDB();
+  vi.stubGlobal('File', NodeFile);
+  const demoProject = createProject('保留演示项目');
+  const first = await identityService.newUser();
+  expect(first.id).not.toBe('demo');
+  expect(first.name).toBe('新用户');
+  for (const key of ['projects', 'accounts', 'films', 'tasks', 'content', 'products'] as const) expect(studio.value[key]).toHaveLength(0);
+  expect(JSON.parse(localStorage.getItem('chuhai-studio-session')!).id).toBe(first.id);
+  const project = createProject('首次创作');
+  await identityService.updateName('独立用户');
+  expect(currentUser.value?.name).toBe('独立用户');
+  const second = await identityService.newUser();
+  expect(second.id).not.toBe(first.id);
+  expect(studio.value.projects).toHaveLength(0);
+  expect(localStorage.getItem(`chuhai-studio-v1:${first.id}`)).toContain(project.name);
+  identityService.demo();
+  expect(studio.value.projects.some(p => p.id === demoProject.id)).toBe(true);
+});
+test('新用户存储失败时保留当前登录和工作空间', async () => {
+  installMemoryIndexedDB();
+  vi.stubGlobal('File', NodeFile);
+  const project = createProject('现有项目');
+  const write = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('storage unavailable'); });
+  try {
+    await expect(identityService.newUser()).rejects.toThrow('浏览器存储不可用');
+    expect(currentUser.value?.id).toBe('demo');
+    expect(studio.value.projects.some(p => p.id === project.id)).toBe(true);
+  } finally { write.mockRestore(); }
+});
 test('TK 授权重复更新帐号、状态模拟及分组删除回归规则',()=>{const a=authorize('demo.brand','ungrouped','成功');expect(authorize('@demo.brand','ungrouped','过期').id).toBe(a.id);expect(studio.value.accounts).toHaveLength(1);expect(studio.value.accounts[0]?.status).toBe('授权过期');expect(()=>authorize('@denied','ungrouped','拒绝')).toThrow('拒绝');});
 test('链接校验拒绝未知域名、非详情地址及重复链接',()=>{expect(()=>parseReference('https://example.com/video/1')).toThrow();expect(()=>parseReference('https://www.tiktok.com/@creator')).toThrow();expect(parseReference('https://www.tiktok.com/@creator/video/123').id).toBe(parseReference('https://www.tiktok.com/@creator/video/123?share=1').id);});
 test('项目导航隐藏数据分析，创作模式进入地址，Roxy 留在更多入口',async()=>{const p=createProject('测试项目');const {app,router}=await open(`/projects/${p.id}?section=publish`);expect(app.text()).toContain('我的作品');expect(app.findAll('aside button').some(b=>b.text()==='发布记录')).toBe(false);expect(app.findAll('button').some(b=>b.attributes('aria-label')==='我的作品分类')).toBe(false);await app.findAll('button').find(b=>b.text()==='已发布')!.trigger('click');await flushPromises();expect(router.currentRoute.value.query.tab).toBe('records');expect(app.findAll('button').some(b=>b.text()==='全部')).toBe(true);expect(app.findAll('aside button').some(b=>b.text().includes('数据分析'))).toBe(false);await app.findAll('aside button').find(b=>b.text().includes('自由创作'))!.trigger('click');await flushPromises();await app.findAll('button').find(b=>b.text()==='专家模式')!.trigger('click');await flushPromises();expect(router.currentRoute.value.query.mode).toBe('expert');});

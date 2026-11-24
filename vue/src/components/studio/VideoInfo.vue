@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { studio } from '@/services/studio';
 import { platformName } from '@/services/accounts';
 import { currentUser } from '@/services/identity';
+import { workspaceOwnerId } from '@/services/team';
 import { getMedia } from '@/services/media';
 import type { VideoRow } from '@/services/videoManagement';
 import { cover, dateTime, duration, scheduledDateTime, rowPlatforms } from '@/services/videoManagement';
@@ -16,7 +17,7 @@ watch(() => imageIds.value[0], async id => {
   if (imageUrl.value) URL.revokeObjectURL(imageUrl.value);
   imageUrl.value = '';
   if (!id || !currentUser.value) return;
-  const blob = await getMedia(currentUser.value.id, id);
+  const blob = await getMedia(workspaceOwnerId(), id);
   if (blob) imageUrl.value = URL.createObjectURL(blob);
 }, { immediate: true });
 onBeforeUnmount(() => { if (imageUrl.value) URL.revokeObjectURL(imageUrl.value); });

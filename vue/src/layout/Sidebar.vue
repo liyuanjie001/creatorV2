@@ -1,10 +1,14 @@
 <script setup lang="ts">
-import { FolderKanban, FolderOpen, Lightbulb, Users, ShoppingBag } from 'lucide-vue-next';
+import { FolderKanban, FolderOpen, Lightbulb, Users, UsersRound, ShoppingBag, CircleHelp } from 'lucide-vue-next';
+import { currentUser } from '@/services/identity';
+import { guideTour } from '@/services/guideTour';
 import { creditsBalance } from '@/services/credits';
+import { isTeamAdmin, isTeamMember } from '@/services/team';
 import ProfileQuickMenu from './ProfileQuickMenu.vue';
 import { CreditsIcon } from '@/components/shared';
 import { cn } from '@/lib/utils';
 import { RouterLink, useRouter, useRoute } from 'vue-router';
+import { computed } from 'vue';
 
 const mainNav = [
   {
@@ -26,10 +30,12 @@ const mainNav = [
     icon: Users,
     match: (path: string) => path.startsWith('/accounts') || path.startsWith('/roxy'),
   },
+  { to: '/team', label: '团队协作', icon: UsersRound, match: (path: string) => path.startsWith('/team') },
 ];
 
 const router = useRouter();
 const location = useRoute();
+const visibleNav = computed(() => mainNav.filter(item => item.to !== '/team' || isTeamAdmin.value || isTeamMember.value));
 </script>
 
 <template>
@@ -39,10 +45,11 @@ const location = useRoute();
     </div>
     <nav class="flex flex-col items-center gap-1 px-2 pt-1">
       <RouterLink
-        v-for="item in mainNav"
+        v-for="item in visibleNav"
         :key="item.to"
         :to="item.to"
         :aria-label="item.label"
+        :data-tour="item.to === '/' ? 'projects' : undefined"
         :class="
           cn(
             'flex w-full flex-col items-center gap-1 rounded-xl px-1 py-2.5 transition-colors',
@@ -57,7 +64,11 @@ const location = useRoute();
       </RouterLink>
     </nav>
     <div class="mt-auto border-t border-slate-200/70 px-1.5 py-3">
+      <button type="button" aria-label="新手引导" class="mb-2 flex w-full flex-col items-center gap-1 rounded-xl py-2.5 text-slate-500 hover:bg-white/70 hover:text-sky-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-500" @click="currentUser && guideTour.start(currentUser.id)">
+        <CircleHelp class="h-5 w-5" aria-hidden="true" /><span class="text-[11px]">新手引导</span>
+      </button>
       <RouterLink
+        v-if="!isTeamMember"
         to="/purchase"
         aria-label="套餐购买"
         :aria-current="location.path === '/purchase' ? 'page' : undefined"

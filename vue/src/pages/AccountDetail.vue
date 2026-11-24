@@ -37,6 +37,8 @@ const fields = computed(() =>
         ['登录状态', loginStatus(account.value.status)],
         ['备注', account.value.note || '未填写'],
         ['授权时间', dateTime(account.value.authorizedAt)],
+        ['授权到期', dateTime(account.value.authorizationExpiresAt)],
+        ['数据更新', dateTime(account.value.dataUpdatedAt)],
       ]
     : [],
 );
@@ -95,7 +97,7 @@ function back() {
             <p class="mt-1 text-sm text-slate-500">
               {{ account.handle }}
             </p>
-            <dl class="mt-2 flex flex-wrap gap-x-4 gap-y-1" aria-label="帐号社交数据">
+            <dl data-tour="account-data" class="mt-2 flex flex-wrap gap-x-4 gap-y-1" aria-label="帐号社交数据">
               <div
                 v-for="item in [
                   { label: '关注', value: account.statistics?.following },
@@ -149,6 +151,9 @@ function back() {
           </div>
         </div>
       </section>
+      <p v-if="accountPlatform(account) === 'youtube'" class="rounded-xl bg-sky-50 p-4 text-sm text-sky-700">
+        YouTube 仅支持账号管理演示，暂不支持发布。
+      </p>
       <section
         v-if="account.loginInfo"
         class="space-y-4 rounded-2xl border border-slate-200 bg-white p-5"

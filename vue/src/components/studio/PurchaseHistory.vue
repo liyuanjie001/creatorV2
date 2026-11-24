@@ -5,7 +5,7 @@ import { ReceiptText, RefreshCw } from 'lucide-vue-next';
 import { toast } from 'vue-sonner';
 import { Card, Button, Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui';
 import { purchaseHistory } from '@/services/purchaseHistory';
-import { refreshRechargeAccount } from '@/services/credits';
+import { refreshRechargeAccount, subscriptionStatus, formatSubscriptionDate } from '@/services/credits';
 import { currentUser } from '@/services/identity';
 const router = useRouter();
 const page = ref(1);
@@ -129,8 +129,14 @@ function viewAccounts() {
                   {{ amount(order.amount) }} / {{ order.credits.toLocaleString() }} 积分
                 </p>
                 <p class="mt-1 text-[11px] text-slate-400">{{ order.name }}</p>
-                <p v-if="order.accountCount" class="mt-1.5 text-[11px] leading-5 text-slate-500">
-                  账号使用权 {{ order.accountCount }} 个 · {{ order.accountStatus }}
+                <p v-if="order.subscription" class="mt-2 text-xs leading-5 text-slate-700">
+                  {{ subscriptionStatus(order) }} · {{ order.subscription.edition === 'team' ? `${order.subscription.seats} 席（另计本人）` : '限本人使用' }}
+                  <span v-if="order.subscription.startsAt && order.subscription.endsAt" class="mt-1 block">
+                    {{ formatSubscriptionDate(order.subscription.startsAt) }} 至 {{ formatSubscriptionDate(order.subscription.endsAt) }}
+                  </span>
+                </p>
+                <p v-if="order.subscription || order.accountCount" class="mt-1.5 text-[11px] leading-5 text-slate-500">
+                  账号使用权 {{ order.accountCount ?? 0 }} 个<span v-if="order.accountStatus"> · {{ order.accountStatus }}</span>
                 </p>
                 <p v-if="order.purchaseMode === 'creditsOnly'" class="mt-1 text-[11px] text-slate-400">
                   账号已兑换为积分
@@ -165,8 +171,14 @@ function viewAccounts() {
           <p class="mt-3 text-sm font-medium tabular-nums text-slate-700">
             {{ amount(order.amount) }} / {{ order.credits.toLocaleString() }} 积分
           </p>
-          <p v-if="order.accountCount" class="mt-2 text-xs leading-6 text-slate-500">
-            账号使用权 {{ order.accountCount }} 个 · {{ order.accountStatus }}
+          <p v-if="order.subscription" class="mt-2 text-xs leading-5 text-slate-700">
+            {{ subscriptionStatus(order) }} · {{ order.subscription.edition === 'team' ? `${order.subscription.seats} 席（另计本人）` : '限本人使用' }}
+            <span v-if="order.subscription.startsAt && order.subscription.endsAt" class="mt-1 block">
+              {{ formatSubscriptionDate(order.subscription.startsAt) }} 至 {{ formatSubscriptionDate(order.subscription.endsAt) }}
+            </span>
+          </p>
+          <p v-if="order.subscription || order.accountCount" class="mt-2 text-xs leading-6 text-slate-500">
+            账号使用权 {{ order.accountCount ?? 0 }} 个<span v-if="order.accountStatus"> · {{ order.accountStatus }}</span>
           </p>
           <p v-if="order.purchaseMode === 'creditsOnly'" class="mt-2 text-xs text-slate-400">
             账号已兑换为积分
@@ -204,6 +216,19 @@ function viewAccounts() {
           <dl class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-5 gap-y-4 text-xs leading-6">
             <dt class="text-slate-400">购买内容</dt>
             <dd>{{ selected.name }}</dd>
+            <template v-if="selected.subscription">
+              <dt class="text-slate-400">订阅状态</dt><dd>{{ subscriptionStatus(selected) }}</dd>
+              <dt class="text-slate-400">团队席位</dt><dd>{{ selected.subscription.edition === 'team' ? `${selected.subscription.seats} 席（另计本人）` : '限本人使用' }}</dd>
+              <template v-if="selected.subscription.startsAt && selected.subscription.endsAt">
+                <dt class="text-slate-400">生效日期</dt><dd>{{ formatSubscriptionDate(selected.subscription.startsAt) }}</dd>
+                <dt class="text-slate-400">到期日期</dt><dd>{{ formatSubscriptionDate(selected.subscription.endsAt) }}</dd>
+              </template>
+              <dt class="text-slate-400">基础价</dt><dd>{{ amount(selected.subscription.baseAmount) }}</dd>
+              <dt class="text-slate-400">账号费用</dt><dd>{{ amount(selected.subscription.accountAmount) }}（{{ selected.accountCount ?? 0 }} 个）</dd>
+              <template v-if="selected.subscription.edition === 'team'">
+                <dt class="text-slate-400">席位费用</dt><dd>{{ amount(selected.subscription.seatAmount) }}</dd>
+              </template>
+            </template>
             <dt class="text-slate-400">订单号</dt>
             <dd class="break-all">
               {{ selected.id }}

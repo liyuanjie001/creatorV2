@@ -3,7 +3,13 @@ import { computed, ref, watch, nextTick } from 'vue';
 import { PopoverRoot, PopoverTrigger, PopoverPortal, PopoverContent } from 'reka-ui';
 import { Search, ChevronDown, Check } from 'lucide-vue-next';
 import type { TKAccount } from '@/types/studio';
-import { loginStatus, accountPlatform, platformName, platforms } from '@/services/accounts';
+import {
+  loginStatus,
+  accountPlatform,
+  platformName,
+  publishingPlatforms as platforms,
+  supportsPublishing,
+} from '@/services/accounts';
 import { dateTime } from '@/services/videoManagement';
 const props = defineProps<{
   accounts: TKAccount[];
@@ -27,12 +33,20 @@ const unavailable = computed(
 );
 const filtered = computed(() => {
   const q = query.value.trim().toLowerCase();
-  return props.accounts.filter(a => !platform.value || accountPlatform(a) === platform.value).filter((a) =>
-    `${a.name} ${a.handle} ${groupName(a)} ${a.note} ${platformName(accountPlatform(a))}`.toLowerCase().includes(q),
-  );
+  return props.accounts
+    .filter(supportsPublishing)
+    .filter((a) => !platform.value || accountPlatform(a) === platform.value)
+    .filter((a) =>
+      `${a.name} ${a.handle} ${groupName(a)} ${a.note} ${platformName(accountPlatform(a))}`
+        .toLowerCase()
+        .includes(q),
+    );
 });
 watch(open, (value) => {
-  if (value) { query.value = ''; platform.value = ''; }
+  if (value) {
+    query.value = '';
+    platform.value = '';
+  }
 });
 watch(
   () => props.disabled,
@@ -44,6 +58,7 @@ function choose(account: TKAccount) {
   if (
     props.disabled ||
     account.deleted ||
+    !supportsPublishing(account) ||
     account.status !== '已授权' ||
     !props.accounts.some((a) => a.id === account.id)
   )
@@ -86,7 +101,11 @@ function keyboard(event: KeyboardEvent) {
         >
           <span class="min-w-0 flex-1 truncate">
             {{
-              selected ? `${selected.name} · ${selected.handle} · ${platformName(accountPlatform(selected))}` : modelValue ? '帐号不可用' : '请选择帐号'
+              selected
+                ? `${selected.name} · ${selected.handle} · ${platformName(accountPlatform(selected))}`
+                : modelValue
+                  ? '帐号不可用'
+                  : '请选择帐号'
             }}
           </span>
           <span
@@ -112,7 +131,13 @@ function keyboard(event: KeyboardEvent) {
           @open-auto-focus.prevent="nextTick(() => search?.focus())"
           @keydown="keyboard"
         >
-<label class="mb-2 flex items-center gap-2 text-xs text-slate-500">平台<select v-model="platform" aria-label="筛选帐号平台" class="studio-field !h-9"><option value="">全部平台</option><option v-for="p in platforms" :key="p.value" :value="p.value">{{ p.label }}</option></select></label>
+          <label class="mb-2 flex items-center gap-2 text-xs text-slate-500">
+            平台
+            <select v-model="platform" aria-label="筛选帐号平台" class="studio-field !h-9">
+              <option value="">全部平台</option>
+              <option v-for="p in platforms" :key="p.value" :value="p.value">{{ p.label }}</option>
+            </select>
+          </label>
           <label class="relative m-3 block shrink-0">
             <Search class="pointer-events-none absolute left-3 top-3 h-4 w-4 text-slate-400" />
             <input
@@ -157,7 +182,9 @@ function keyboard(event: KeyboardEvent) {
                       {{ loginStatus(account.status) }}
                     </span>
                   </span>
-                  <span class="block break-all text-slate-500">{{ account.handle }} · {{ platformName(accountPlatform(account)) }}</span>
+                  <span class="block break-all text-slate-500">
+                    {{ account.handle }} · {{ platformName(accountPlatform(account)) }}
+                  </span>
                   <span class="block break-words text-slate-500">
                     分组：{{ groupName(account) }} · 备注：{{ account.note || '未填写' }}
                   </span>

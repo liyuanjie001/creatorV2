@@ -44,6 +44,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router';
 import { studio, startGeneration, startBreakdown, blankAttributes } from '@/services/studio';
 import { currentUser } from '@/services/identity';
+import { workspaceOwnerId } from '@/services/team';
 import { saveMedia, getMedia } from '@/services/media';
 import { uid } from '@/services/storage';
 import { mockBreakdown, breakdownText } from '@/services/breakdown';
@@ -134,7 +135,7 @@ watch(() => localVideo.value?.mediaId || editingVideoMedia.value[0]?.mediaId, as
  if (targetPreview.value) URL.revokeObjectURL(targetPreview.value);
  targetPreview.value = '';
  if (!id || !currentUser.value) return;
- try { const blob = await getMedia(currentUser.value.id, id); if (blob && revision === previewRevision) targetPreview.value = URL.createObjectURL(blob); } catch { /* Replace unavailable media through the source picker. */ }
+ try { const blob = await getMedia(workspaceOwnerId(), id); if (blob && revision === previewRevision) targetPreview.value = URL.createObjectURL(blob); } catch { /* Replace unavailable media through the source picker. */ }
 });
 onBeforeUnmount(() => { previewRevision++; if (targetPreview.value) URL.revokeObjectURL(targetPreview.value); });
 const quickPrompts: Record<QuickAction, string> = {
@@ -184,7 +185,7 @@ async function uploadQuickVideo(event: Event) {
     if (!file.type.startsWith('video/')) throw new Error('请选择视频文件');
     if (!currentUser.value) throw new Error('请先登录后上传');
     videoUploading.value = true;
-    const mediaId = await saveMedia(currentUser.value.id, file);
+    const mediaId = await saveMedia(workspaceOwnerId(), file);
     const reference = { id: uid(), title: file.name, author: '本地视频', url: '', source: '本地上传', duration: '待分析' };
     studio.value.references.unshift(reference);
     editingVideoMedia.value = [];
@@ -255,7 +256,7 @@ async function uploadReferenceImages(event: Event) {
     toast.error(`参考素材最多选择 ${MAX_ASSETS} 个`); input.value = ''; return;
   }
   try {
-    for (const file of files) selectedLocalImageRefs.value.push({ id: uid(), name: file.name, type: '图片', mediaId: await saveMedia(currentUser.value!.id, file) });
+    for (const file of files) selectedLocalImageRefs.value.push({ id: uid(), name: file.name, type: '图片', mediaId: await saveMedia(workspaceOwnerId(), file) });
   } catch (error) { toast.error((error as Error).message); }
   finally { input.value = ''; }
 }

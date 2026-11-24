@@ -11,11 +11,12 @@ import { Toaster } from 'vue-sonner';
 import Sidebar from '@/layout/Sidebar.vue';
 import InspirationDialog from '@/layout/InspirationDialog.vue';
 import VideoPlayerDialog from '@/components/VideoPlayerDialog.vue';
+import GuideTour from '@/components/tour/GuideTour.vue';
 const route = useRoute();
 </script>
 
 <template>
-  <div class="min-h-screen bg-[#eef0f3] text-slate-900">
+  <div data-tour-background class="min-h-screen bg-[#eef0f3] text-slate-900">
     <RouterView v-if="route.name === 'unlock' || route.name === 'auth'" />
     <template v-else-if="route.matched.length">
       <Sidebar />
@@ -54,4 +55,5 @@ const route = useRoute();
       }"
     />
   </div>
+  <GuideTour />
 </template>

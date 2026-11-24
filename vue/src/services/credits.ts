@@ -1,6 +1,8 @@
 import { computed, ref, watch } from 'vue';
+import { DateTime } from 'luxon';
 import { currentUser } from './identity';
 import { now, readJSON, uid, writeJSON } from './storage';
+import { assertCreditSpend, commitCreditSpend, currentMember, isTeamMember, workspaceOwnerId } from './team';
 import type { SocialPlatform, StudioState, TKAccount } from '@/types/studio';
 import { countryName, isCountryCode } from './countries';
 
@@ -93,29 +95,43 @@ export const rechargePacks = {
   },
 } as const;
 export type RechargePackKey = keyof typeof rechargePacks;
-export type RechargeBenefit = { label: string; value: boolean | number | string };
+export const rechargeBenefitCategories = ['AI 创作', '账号与发布', '数据分析', '团队协作'] as const;
+export type RechargeBenefit = {
+  category: (typeof rechargeBenefitCategories)[number];
+  label: string;
+  value: boolean | number | string;
+};
 // These benefits describe the purchased package; they do not gate application features.
-export function getRechargeBenefits(pack: (typeof rechargePacks)[RechargePackKey]): RechargeBenefit[] {
+export function getRechargeBenefits(
+  pack: (typeof rechargePacks)[RechargePackKey],
+  subscription?: Pick<SubscriptionQuote, 'edition' | 'accountCount' | 'seats'>,
+): RechargeBenefit[] {
   return [
-    { label: '视频一键发布', value: true },
-    { label: '图文一键发布', value: pack.benefits.imagePublishing },
-    { label: '视频／图文 BGM', value: pack.benefits.bgm },
-    { label: '批量发布', value: pack.benefits.batchPublishing },
-    { label: '定时发布', value: pack.benefits.scheduledPublishing },
-    { label: '可绑定发布账号数', value: `${pack.accountCount} 个` },
-    { label: '可发布平台', value: '全部平台' },
-    { label: '快速创作', value: true },
-    { label: '智能创作（Agent 多任务并行）', value: true },
-    { label: '爆款视频复刻', value: pack.benefits.videoRemake },
-    { label: '批量内容生成', value: pack.benefits.batchGeneration },
-    { label: '账号数据通解', value: true },
-    { label: '发布结果统计', value: true },
-    { label: '内容数据分析', value: pack.benefits.contentAnalytics },
-    { label: '项目管理（不限项目数）', value: true },
-    { label: '产品卡创建', value: true },
-    { label: '素材库管理', value: true },
-    { label: '团队协作成员', value: pack.teamMembers ? `${pack.teamMembers} 人` : false },
-    { label: '团队权限管理', value: pack.benefits.teamPermissions },
+    { category: 'AI 创作', label: '快速创作', value: true },
+    { category: 'AI 创作', label: '智能创作', value: true },
+    { category: 'AI 创作', label: '多任务并行', value: pack.amount === 500 ? '10个' : pack.amount === 1000 ? '20个' : pack.amount === 2000 ? '无限并行任务' : '高级加速通道' },
+    { category: 'AI 创作', label: '爆款视频复刻', value: pack.benefits.videoRemake },
+    { category: 'AI 创作', label: '项目管理（不限制项目个数）', value: true },
+    { category: 'AI 创作', label: '产品卡创建', value: true },
+    { category: 'AI 创作', label: '素材库管理', value: true },
+    { category: 'AI 创作', label: '批量生成视频', value: pack.benefits.batchGeneration },
+    { category: '账号与发布', label: '视频一键发布', value: true },
+    { category: '账号与发布', label: '图文一键发布', value: pack.benefits.imagePublishing },
+    { category: '账号与发布', label: '配置视频/图文 BGM', value: pack.benefits.bgm },
+    { category: '账号与发布', label: '批量发布视频', value: pack.benefits.batchPublishing },
+    { category: '账号与发布', label: '定时发布', value: pack.benefits.scheduledPublishing },
+    { category: '账号与发布', label: '可绑定发布账号的个数', value: pack.accountCount },
+    { category: '账号与发布', label: '可发布平台', value: '全部平台' },
+    { category: '账号与发布', label: '账号数据同步', value: true },
+    { category: '数据分析', label: '发布结果统计', value: true },
+    { category: '数据分析', label: '内容数据分析', value: pack.benefits.contentAnalytics },
+    ...(subscription?.edition === 'team' ? [
+      { category: '团队协作' as const, label: '团队协作成员', value: true },
+      { category: '团队协作' as const, label: '项目权限管理', value: true },
+      { category: '团队协作' as const, label: '项目资源共享', value: true },
+      { category: '团队协作' as const, label: '团队席位管理', value: true },
+      { category: '团队协作' as const, label: '积分用量管理', value: true },
+    ] : []),
   ];
 }
 function creditPack(key: RechargePackKey) {
@@ -144,6 +160,79 @@ export const purchasePacks = { ...rechargePacks, ...creditOnlyPacks, ...accountO
 export type PurchasePackKey = keyof typeof purchasePacks;
 export type PurchaseOptions = { includeAccounts?: boolean };
 export type PurchaseMode = 'withAccounts' | 'creditsOnly';
+export const subscriptionEditions = { personal: '个人版', team: '团队版' } as const;
+export const subscriptionPeriods = { quarter: '按季订阅', year: '按年订阅' } as const;
+export const subscriptionLimits = { accounts: { min: 0, max: 100 }, seats: { min: 2, max: 100 } } as const;
+export const subscriptionUnitPrices = {
+  account: { p500: 42, p1000: 40, p2000: 36, p5000: 30 },
+  quarterlySeat: { p500: 60, p1000: 50, p2000: 45, p5000: 40 },
+} as const;
+export type SubscriptionEdition = keyof typeof subscriptionEditions;
+export type SubscriptionPeriod = keyof typeof subscriptionPeriods;
+// Subscription allocations are separate from standalone credit top-ups.
+export const subscriptionQuarterlyCredits: Record<RechargePackKey, number> = {
+  p500: 961,
+  p1000: 2272,
+  p2000: 5000,
+  p5000: 12820,
+};
+export type SubscriptionOptions = {
+  edition: SubscriptionEdition;
+  period: SubscriptionPeriod;
+  accountCount: number;
+  seats: number;
+};
+type SubscriptionQuote = SubscriptionOptions & {
+  baseAmount: number;
+  accountAmount: number;
+  seatAmount: number;
+  amount: number;
+  credits: number;
+};
+export type SubscriptionSnapshot = Omit<SubscriptionQuote, 'amount' | 'credits' | 'accountCount'> & {
+  startsAt?: string;
+  endsAt?: string;
+};
+
+export function getSubscriptionQuote(tier: RechargePackKey, options: SubscriptionOptions): SubscriptionQuote {
+  const { edition, period, accountCount, seats } = options;
+  if (!Object.hasOwn(rechargePacks, tier) || !Object.hasOwn(subscriptionEditions, edition) || !Object.hasOwn(subscriptionPeriods, period))
+    throw new Error('请选择有效版本、档位和订阅周期');
+  const validCount = (value: number, range: { min: number; max: number }) =>
+    Number.isSafeInteger(value) && value >= range.min && value <= range.max;
+  if (!validCount(accountCount, subscriptionLimits.accounts)) throw new Error('账号使用权数量须为 0–100 的整数');
+  if (edition === 'team' ? !validCount(seats, subscriptionLimits.seats) : seats !== 0)
+    throw new Error(edition === 'team' ? '团队席位数须为 2–100 的整数' : '个人版仅限本人使用');
+  const pack = rechargePacks[tier];
+  const multiplier = period === 'year' ? 4 : 1;
+  const baseAmount = pack.amount * multiplier;
+  const accountAmount = accountCount * subscriptionUnitPrices.account[tier];
+  const seatAmount = seats * subscriptionUnitPrices.quarterlySeat[tier] * multiplier;
+  return {
+    edition, period, accountCount, seats, baseAmount, accountAmount, seatAmount,
+    amount: baseAmount + accountAmount + seatAmount,
+    credits: subscriptionQuarterlyCredits[tier] * multiplier,
+  };
+}
+
+/**
+ * The discount uses the Basic plan's credit price as the reference price.
+ * Account and seat add-ons are compared at their Basic plan unit prices.
+ */
+export function getSubscriptionDiscount(quote: SubscriptionQuote) {
+  const basic = rechargePacks.p500;
+  const periodMultiplier = quote.period === 'year' ? 4 : 1;
+  const referenceAmount =
+    quote.credits * (basic.amount / subscriptionQuarterlyCredits.p500) +
+    quote.accountCount * subscriptionUnitPrices.account.p500 +
+    quote.seats * subscriptionUnitPrices.quarterlySeat.p500 * periodMultiplier;
+  return {
+    referenceAmount,
+    ratio: quote.amount / referenceAmount,
+    label: `${(quote.amount / referenceAmount * 10).toFixed(1)}折`,
+  };
+}
+
 export function getPurchaseQuote(pack: PurchasePackKey, options: PurchaseOptions = {}) {
   if (!Object.hasOwn(purchasePacks, pack)) throw new Error('请选择有效套餐');
   const config = purchasePacks[pack];
@@ -170,14 +259,16 @@ export type RechargeOrder = {
   accountCount?: number;
   purchaseMode?: PurchaseMode;
   videoCount?: number;
+  subscription?: SubscriptionSnapshot;
   deliveryMode?: 'automatic';
   channel: PaymentChannel;
   status: 'pending' | 'completed';
   createdAt: string;
   completedAt?: string;
 };
-export type AccountAllocation = Record<SocialPlatform, number>;
-export type AccountClaimItem = { platform: SocialPlatform; countryCode: string; quantity: number };
+export type PurchasedPlatform = Exclude<SocialPlatform, 'youtube'>;
+export type AccountAllocation = Record<PurchasedPlatform, number>;
+export type AccountClaimItem = { platform: PurchasedPlatform; countryCode: string; quantity: number };
 export type AccountClaimInput = AccountAllocation | AccountClaimItem[];
 export type AccountClaim = {
   id: string;
@@ -197,21 +288,22 @@ function read(userId: string): CreditAccount {
 }
 function save(userId: string, value: CreditAccount) {
   if (!writeJSON(key(userId), value)) throw new Error('本地保存失败，请检查浏览器存储后重试');
-  if (currentUser.value?.id === userId) account.value = value;
+  if (workspaceOwnerId() === userId) account.value = value;
 }
 watch(
-  () => currentUser.value?.id,
-  (userId) => {
-    account.value = userId ? read(userId) : initial();
+  () => currentUser.value ? workspaceOwnerId() : null,
+  (ownerId) => {
+    account.value = ownerId ? read(ownerId) : initial();
   },
   { immediate: true, flush: 'sync' },
 );
-export const creditsBalance = computed(() => account.value.balance);
-export const creditsTotal = computed(() => account.value.total);
+export const creditsBalance = computed(() => isTeamMember.value ? currentMember.value?.credits ?? 0 : account.value.balance);
+export const creditsTotal = computed(() => isTeamMember.value ? currentMember.value?.creditLimit ?? 0 : account.value.total);
 export const rechargeOrders = computed(() => account.value.orders);
 export const rechargeAccountClaims = computed(() => account.value.claims);
 // Reload persisted snapshots without settling pending orders or changing balances.
 export function refreshRechargeAccount() {
+  if (isTeamMember.value) throw new Error('仅管理员可以查看团队充值账本');
   const owner = userId();
   try {
     const raw = localStorage.getItem(key(owner));
@@ -242,11 +334,60 @@ export function refreshRechargeAccount() {
     throw new Error('订单读取失败，请检查浏览器存储后重试');
   }
 }
-// Credits-only recharges never change the version; buying a lower tier does not downgrade it.
+const subscriptionClock = ref(Date.now());
+watch(account, (_, __, onCleanup) => {
+  let timer: ReturnType<typeof setTimeout>;
+  function update() {
+    const time = Date.now();
+    subscriptionClock.value = time;
+    let next = Infinity;
+    for (const { subscription } of account.value.orders) {
+      for (const value of [subscription?.startsAt, subscription?.endsAt]) {
+        if (!value) continue;
+        const boundary = Date.parse(value);
+        if (boundary > time) next = Math.min(next, boundary);
+      }
+    }
+    if (Number.isFinite(next)) timer = setTimeout(update, Math.min(next - time, 2_147_483_647));
+  }
+  update();
+  onCleanup(() => clearTimeout(timer));
+}, { immediate: true, flush: 'sync' });
+
+export function subscriptionStatus(order: RechargeOrder) {
+  const term = order.subscription;
+  if (!term) return '';
+  if (order.status === 'pending' || !term.startsAt || !term.endsAt) return '待支付';
+  if (Date.parse(term.startsAt) > subscriptionClock.value) return '待生效';
+  return Date.parse(term.endsAt) > subscriptionClock.value ? '生效中' : '已到期';
+}
+export function formatSubscriptionDate(value: string) {
+  return DateTime.fromISO(value, { zone: 'Asia/Shanghai' }).toFormat('yyyy-MM-dd HH:mm');
+}
+
+export const currentSubscription = computed(() => {
+  let selected: RechargeOrder | undefined;
+  for (const order of account.value.orders) {
+    if (!Object.hasOwn(rechargePacks, order.pack) || subscriptionStatus(order) !== '生效中') continue;
+    const rank = rechargePacks[order.pack as RechargePackKey].amount;
+    if (!selected || rank > rechargePacks[selected.pack as RechargePackKey].amount ||
+      (rank === rechargePacks[selected.pack as RechargePackKey].amount &&
+        Date.parse(order.subscription!.startsAt!) >= Date.parse(selected.subscription!.startsAt!))) selected = order;
+  }
+  return selected;
+});
+export const latestSubscription = computed(() =>
+  account.value.orders.reduce<RechargeOrder | undefined>((latest, order) => {
+    if (!order.subscription || !order.completedAt) return latest;
+    return !latest || order.completedAt >= latest.completedAt! ? order : latest;
+  }, undefined),
+);
+
 export const currentPackageKey = computed<RechargePackKey | null>(() => {
+  if (currentSubscription.value) return currentSubscription.value.pack as RechargePackKey;
   let highest: RechargePackKey | null = null;
   for (const order of account.value.orders) {
-    if (order.status !== 'completed') continue;
+    if (order.status !== 'completed' || order.subscription) continue;
     const pack = order.pack === 'p490' ? 'p500' : order.pack;
     if (!Object.hasOwn(rechargePacks, pack)) continue;
     const candidate = pack as RechargePackKey;
@@ -284,17 +425,37 @@ function remainingLegacyAccounts(value: CreditAccount) {
 export const socialAccountsRemaining = computed(() => remainingLegacyAccounts(account.value));
 function userId() {
   if (!currentUser.value) throw new Error('请先登录后充值');
-  return currentUser.value.id;
+  if (isTeamMember.value) throw new Error('仅管理员可以充值和管理购买记录');
+  return workspaceOwnerId();
+}
+export function spendCredits(amount: number) {
+  if (!Number.isSafeInteger(amount) || amount <= 0) return;
+  const owner = workspaceOwnerId();
+  const value = read(owner);
+  assertCreditSpend(amount, value.balance);
+  const next = { ...value, balance: value.balance - amount };
+  save(owner, next);
+  try { commitCreditSpend(amount); }
+  catch (error) { save(owner, value); throw error; }
 }
 export function createRechargeOrder(pack: PurchasePackKey, options: PurchaseOptions = {}): RechargeOrder {
+  return savePendingOrder(pack, getPurchaseQuote(pack, options));
+}
+export function createSubscriptionOrder(pack: RechargePackKey, options: SubscriptionOptions): RechargeOrder {
+  const { amount, credits, accountCount, ...subscription } = getSubscriptionQuote(pack, options);
+  return savePendingOrder(pack, { amount, credits, accountCount, subscription });
+}
+function savePendingOrder(
+  pack: PurchasePackKey,
+  quote: Pick<RechargeOrder, 'amount' | 'credits' | 'accountCount' | 'purchaseMode' | 'videoCount' | 'subscription'>,
+): RechargeOrder {
   const id = userId();
-  const quote = getPurchaseQuote(pack, options);
   const order: RechargeOrder = {
     id: uid(),
     userId: id,
     pack,
     ...quote,
-    ...(quote.accountCount > 0 ? { deliveryMode: 'automatic' as const } : {}),
+    ...((quote.accountCount ?? 0) > 0 ? { deliveryMode: 'automatic' as const } : {}),
     channel: 'alipay',
     status: 'pending',
     createdAt: now(),
@@ -310,6 +471,23 @@ export function completeRecharge(orderId: string, channel: PaymentChannel): Rech
   if (!order) throw new Error('充值订单不存在，请重新选择档位');
   if (order.status === 'completed') return order;
   const completed: RechargeOrder = { ...order, channel, status: 'completed', completedAt: now() };
+  if (order.subscription) {
+    const edition = order.subscription.edition;
+    let starts = Date.parse(completed.completedAt!);
+    // Renewals chain after the last paid term of the same edition and tier.
+    for (const previous of value.orders) {
+      if (previous.status !== 'completed' || previous.pack !== order.pack || previous.subscription?.edition !== edition) continue;
+      const end = Date.parse(previous.subscription.endsAt ?? '');
+      if (end > starts) starts = end;
+    }
+    const startDate = DateTime.fromMillis(starts, { zone: 'Asia/Shanghai' });
+    const months = order.subscription.period === 'year' ? 12 : 3;
+    completed.subscription = {
+      ...order.subscription,
+      startsAt: startDate.toUTC().toISO()!,
+      endsAt: startDate.plus({ months }).toUTC().toISO()!,
+    };
+  }
   const claims = [...value.claims];
   if (order.deliveryMode === 'automatic' && (order.accountCount ?? 0) > 0) {
     const requestId = `automatic:${order.id}`;
@@ -339,7 +517,7 @@ export function completeRecharge(orderId: string, channel: PaymentChannel): Rech
 function createPurchasedAccount(
   requestId: string,
   orderId: string,
-  platform: SocialPlatform,
+  platform: PurchasedPlatform,
   countryCode: string,
   index: number,
   deliveryId?: string,
@@ -374,7 +552,7 @@ function createPurchasedAccount(
 
 // The claim ledger commits first; delivery can be recovered after an interrupted workspace write.
 export function normalizeClaimItems(input: AccountClaimInput): AccountClaimItem[] {
-  const platformKeys: SocialPlatform[] = ['tiktok', 'instagram', 'facebook'];
+  const platformKeys: PurchasedPlatform[] = ['tiktok', 'instagram', 'facebook'];
   const rows = Array.isArray(input)
     ? input
     : platformKeys.map((platform) => ({ platform, countryCode: 'US', quantity: input?.[platform] }));

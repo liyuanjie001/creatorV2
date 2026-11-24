@@ -5,6 +5,7 @@ import { Play, Send, Download, Pencil, LayoutGrid, List, Trash2, RotateCcw, Sear
 import { studio, startGeneration, retryGeneration } from '@/services/studio';
 import { getMedia } from '@/services/media';
 import { currentUser } from '@/services/identity';
+import { workspaceOwnerId } from '@/services/team';
 import { downloadFile } from '@/services/storage';
 import { toast } from 'vue-sonner';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui';
@@ -64,10 +65,10 @@ const films=computed(() => {
   const pending: Film[] = studio.value.jobs.filter(j => j.projectId === props.projectId && j.status !== '已完成' && !completed.some(f => f.id === j.id)).map(j => ({ ...j.film, id: j.id, createdAt: j.createdAt ?? new Date(j.dueAt - 5000).toISOString() }));
   return [...pending, ...completed].filter(f => f.title.toLowerCase().includes(query.value.toLowerCase()));
 });
-async function open(f:Film){if(creationStatus(f)!=='成功')return;if(mediaUrl.value)URL.revokeObjectURL(mediaUrl.value);mediaUrl.value='';preview.value=f;if(f.mediaIds[0]){try{const blob=await getMedia(currentUser.value!.id,f.mediaIds[0]);if(blob)mediaUrl.value=URL.createObjectURL(blob);else toast.error('本地媒体不存在，请重新上传');}catch(e){toast.error((e as Error).message);}}}
+async function open(f:Film){if(creationStatus(f)!=='成功')return;if(mediaUrl.value)URL.revokeObjectURL(mediaUrl.value);mediaUrl.value='';preview.value=f;if(f.mediaIds[0]){try{const blob=await getMedia(workspaceOwnerId(),f.mediaIds[0]);if(blob)mediaUrl.value=URL.createObjectURL(blob);else toast.error('本地媒体不存在，请重新上传');}catch(e){toast.error((e as Error).message);}}}
 onBeforeUnmount(() => { if (mediaUrl.value) URL.revokeObjectURL(mediaUrl.value); });
 function close(){preview.value=null;if(mediaUrl.value)URL.revokeObjectURL(mediaUrl.value);mediaUrl.value='';}
-async function download(f:Film){if(f.mediaIds.length){for(const id of f.mediaIds){const blob=await getMedia(currentUser.value!.id,id);if(blob)downloadFile(f.title+(f.type==='视频'?'.mp4':'.png'),blob);else toast.error('媒体已丢失');}}else{downloadFile(`${f.title}-创作说明.txt`,new Blob([`演示成片（尚未连接视频生成服务）\n${f.title}\n${f.brief}\n${f.ratio} / ${f.duration}s / ${f.quality}`],{type:'text/plain'}));toast.info('已下载创作说明；原型生成结果不含真实视频文件');}}
+async function download(f:Film){if(f.mediaIds.length){for(const id of f.mediaIds){const blob=await getMedia(workspaceOwnerId(),id);if(blob)downloadFile(f.title+(f.type==='视频'?'.mp4':'.png'),blob);else toast.error('媒体已丢失');}}else{downloadFile(`${f.title}-创作说明.txt`,new Blob([`演示成片（尚未连接视频生成服务）\n${f.title}\n${f.brief}\n${f.ratio} / ${f.duration}s / ${f.quality}`],{type:'text/plain'}));toast.info('已下载创作说明；原型生成结果不含真实视频文件');}}
 function renameFilm(f: Film, event: Event) {
   const input = event.target as HTMLInputElement;
   const value = input.value.trim();

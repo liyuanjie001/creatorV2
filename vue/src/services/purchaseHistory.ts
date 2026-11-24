@@ -5,12 +5,16 @@ import {
   rechargeAccountClaims,
   purchasePacks,
   rechargePacks,
+  subscriptionEditions,
+  subscriptionPeriods,
   type RechargeOrder,
   type PurchasePackKey,
 } from './credits';
 import { studio } from './studio';
 
 export function purchaseName(order: RechargeOrder) {
+  if (order.subscription && Object.hasOwn(rechargePacks, order.pack))
+    return `${subscriptionEditions[order.subscription.edition]} · ${rechargePacks[order.pack as keyof typeof rechargePacks].priceLabel} · ${subscriptionPeriods[order.subscription.period]}`;
   if (order.pack === 'p490') return '基础版（历史套餐）';
   if (!Object.hasOwn(purchasePacks, order.pack)) return '历史积分充值';
   const pack = purchasePacks[order.pack as PurchasePackKey];

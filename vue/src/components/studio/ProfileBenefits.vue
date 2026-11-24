@@ -2,14 +2,29 @@
 import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { Crown, ChevronRight, ArrowUpRight } from 'lucide-vue-next';
-import { currentPackage, creditsBalance, creditsTotal, getRechargeBenefits } from '@/services/credits';
+import {
+  currentPackage, currentSubscription, latestSubscription, creditsBalance, creditsTotal, getRechargeBenefits,
+  subscriptionEditions, subscriptionPeriods, subscriptionStatus, formatSubscriptionDate,
+} from '@/services/credits';
 import PackageBenefits from '@/components/PackageBenefits.vue';
 import PurchaseHistory from './PurchaseHistory.vue';
 import { CreditsIcon } from '@/components/shared';
 import { Card, Button, Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui';
 const router = useRouter();
 const detailsOpen = ref(false);
-const benefits = computed(() => (currentPackage.value ? getRechargeBenefits(currentPackage.value) : []));
+const displayedSubscription = computed(() => currentSubscription.value ?? latestSubscription.value);
+const benefits = computed(() => {
+  const order = currentSubscription.value;
+  return currentPackage.value
+    ? getRechargeBenefits(currentPackage.value, order?.subscription
+      ? { ...order.subscription, accountCount: order.accountCount ?? 0 }
+      : undefined)
+    : [];
+});
+function renew() {
+  const term = displayedSubscription.value?.subscription;
+  void router.push({ path: '/purchase', query: term ? { edition: term.edition, period: term.period } : {} });
+}
 const creditsPct = computed(() =>
   creditsTotal.value <= 0 ? 0 : Math.min(100, Math.round((creditsBalance.value / creditsTotal.value) * 100)),
 );
@@ -47,6 +62,16 @@ const creditsPct = computed(() =>
         <p class="mt-2 text-xs leading-5 text-slate-500">
           {{ currentPackage?.description ?? '选择适合你的版本，开启创作与发布' }}
         </p>
+        <dl v-if="displayedSubscription?.subscription" class="mt-4 space-y-2 text-xs leading-5 text-slate-700" aria-label="订阅权益">
+          <div><dt class="sr-only">版本与周期</dt><dd>{{ subscriptionEditions[displayedSubscription.subscription.edition] }} · {{ subscriptionPeriods[displayedSubscription.subscription.period] }} · {{ subscriptionStatus(displayedSubscription) }}</dd></div>
+          <div v-if="displayedSubscription.subscription.startsAt && displayedSubscription.subscription.endsAt">
+            <dt>订阅日期</dt>
+            <dd>{{ formatSubscriptionDate(displayedSubscription.subscription.startsAt) }} 至 {{ formatSubscriptionDate(displayedSubscription.subscription.endsAt) }}</dd>
+          </div>
+          <div><dt class="sr-only">团队席位</dt><dd>{{ displayedSubscription.subscription.edition === 'team' ? `团队席位 ${displayedSubscription.subscription.seats} 席（另计本人）` : '限本人使用' }}</dd></div>
+          <div v-if="!currentSubscription"><dt class="sr-only">当前权益</dt><dd>{{ currentPackage ? '当前沿用历史套餐权益' : '当前无生效中的订阅' }}</dd></div>
+        </dl>
+        <Button v-if="displayedSubscription" variant="outline" class="mt-4 border-sky-200 text-sky-700" @click="renew">手动续购</Button>
         <Button
           class="brand-gradient mt-6 gap-1.5 text-white hover:opacity-90"
           @click="router.push('/purchase')"

@@ -5,6 +5,7 @@ import { Upload, Search, ArrowLeft, Sparkles, ChevronDown, Loader2, Heart, Messa
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui';
 import { studio, blankAttributes, ensurePublishTask, submitPublish } from '@/services/studio';
 import { currentUser } from '@/services/identity';
+import { workspaceOwnerId, canUseAccount, isTeamAdmin } from '@/services/team';
 import { getMedia, saveMedia } from '@/services/media';
 import { uid, now } from '@/services/storage';
 import type { Film, PublishTask } from '@/types/studio';
@@ -13,7 +14,7 @@ import FilmPreview from './FilmPreview.vue';
 import VideoManagement from './VideoManagement.vue';
 import InfoTip from './InfoTip.vue';
 import SchedulePicker from './SchedulePicker.vue';
-import { publishCaption, platformName, accountPlatform, accountAvailableInProject } from '@/services/accounts';
+import { publishCaption, platformName, accountPlatform, accountAvailableInProject, supportsPublishing } from '@/services/accounts';
 import AccountPicker from './AccountPicker.vue';
 import AccountAuthorization from './AccountAuthorization.vue';
 import type { TKAccount } from '@/types/studio';
@@ -53,10 +54,12 @@ const imagePickerSelection = ref<string[]>([]);
 const imagePickerSearch = ref('');
 
 const project = computed(() => studio.value.projects.find(p => p.id === props.projectId)!);
-const accounts = computed(() => studio.value.accounts.filter(a => accountAvailableInProject(a, project.value)));
+const accounts = computed(() => studio.value.accounts.filter(a => (isTeamAdmin.value || canUseAccount(a.id)) && supportsPublishing(a) && accountAvailableInProject(a, project.value)));
 const authAccount = ref<TKAccount | null>(null);
 const authOpen = ref(false);
+const preparedAccount = ref('');
 function openAccountAuth(account: TKAccount) { authAccount.value = account; authOpen.value = true; }
+function bindAccount() { authAccount.value = null; authOpen.value = true; }
 const mutable = (task?: PublishTask) => !task || ['待配置', '发布失败', '已取消'].includes(task.status);
 async function upload(event: Event, kind: 'video' | 'image') {
   const files = Array.from((event.target as HTMLInputElement).files ?? []);
@@ -71,7 +74,7 @@ async function upload(event: Event, kind: 'video' | 'image') {
     const uploadedIds: string[] = [];
     for (const groupFiles of groups) {
       const mediaIds: string[] = [];
-      for (const file of groupFiles) mediaIds.push(await saveMedia(currentUser.value!.id, file));
+      for (const file of groupFiles) mediaIds.push(await saveMedia(workspaceOwnerId(), file));
       const film: Film = { id: uid(), projectId: props.projectId, title: groupFiles[0]!.name.replace(/\.[^.]+$/, ''), type: isVideo ? '视频' : '图文', source: '本地上传', createdAt: now(), duration: '15', ratio: '9:16', quality: '原始', brief: '本地上传媒体', productIds: [], version: 1, mediaIds, inPublishing: true, attributes: blankAttributes() };
       studio.value.films.unshift(film);
       ensurePublishTask(film);
@@ -119,7 +122,7 @@ watch(() => drafts.value.map(t => `${t.id}:${(t.imageMediaIds ?? []).join(',')}`
     const prior = imageUrls.value[task.id] ?? [];
     prior.forEach(item => URL.revokeObjectURL(item.url));
     const ids = task.imageMediaIds ?? filmFor(task)?.mediaIds ?? [];
-    const blobs = await Promise.all(ids.map(id => getMedia(currentUser.value!.id, id)));
+    const blobs = await Promise.all(ids.map(id => getMedia(workspaceOwnerId(), id)));
     urls[task.id] = ids.flatMap((id, index) => blobs[index] ? [{ id, url: URL.createObjectURL(blobs[index]!) }] : []);
   }
   imageUrls.value = urls;
@@ -136,7 +139,7 @@ async function openImagePicker(task: PublishTask) {
   const works = studio.value.films.filter(f => f.projectId === props.projectId && f.type === '图文');
   for (const work of works) {
     for (const id of work.mediaIds) {
-      const blob = await getMedia(currentUser.value!.id, id);
+      const blob = await getMedia(workspaceOwnerId(), id);
       if (blob) items.push({ id, url: URL.createObjectURL(blob), title: work.title });
     }
   }
@@ -169,7 +172,7 @@ async function uploadTaskImages(task: PublishTask, event: Event) {
   imageBusy.value[task.id] = true;
   try {
     const current = task.imageMediaIds ??= [...(filmFor(task)?.mediaIds ?? [])];
-    const ids = await Promise.all(files.map(file => saveMedia(currentUser.value!.id, file)));
+    const ids = await Promise.all(files.map(file => saveMedia(workspaceOwnerId(), file)));
     task.imageMediaIds = [...current, ...ids];
   } catch (cause) { toast.error((cause as Error).message); }
   finally { imageBusy.value[task.id] = false; input.value = ''; }
@@ -254,7 +257,17 @@ async function helpWrite(task: PublishTask) {
   <section v-if="tab === 'configure'" class="w-full space-y-5" aria-label="发布配置页面">
     <header class="flex items-start gap-3"><button class="studio-btn !px-3 !text-xs !font-normal" aria-label="返回上一个页面" @click="backToCreations"><ArrowLeft class="h-4 w-4" />返回</button><div><h1 class="text-lg font-normal text-slate-800">配置发布</h1><p class="mt-2 text-xs text-slate-400">共 {{ drafts.length }} 条成片 · 逐条确认帐号与发布内容，修改自动保存。</p></div></header>
     <div>
-    <div v-if="!drafts.length" class="py-12 text-center text-sm text-slate-400">没有可配置的发布任务<button class="ml-3 text-sky-600" @click="backToCreations">返回创作记录</button></div><template v-if="drafts.length"><div v-for="(task, index) in drafts" :key="task.id" class="mb-4 mt-4 grid items-start gap-6 [&+div]:mt-9 md:grid-cols-[minmax(0,1fr)_220px] xl:grid-cols-[minmax(0,1fr)_280px]"><section class="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white">
+    <div v-if="!drafts.length" class="space-y-5 rounded-2xl border border-slate-200 p-5">
+      <div><h2 class="text-sm font-semibold text-slate-800">请先选择要发布的作品</h2><p class="mt-2 text-xs text-slate-500">当前没有可配置的发布任务。可先准备发布账号，再返回我的作品上传或选择视频。</p></div>
+      <div data-tour="publish-accounts" class="max-w-lg space-y-3">
+        <span class="studio-label">发布帐号</span>
+        <AccountPicker v-model="preparedAccount" :accounts="accounts" :groups="studio.groups" :selected-account="studio.accounts.find(a => a.id === preparedAccount)" :disabled="project.archived" @authorize="openAccountAuth" />
+        <p class="text-xs text-slate-400">作品上传后，请在发布任务中确认所选账号。</p>
+        <div class="flex flex-wrap gap-3"><button data-tour="bind-account" class="studio-primary" :disabled="project.archived" @click="bindAccount">绑定 TikTok 账号</button><button class="studio-btn" @click="router.push({ query: { section: 'settings' } })">关联已有账号</button></div>
+        <p class="text-xs text-slate-400">新绑定的账号需在项目设置中关联后，才能用于当前项目发布。</p>
+      </div>
+      <button class="studio-btn" @click="backToCreations">返回我的作品</button>
+    </div><template v-if="drafts.length"><div v-for="(task, index) in drafts" :key="task.id" class="mb-4 mt-4 grid items-start gap-6 [&+div]:mt-9 md:grid-cols-[minmax(0,1fr)_220px] xl:grid-cols-[minmax(0,1fr)_280px]"><section class="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white">
       <header class="flex items-center gap-3 bg-slate-100/80 px-5 py-3">
         <span v-if="drafts.length > 1 && filmFor(task)?.type !== '图文'" class="flex h-9 min-w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-[#11a3fd] to-[#1769ff] px-2 text-lg font-bold tabular-nums text-white" :aria-label="`第 ${index + 1} 条视频`">{{ index + 1 }}</span>
         <h3 class="min-w-0 flex-1 truncate text-sm font-semibold text-slate-800" :title="filmFor(task)?.title">{{ filmFor(task)?.title }}</h3><button type="button" class="shrink-0 text-xs text-sky-600" :disabled="project.archived || busy" @click="addConfiguration(task)">添加发布帐号</button>
@@ -281,7 +294,7 @@ async function helpWrite(task: PublishTask) {
               <button type="button" class="flex h-10 w-full max-w-sm items-center justify-center gap-2 rounded-lg bg-slate-100 text-sm font-medium text-slate-700 hover:bg-slate-200" @click="toast.info('背景音乐选择暂未开放')"><Plus class="h-4 w-4" />选择音乐</button>
             </div>
           </section>
-          <div><span class="studio-label">发布帐号<InfoTip text="请选择当前项目的在线帐号；登录过期时请先登录授权。" /></span><AccountPicker v-model="task.accountId" :accounts="accounts" :groups="studio.groups" :selected-account="studio.accounts.find(a => a.id === task.accountId)" :disabled="project.archived || !mutable(task) || busy" @authorize="openAccountAuth" /></div>
+          <div :data-tour="index === 0 ? 'publish-accounts' : undefined"><span class="studio-label">发布帐号<InfoTip text="请选择当前项目的在线帐号；登录过期时请先登录授权。" /></span><AccountPicker v-model="task.accountId" :accounts="accounts" :groups="studio.groups" :selected-account="studio.accounts.find(a => a.id === task.accountId)" :disabled="project.archived || !mutable(task) || busy" @authorize="openAccountAuth" /><div class="mt-3 flex gap-3 text-xs text-sky-600"><button :data-tour="index === 0 ? 'bind-account' : undefined" :disabled="project.archived || busy" @click="bindAccount">绑定 TikTok 账号</button><button @click="router.push({ query: { section: 'settings' } })">关联已有账号</button></div></div>
           <div>
             <div class="mb-2 flex items-center justify-between gap-3">
               <label :for="`caption-${task.id}`" class="text-xs font-medium text-slate-500">发布文案</label>

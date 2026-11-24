@@ -30,8 +30,8 @@ test('purchase history appears below benefits, follows payment and supports mobi
   expect(historyBox!.y).toBeGreaterThan(benefitBox!.y + benefitBox!.height);
   await page.getByRole('link', { name: '套餐购买', exact: true }).click();
   await page
-    .getByLabel('¥500 套餐', { exact: true })
-    .getByRole('button', { name: '购买套餐', exact: true })
+    .getByLabel('基础版套餐', { exact: true })
+    .getByRole('button', { name: /订阅套餐|续购套餐/, exact: true })
     .click();
   const dialog = page.getByRole('dialog');
   await dialog.getByRole('button', { name: '微信支付', exact: true }).click();
@@ -40,19 +40,19 @@ test('purchase history appears below benefits, follows payment and supports mobi
   await page.getByRole('button', { name: '个人中心', exact: true }).click();
   const table = page.getByRole('table', { name: '购买记录列表', exact: true });
   await expect(table.getByRole('row')).toHaveCount(2);
-  await expect(table).toContainText('¥500 / 933 积分');
+  await expect(table).toContainText('¥584 / 961 积分');
   await expect(table).toContainText('微信支付');
   await expect(table).toContainText('账号使用权 2 个 · 已添加至账号管理');
   await table.getByRole('button', { name: /^查看订单/ }).click();
   await expect(dialog.getByRole('heading')).toHaveText('购买记录详情');
-  await expect(dialog).toContainText('基础版套餐');
+  await expect(dialog).toContainText('个人版 · 基础版 · 按季订阅');
   await expect(dialog).toContainText('支付时间');
   await dialog.getByRole('button', { name: '查看账号', exact: true }).click();
   await expect(page).toHaveURL(/#\/accounts$/);
   await page.getByRole('button', { name: '个人中心', exact: true }).click();
   await page.getByRole('button', { name: '刷新订单', exact: true }).click();
   await expect(table.getByRole('row')).toHaveCount(2);
-  await expect(page.getByLabel('当前剩余积分')).toHaveText('1,033');
+  await expect(page.getByLabel('当前剩余积分')).toHaveText('1,061');
   await page.screenshot({ path: info.outputPath('purchase-history-desktop.png'), fullPage: true });
   await page.reload();
   await expect(table).toContainText('微信支付');
@@ -60,11 +60,11 @@ test('purchase history appears below benefits, follows payment and supports mobi
   await expect(table).toBeHidden();
   const record = history.getByRole('article');
   await expect(record).toHaveCount(1);
-  await expect(record).toContainText('¥500 / 933 积分');
+  await expect(record).toContainText('¥584 / 961 积分');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: info.outputPath('purchase-history-mobile.png'), fullPage: true });
   await record.getByRole('button', { name: /^查看订单/ }).click();
-  await expect(dialog).toContainText('基础版套餐');
+  await expect(dialog).toContainText('个人版 · 基础版 · 按季订阅');
   const bounds = await dialog.boundingBox();
   expect(bounds!.width).toBeLessThan(390);
   await page.keyboard.press('Escape');

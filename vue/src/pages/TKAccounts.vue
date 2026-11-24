@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   Plus,
@@ -10,8 +10,9 @@ import {
   LayoutGrid,
   Layers,
   GripVertical,
-  ListFilter,
-  Check,
+  RefreshCw,
+  UserRound,
+  ExternalLink,
 } from 'lucide-vue-next';
 import {
   Dialog,
@@ -23,42 +24,73 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from '@/components/ui';
-import { studio, accountDeleteReason, deleteAccount, reorderGroup } from '@/services/studio';
-import { uid } from '@/services/storage';
+import {
+  studio,
+  storageError,
+  accountDeleteReason,
+  deleteAccount,
+  reorderGroup,
+  saveAccountGroup,
+  removeAccountGroup,
+  moveAccountsToGroup,
+  saveAccountNote,
+  refreshAccounts,
+  syncAccountData,
+} from '@/services/studio';
 import { dateTime } from '@/services/videoManagement';
 import { toast } from 'vue-sonner';
-import AccountClaimDialog from '@/components/studio/AccountClaimDialog.vue';
-import { socialAccountsRemaining } from '@/services/credits';
-const claimOpen = ref(false);
 import AccountAuthorization from '@/components/studio/AccountAuthorization.vue';
-import { loginStatus, platformName, accountPlatform } from '@/services/accounts';
+import { platformName, accountPlatform, platforms } from '@/services/accounts';
+import {
+  accountOverview,
+  accountHomepage,
+  authorizationStatuses,
+  matchesAuthorization,
+} from '@/services/accountManagement';
 import type { TKAccount } from '@/types/studio';
 const route = useRoute(),
   router = useRouter();
-const tab = computed(() => (route.query.tab === 'groups' ? 'groups' : 'accounts'));
 function parameter(key: string) {
   return typeof route.query[key] === 'string' ? (route.query[key] as string) : '';
 }
 function setParameter(key: string, value: string) {
-  void router.replace({ query: { ...route.query, [key]: value || undefined } });
+  const location = { query: { ...route.query, [key]: value || undefined } };
+  void (key === 'q' ? router.replace(location) : router.push(location));
 }
+const groupsOpen = computed({
+  get: () => parameter('tab') === 'groups',
+  set: (value) => setParameter('tab', value ? 'groups' : ''),
+});
+const groupButton = ref<HTMLButtonElement>();
+watch(groupsOpen, async (open) => {
+  if (!open) {
+    await nextTick();
+    groupButton.value?.focus();
+  }
+});
 const query = computed({ get: () => parameter('q'), set: (value) => setParameter('q', value) });
 const group = computed(() =>
   studio.value.groups.some((g) => g.id === parameter('group')) ? parameter('group') : '',
 );
-
-const status = computed(() => (parameter('status') ? loginStatus(parameter('status')) : ''));
+const status = computed(() => parameter('status'));
 const view = computed(() => (parameter('view') === 'grid' ? 'grid' : 'list'));
 const liveAccounts = computed(() => studio.value.accounts.filter((a) => !a.deleted));
+const platformAccounts = computed(() =>
+  liveAccounts.value.filter((a) => !parameter('platform') || accountPlatform(a) === parameter('platform')),
+);
+const validCount = computed(() => platformAccounts.value.filter((a) => a.status === '已授权').length);
 const accounts = computed(() =>
-  liveAccounts.value.filter(
+  platformAccounts.value.filter(
     (a) =>
-      (!parameter('platform') || accountPlatform(a) === parameter('platform')) &&
       (!group.value || a.groupId === group.value) &&
-      (!status.value || loginStatus(a.status) === status.value) &&
-      `${a.name} ${a.handle} ${a.note}`.toLowerCase().includes(query.value.toLowerCase()),
+      matchesAuthorization(a, status.value) &&
+      (a.name + ' ' + a.handle + ' ' + a.note).toLowerCase().includes(query.value.trim().toLowerCase()),
   ),
 );
+const summaries = computed(() =>
+  Object.fromEntries(accounts.value.map((a) => [a.id, accountOverview(studio.value, a.id)])),
+);
+const number = (value?: number) => (value === undefined ? '—' : value.toLocaleString('zh-CN'));
 const selected = ref<string[]>([]),
   moveGroup = ref('ungrouped');
 watch(
@@ -67,13 +99,16 @@ watch(
     selected.value = [];
   },
 );
-const authOpen = ref(false);
-const authAccount = ref<TKAccount | null>(null);
+const authOpen = ref(false),
+  authAccount = ref<TKAccount | null>(null);
 const deleteId = ref(''),
   groupName = ref(''),
   groupEditId = ref(''),
   deleteGroupId = ref(''),
   dragging = ref('');
+const actionError = ref(''),
+  syncing = ref<string[]>([]),
+  refreshing = ref(false);
 const editor = ref<{ id: string; field: 'group' | 'note'; value: string } | null>(null);
 const affected = computed(
   () =>
@@ -82,83 +117,81 @@ const affected = computed(
     ).length,
 );
 const deletingAccount = computed(() => studio.value.accounts.find((a) => a.id === deleteId.value));
+function attempt(action: () => void) {
+  try {
+    actionError.value = '';
+    action();
+    return true;
+  } catch (error) {
+    actionError.value = (error as Error).message;
+    toast.error(actionError.value);
+    return false;
+  }
+}
 function openAuth(account: TKAccount | null = null) {
   authAccount.value = account;
   authOpen.value = true;
 }
+function details(account: TKAccount) {
+  void router.push({ path: '/accounts/' + account.id, query: { returnTo: route.fullPath } });
+}
 function groupSave() {
-  const name = groupName.value.trim();
-  if (!name) {
-    toast.error('请填写分组名称');
-    return;
-  }
-  if (studio.value.groups.some((g) => g.name === name && g.id !== groupEditId.value)) {
-    toast.error('分组名称已存在');
-    return;
-  }
-  const g = studio.value.groups.find((g) => g.id === groupEditId.value);
-  if (g && g.id !== 'ungrouped') g.name = name;
-  else if (!g) studio.value.groups.push({ id: uid(), name });
-  groupName.value = '';
-  groupEditId.value = '';
+  attempt(() => {
+    saveAccountGroup(groupName.value, groupEditId.value);
+    groupName.value = '';
+    groupEditId.value = '';
+    toast.success('分组已保存');
+  });
 }
 function removeGroup() {
-  if (deleteGroupId.value === 'ungrouped') return;
-  studio.value.accounts
-    .filter((a) => a.groupId === deleteGroupId.value)
-    .forEach((a) => (a.groupId = 'ungrouped'));
-  studio.value.groups = studio.value.groups.filter((g) => g.id !== deleteGroupId.value);
-  if (parameter('group') === deleteGroupId.value) setParameter('group', '');
-  if (moveGroup.value === deleteGroupId.value) moveGroup.value = 'ungrouped';
-  if (groupEditId.value === deleteGroupId.value) {
-    groupEditId.value = '';
-    groupName.value = '';
-  }
-  deleteGroupId.value = '';
+  attempt(() => {
+    const id = deleteGroupId.value;
+    removeAccountGroup(id);
+    if (parameter('group') === id) setParameter('group', '');
+    if (moveGroup.value === id) moveGroup.value = 'ungrouped';
+    if (groupEditId.value === id) {
+      groupEditId.value = '';
+      groupName.value = '';
+    }
+    deleteGroupId.value = '';
+    toast.success('分组已删除');
+  });
 }
 function move() {
-  if (!studio.value.groups.some((g) => g.id === moveGroup.value)) return;
-  liveAccounts.value
-    .filter((a) => selected.value.includes(a.id))
-    .forEach((a) => (a.groupId = moveGroup.value));
-  selected.value = [];
-  toast.success('已移动帐号');
+  attempt(() => {
+    moveAccountsToGroup(selected.value, moveGroup.value);
+    selected.value = [];
+    toast.success('已移动帐号');
+  });
 }
 function saveField() {
   const edit = editor.value;
   if (!edit) return;
-  const account = liveAccounts.value.find((a) => a.id === edit.id);
-  if (!account) {
+  attempt(() => {
+    if (edit.field === 'group') moveAccountsToGroup([edit.id], edit.value);
+    else saveAccountNote(edit.id, edit.value);
     editor.value = null;
-    return;
-  }
-  if (edit.field === 'group') {
-    if (!studio.value.groups.some((g) => g.id === edit.value)) return;
-    account.groupId = edit.value;
-  } else account.note = edit.value.trim();
-  editor.value = null;
-  toast.success('帐号资料已保存');
+    toast.success('帐号资料已保存');
+  });
 }
 function confirmDelete() {
-  try {
+  attempt(() => {
     deleteAccount(deleteId.value);
     selected.value = selected.value.filter((id) => id !== deleteId.value);
     deleteId.value = '';
     toast.success('帐号已删除，待执行任务已取消');
-  } catch (e) {
-    toast.error((e as Error).message);
-  }
+  });
 }
 function viewGroup(id: string) {
-  void router.push({ query: { tab: 'accounts', group: id, view: parameter('view') || undefined } });
+  void router.push({ query: { ...route.query, tab: undefined, group: id } });
 }
 function shift(id: string, offset: number) {
-  const index = studio.value.groups.findIndex((g) => g.id === id);
-  const target = studio.value.groups[index + offset];
-  if (target) reorderGroup(id, target.id);
+  const index = studio.value.groups.findIndex((g) => g.id === id),
+    target = studio.value.groups[index + offset];
+  if (target) attempt(() => reorderGroup(id, target.id));
 }
 function drop(id: string) {
-  reorderGroup(dragging.value, id);
+  attempt(() => reorderGroup(dragging.value, id));
   dragging.value = '';
 }
 function startDrag(event: DragEvent, id: string) {
@@ -174,242 +207,247 @@ function toggleAll() {
     ? []
     : accounts.value.map((a) => a.id);
 }
+async function sync(account: TKAccount) {
+  if (syncing.value.includes(account.id)) return;
+  if (account.status !== '已授权') {
+    toast.error('请先授权账号再同步数据');
+    openAuth(account);
+    return;
+  }
+  const ownerIds = [...syncing.value, account.id];
+  syncing.value = ownerIds;
+  actionError.value = '';
+  try {
+    await syncAccountData(account.id);
+    toast.success('演示数据同步完成');
+  } catch (error) {
+    actionError.value = (error as Error).message;
+    toast.error(actionError.value);
+  } finally {
+    syncing.value = syncing.value.filter((id) => id !== account.id);
+  }
+}
+async function refresh() {
+  if (refreshing.value || syncing.value.length) return;
+  refreshing.value = true;
+  await nextTick();
+  attempt(() => {
+    refreshAccounts();
+    selected.value = [];
+    toast.success('已刷新本地数据');
+  });
+  refreshing.value = false;
+}
 </script>
 <template>
-  <div class="space-y-6">
-    <header class="flex items-start justify-between gap-4">
-      <div>
-        <h1 class="text-xl font-semibold text-slate-900">帐号管理</h1>
-        <p class="mt-2 text-[13px] text-slate-400">
-          连接 TikTok、Facebook、Instagram 帐号，让内容创作与发布顺畅衔接
-        </p>
-      </div>
-      <div class="flex shrink-0 flex-wrap items-center justify-end gap-2">
-        <button class="studio-primary" @click="openAuth()">
-          <Plus class="h-4 w-4" />
-          添加帐号
-        </button>
-        <button
-          type="button"
-          class="studio-tab"
-          :class="tab === 'groups' ? 'studio-active' : 'bg-sky-50 text-sky-600'"
-          @click="setParameter('tab', tab === 'groups' ? 'accounts' : 'groups')"
-        >
-          {{ tab === 'groups' ? '返回帐号列表' : '帐号分组' }}
-        </button>
-        <DropdownMenu>
-          <DropdownMenuTrigger as-child>
-            <button class="studio-btn">
-              <MoreHorizontal class="h-4 w-4" />
-              更多
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent class="bg-white">
-            <DropdownMenuItem @select="router.push('/roxy')">Roxy 窗口管理 ↗</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-    </header>
-    <AccountClaimDialog v-model:open="claimOpen" />
-    <div
-      v-if="socialAccountsRemaining > 0"
-      class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-sky-100 bg-sky-50/60 p-4"
-      aria-label="待领取帐号提示"
-    >
-      <div>
-        <p class="text-sm font-medium text-sky-900">历史待领取账号：{{ socialAccountsRemaining }} 个</p>
-        <p class="mt-2 text-sm font-semibold text-sky-700">
-          可选择 TikTok、Instagram、Facebook 帐号及国家地区，领取后可直接发布视频、图文等作品
-        </p>
-        <p class="mt-1 text-xs leading-5 text-slate-500">
-          此入口仅用于历史购买的剩余名额，新购买账号付款后自动到账。
-        </p>
-        <p class="mt-1 text-xs text-slate-500">
-          领取账号使用权；在帐号管理中打开详情可查看登录信息。领取后所有项目可直接发布。
-        </p>
-      </div>
-      <button class="studio-btn" @click="claimOpen = true">领取历史账号</button>
-    </div>
-    <template v-if="tab === 'accounts'">
-      <div class="flex flex-wrap items-center gap-3">
-        <nav class="flex flex-wrap gap-2" aria-label="帐号平台分类">
-          <button
-            v-for="item in [
-              { value: '', label: '全部平台' },
-              { value: 'tiktok', label: 'TikTok' },
-              { value: 'instagram', label: 'Instagram' },
-              { value: 'facebook', label: 'Facebook' },
-            ]"
-            :key="item.value || 'all'"
-            type="button"
-            class="rounded-lg border px-3 py-2 text-sm font-medium transition-colors"
-            :class="
-              parameter('platform') === item.value
-                ? 'border-sky-500 bg-sky-500 text-white'
-                : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
-            "
-            :aria-pressed="parameter('platform') === item.value"
-            @click="setParameter('platform', item.value)"
-          >
-            {{ item.label }}
-          </button>
-        </nav>
-        <div class="relative w-64">
-          <Search class="pointer-events-none absolute left-3 top-3 h-4 w-4 text-slate-400" />
-          <input
-            v-model="query"
-            class="studio-field pl-9"
-            aria-label="搜索帐号"
-            placeholder="搜索帐号、用户名、备注"
-          />
-        </div>
-        <button
-          v-if="group || status || query || parameter('platform')"
-          class="text-xs text-sky-600"
-          @click="router.replace({ query: { tab: 'accounts' } })"
-        >
-          清除筛选
-        </button>
-        <span class="ml-auto text-xs text-slate-400">{{ accounts.length }} 个帐号</span>
-      </div>
-      <div
-        v-if="selected.length"
-        class="flex items-center gap-3 rounded-xl bg-sky-50 p-3 text-xs text-sky-700"
+  <div class="min-w-0 space-y-5" aria-label="账号管理页面">
+    <h1 class="text-xl font-semibold text-slate-900">帐号管理</h1>
+    <nav class="flex flex-wrap gap-2" aria-label="帐号平台分类">
+      <button
+        v-for="item in [{ value: '', label: '全部平台' }, ...platforms]"
+        :key="item.value || 'all'"
+        type="button"
+        class="rounded-lg border px-3 py-2 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+        :class="
+          parameter('platform') === item.value
+            ? 'border-sky-500 bg-sky-500 text-white'
+            : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
+        "
+        :aria-pressed="parameter('platform') === item.value"
+        @click="setParameter('platform', item.value)"
       >
-        已选 {{ selected.length }} 个帐号
-        <select v-model="moveGroup" class="studio-field !w-40" aria-label="批量移动到分组">
-          <option v-for="g in studio.groups" :key="g.id" :value="g.id">{{ g.name }}</option>
-        </select>
-        <button class="studio-btn" @click="move">移动分组</button>
+        {{ item.label }}
+      </button>
+    </nav>
+    <section data-tour="account-data" class="grid grid-cols-1 gap-4 sm:grid-cols-3" aria-label="账号统计">
+      <div
+        v-for="item in [
+          {
+            label: parameter('platform')
+              ? platformName(parameter('platform') as TKAccount['platform']) + ' 账号'
+              : '账号总数',
+            value: platformAccounts.length,
+          },
+          { label: '授权有效', value: validCount },
+          { label: '需要处理', value: platformAccounts.length - validCount },
+        ]"
+        :key="item.label"
+        class="rounded-xl border border-slate-200 bg-white px-5 py-4"
+      >
+        <p class="text-xs text-slate-400">{{ item.label }}</p>
+        <p class="mt-2 text-2xl font-semibold text-slate-800">{{ item.value }}</p>
       </div>
-      <div class="overflow-x-auto rounded-xl border border-slate-200">
-        <table class="studio-table min-w-[960px]" aria-label="帐号列表">
-          <thead>
-            <tr>
-              <th>
-                <input
-                  type="checkbox"
-                  class="h-4 w-4 accent-sky-500"
-                  aria-label="选择全部帐号"
-                  :checked="!!accounts.length && accounts.every((a) => selected.includes(a.id))"
-                  :disabled="!accounts.length"
-                  @change="toggleAll"
-                />
-              </th>
-              <th>帐号</th>
-              <th>平台</th>
-              <th>
-                <div class="flex items-center gap-1">
-                  帐号分组
-                  <DropdownMenu>
-                    <DropdownMenuTrigger as-child>
-                      <button aria-label="帐号分组筛选" :class="group ? 'text-sky-600' : 'text-slate-400'">
-                        <ListFilter class="h-4 w-4" />
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent class="max-h-72 overflow-y-auto bg-white p-1">
-                      <DropdownMenuItem @select="setParameter('group', '')">
-                        <Check v-if="!group" class="mr-2 h-3 w-3" />
-                        全部分组
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        v-for="g in studio.groups"
-                        :key="g.id"
-                        @select="setParameter('group', g.id)"
-                      >
-                        <Check v-if="group === g.id" class="mr-2 h-3 w-3" />
-                        {{ g.name }}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem @select="setParameter('group', '')">清除分组筛选</DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              </th>
-              <th>
-                <div class="flex items-center gap-1">
-                  登录状态
-                  <DropdownMenu>
-                    <DropdownMenuTrigger as-child>
-                      <button aria-label="登录状态筛选" :class="status ? 'text-sky-600' : 'text-slate-400'">
-                        <ListFilter class="h-4 w-4" />
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent class="bg-white p-1">
-                      <DropdownMenuItem @select="setParameter('status', '')">
-                        <Check v-if="!status" class="mr-2 h-3 w-3" />
-                        全部登录状态
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        v-for="s in ['在线', '登录过期']"
-                        :key="s"
-                        @select="setParameter('status', s)"
-                      >
-                        <Check v-if="status === s" class="mr-2 h-3 w-3" />
-                        {{ s }}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem @select="setParameter('status', '')">清除状态筛选</DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              </th>
-              <th>备注</th>
-              <th>授权时间</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="a in accounts" :key="a.id">
-              <td>
-                <input
-                  v-model="selected"
-                  type="checkbox"
-                  class="h-4 w-4 accent-sky-500"
-                  :value="a.id"
-                  :aria-label="`选择 ${a.name}`"
-                />
-              </td>
-              <td>
-                <div class="flex items-center gap-3">
-                  <span
-                    class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-900 font-semibold text-white"
-                  >
-                    {{ a.name.slice(0, 1).toUpperCase() }}
-                  </span>
-                  <div>
-                    <button
-                      type="button"
-                      class="text-left font-medium text-slate-800 hover:text-sky-600 hover:underline"
-                      @click="router.push({ path: '/accounts/' + a.id, query: { returnTo: route.fullPath } })"
-                    >
-                      {{ a.name }}
-                    </button>
-                    <p class="mt-1 text-[11px] text-slate-400">
-                      {{ a.handle }} · {{ platformName(accountPlatform(a)) }}
-                      <span
-                        v-if="a.source === 'recharge'"
-                        class="ml-1 rounded bg-sky-50 px-1.5 py-0.5 text-[10px] text-sky-600"
-                      >
-                        购买账号
-                      </span>
-                    </p>
-                  </div>
-                </div>
-              </td>
-              <td>
-                <span class="rounded-md bg-sky-50 px-2 py-1 text-xs font-medium text-sky-700">
-                  {{ platformName(accountPlatform(a)) }}
+    </section>
+    <div class="flex flex-wrap items-center gap-2.5">
+      <div class="relative w-full sm:w-60">
+        <Search class="pointer-events-none absolute left-3 top-3 h-4 w-4 text-slate-400" />
+        <input
+          v-model="query"
+          class="studio-field pl-9"
+          aria-label="搜索帐号"
+          placeholder="搜索账号、用户名、备注"
+        />
+      </div>
+      <select
+        :value="status"
+        aria-label="授权状态筛选"
+        class="studio-field !w-auto max-w-full"
+        @change="setParameter('status', ($event.target as HTMLSelectElement).value)"
+      >
+        <option value="">全部授权状态</option>
+        <option v-for="item in authorizationStatuses" :key="item" :value="item">{{ item }}</option>
+        <option v-if="status === '在线' || status === '登录过期'" :value="status">{{ status }}</option>
+      </select>
+      <select
+        :value="group"
+        aria-label="帐号分组筛选"
+        class="studio-field !w-auto max-w-full"
+        @change="setParameter('group', ($event.target as HTMLSelectElement).value)"
+      >
+        <option value="">全部分组</option>
+        <option v-for="g in studio.groups" :key="g.id" :value="g.id">{{ g.name }}</option>
+      </select>
+      <button class="studio-primary" @click="openAuth()">
+        <Plus class="h-4 w-4" />
+        绑定账号
+      </button>
+      <button ref="groupButton" class="studio-btn" @click="groupsOpen = true">
+        <Layers class="h-4 w-4" />
+        管理分组
+      </button>
+      <button
+        v-if="group || status || query || parameter('platform')"
+        class="px-2 text-xs text-sky-600"
+        @click="router.push({ query: {} })"
+      >
+        清除筛选
+      </button>
+      <div class="ml-auto flex items-center gap-3">
+        <span class="text-xs text-slate-400">{{ accounts.length }} 个账号</span>
+        <button class="studio-btn" :disabled="refreshing || !!syncing.length" @click="refresh">
+          <RefreshCw class="h-3.5 w-3.5" :class="refreshing && 'animate-spin'" />
+          刷新
+        </button>
+      </div>
+    </div>
+    <p
+      v-if="actionError || storageError"
+      role="alert"
+      class="rounded-lg bg-rose-50 p-3 text-sm text-rose-600"
+    >
+      {{ actionError || storageError }}
+    </p>
+    <div
+      v-if="selected.length"
+      class="flex flex-wrap items-center gap-3 rounded-xl bg-sky-50 p-3 text-xs text-sky-700"
+    >
+      已选 {{ selected.length }} 个账号
+      <select v-model="moveGroup" class="studio-field !w-40 max-w-full" aria-label="批量移动到分组">
+        <option v-for="g in studio.groups" :key="g.id" :value="g.id">{{ g.name }}</option>
+      </select>
+      <button class="studio-btn" @click="move">移动分组</button>
+    </div>
+    <div
+      class="max-w-full overflow-x-auto rounded-xl border border-slate-200"
+      tabindex="0"
+      aria-label="账号表格滚动区域"
+    >
+      <table class="studio-table min-w-[1750px]" aria-label="帐号列表">
+        <thead>
+          <tr>
+            <th>
+              <input
+                type="checkbox"
+                class="h-4 w-4 accent-sky-500"
+                aria-label="选择全部帐号"
+                :checked="!!accounts.length && accounts.every((a) => selected.includes(a.id))"
+                :disabled="!accounts.length"
+                @change="toggleAll"
+              />
+            </th>
+            <th>账号</th>
+            <th>平台</th>
+            <th>分组</th>
+            <th>播放量</th>
+            <th>获赞</th>
+            <th>最近发布</th>
+            <th>粉丝</th>
+            <th>关注</th>
+            <th>作品</th>
+            <th>授权状态</th>
+            <th>数据更新</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="a in accounts" :key="a.id">
+            <td>
+              <input
+                v-model="selected"
+                type="checkbox"
+                class="h-4 w-4 accent-sky-500"
+                :value="a.id"
+                :aria-label="'选择 ' + a.name"
+              />
+            </td>
+            <td class="min-w-64 max-w-80">
+              <div class="flex items-start gap-3">
+                <span class="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-sky-50 text-sky-500">
+                  <UserRound class="h-6 w-6" />
                 </span>
-              </td>
-              <td>
-                <button
-                  class="text-sky-600 hover:underline"
-                  :aria-label="`修改 ${a.name} 的分组`"
-                  @click="editor = { id: a.id, field: 'group', value: a.groupId }"
-                >
-                  {{ studio.groups.find((g) => g.id === a.groupId)?.name || '未分组' }}
-                </button>
-              </td>
-              <td>
+                <div class="min-w-0">
+                  <button
+                    class="max-w-56 truncate text-left font-medium text-slate-800 hover:text-sky-600"
+                    @click="details(a)"
+                  >
+                    {{ a.name }}
+                  </button>
+                  <p class="mt-1 max-w-56 truncate text-[11px] text-slate-400">
+                    {{ a.handle }}
+                    <span
+                      v-if="a.source === 'recharge'"
+                      class="ml-1 rounded bg-sky-50 px-1.5 py-0.5 text-[10px] text-sky-600"
+                    >
+                      购买账号
+                    </span>
+                  </p>
+                  <button
+                    class="mt-1 block max-w-56 truncate text-left text-[11px] text-slate-400 hover:text-sky-600"
+                    :title="a.note"
+                    :aria-label="'修改 ' + a.name + ' 的备注'"
+                    @click="editor = { id: a.id, field: 'note', value: a.note }"
+                  >
+                    备注：{{ a.note || '—' }}
+                  </button>
+                </div>
+              </div>
+            </td>
+            <td class="whitespace-nowrap">
+              {{ platformName(accountPlatform(a)) }}
+              <p v-if="accountPlatform(a) === 'youtube'" class="mt-1 text-[10px] text-slate-400">
+                暂不支持发布
+              </p>
+            </td>
+            <td>
+              <button
+                class="max-w-28 truncate text-sky-600 hover:underline"
+                :aria-label="'修改 ' + a.name + ' 的分组'"
+                @click="editor = { id: a.id, field: 'group', value: a.groupId }"
+              >
+                {{ studio.groups.find((g) => g.id === a.groupId)?.name || '未分组' }}
+              </button>
+            </td>
+            <td>
+              {{ number(summaries[a.id]?.views) }}
+              <p v-if="summaries[a.id]?.partial" class="mt-1 text-[10px] text-amber-500">部分数据</p>
+            </td>
+            <td>{{ number(a.statistics?.likes) }}</td>
+            <td class="whitespace-nowrap text-[11px]">{{ dateTime(summaries[a.id]?.latest) }}</td>
+            <td>{{ number(a.statistics?.followers) }}</td>
+            <td>{{ number(a.statistics?.following) }}</td>
+            <td>{{ summaries[a.id]?.works }}</td>
+            <td class="min-w-48">
+              <div class="flex items-center gap-2">
                 <span
                   class="studio-badge"
                   :class="
@@ -418,53 +456,95 @@ function toggleAll() {
                       : '!bg-amber-50 !text-amber-600'
                   "
                 >
-                  {{ loginStatus(a.status) }}
+                  {{ a.status }}
                 </span>
                 <button
                   v-if="a.status !== '已授权'"
-                  type="button"
-                  class="ml-2 whitespace-nowrap text-xs font-medium text-sky-600 hover:text-sky-700"
+                  class="whitespace-nowrap text-xs text-sky-600"
                   @click="openAuth(a)"
                 >
-                  立即登录授权
+                  重新授权
                 </button>
-              </td>
-              <td>
-                <button
-                  class="max-w-56 whitespace-pre-wrap break-words text-left hover:text-sky-600"
-                  :class="!a.note && 'text-slate-400'"
-                  :aria-label="`修改 ${a.name} 的备注`"
-                  @click="editor = { id: a.id, field: 'note', value: a.note }"
+              </div>
+              <p class="mt-1 whitespace-nowrap text-[10px] text-slate-400">
+                授权到期：{{ dateTime(a.authorizationExpiresAt) }}
+              </p>
+              <p class="mt-1 whitespace-nowrap text-[10px] text-slate-400">
+                授权：{{ dateTime(a.authorizedAt) }}
+              </p>
+            </td>
+            <td class="whitespace-nowrap text-[11px]">{{ dateTime(a.dataUpdatedAt) }}</td>
+            <td>
+              <div class="flex items-center gap-3 whitespace-nowrap text-xs text-sky-600">
+                <a
+                  :href="accountHomepage(a)"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  :aria-label="a.name + ' 平台主页'"
+                  class="inline-flex items-center gap-1"
                 >
-                  {{ a.note || '添加备注' }}
+                  平台主页
+                  <ExternalLink class="h-3 w-3" />
+                </a>
+                <button data-tour="account-data-link" @click="details(a)">数据看板</button>
+                <button
+                  class="inline-flex items-center gap-1 disabled:text-slate-400"
+                  :disabled="syncing.includes(a.id)"
+                  :aria-label="'同步 ' + a.name + ' 的数据'"
+                  @click="sync(a)"
+                >
+                  <RefreshCw class="h-3 w-3" :class="syncing.includes(a.id) && 'animate-spin'" />
+                  {{ syncing.includes(a.id) ? '同步中' : '数据同步' }}
                 </button>
-              </td>
-              <td class="whitespace-nowrap">{{ dateTime(a.authorizedAt) }}</td>
-              <td>
-                <span :title="accountDeleteReason(a.id)">
-                  <button
-                    class="text-rose-500 disabled:text-slate-300"
-                    :disabled="!!accountDeleteReason(a.id)"
-                    @click="deleteId = a.id"
-                  >
-                    删除
-                  </button>
-                </span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-        <div v-if="!accounts.length" class="p-16 text-center text-sm text-slate-400">
-          <Users class="mx-auto mb-3 h-9 w-9 text-slate-300" />
-          {{ liveAccounts.length ? '暂无符合筛选条件的帐号' : '暂无帐号，添加你的第一个平台帐号' }}
-        </div>
+                <DropdownMenu>
+                  <DropdownMenuTrigger as-child>
+                    <button class="inline-flex items-center gap-1" :aria-label="a.name + ' 更多操作'">
+                      更多
+                      <MoreHorizontal class="h-3 w-3" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent class="bg-white">
+                    <DropdownMenuItem @select="editor = { id: a.id, field: 'group', value: a.groupId }">
+                      修改分组
+                    </DropdownMenuItem>
+                    <DropdownMenuItem @select="editor = { id: a.id, field: 'note', value: a.note }">
+                      修改备注
+                    </DropdownMenuItem>
+                    <DropdownMenuItem @select="openAuth(a)">重新授权</DropdownMenuItem>
+                    <DropdownMenuItem
+                      :disabled="!!accountDeleteReason(a.id)"
+                      :title="accountDeleteReason(a.id)"
+                      class="text-rose-500"
+                      @select="deleteId = a.id"
+                    >
+                      删除
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <div v-if="!accounts.length" class="p-12 text-center text-sm text-slate-400">
+        <Users class="mx-auto mb-3 h-9 w-9 text-slate-300" />
+        {{ liveAccounts.length ? '暂无符合筛选条件的账号' : '暂无账号，绑定你的第一个平台账号' }}
       </div>
-    </template>
-    <template v-else>
+    </div>
+    <p class="text-[11px] text-slate-400">演示数据 · 数据同步仅在本地运行，不调用平台 API 或保存真实令牌。</p>
+  </div>
+  <Dialog v-model:open="groupsOpen">
+    <DialogContent
+      class="max-h-[85vh] w-[calc(100%-2rem)] max-w-4xl overflow-y-auto rounded-2xl bg-white p-5 sm:p-6"
+    >
+      <DialogTitle>管理分组</DialogTitle>
+      <DialogDescription>按业务整理账号，分组内账号和发布记录会保留。</DialogDescription>
+      <p v-if="actionError" role="alert" class="text-sm text-rose-600">{{ actionError }}</p>
+
       <div class="flex flex-wrap items-center gap-3">
         <input
           v-model="groupName"
-          class="studio-field !w-64"
+          class="studio-field !w-64 max-w-full"
           aria-label="分组名称"
           placeholder="输入分组名称"
           maxlength="30"
@@ -592,9 +672,8 @@ function toggleAll() {
           </div>
         </div>
       </div>
-    </template>
-    <p class="text-[11px] text-slate-400">官方授权流程演示 · 本页面不会调用任何平台 API 或保存真实令牌</p>
-  </div>
+    </DialogContent>
+  </Dialog>
   <AccountAuthorization :open="authOpen" :account="authAccount" @update:open="authOpen = $event" />
   <Dialog :open="!!editor" @update:open="!$event && (editor = null)">
     <DialogContent class="max-w-md bg-white p-6">

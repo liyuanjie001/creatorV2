@@ -1,6 +1,7 @@
 import { createRouter, createWebHashHistory, type RouterHistory } from 'vue-router';
 import { currentUser } from '@/services/identity';
 import { accessGate, unlockDestination } from '@/lib/access';
+import { canEditProject, canUseAccount, isTeamAdmin, isTeamMember } from '@/services/team';
 
 export function createAppRouter(history: RouterHistory = createWebHashHistory(), gate = accessGate) {
   const router = createRouter({
@@ -45,6 +46,7 @@ export function createAppRouter(history: RouterHistory = createWebHashHistory(),
         meta: { immersive: true },
       },
       { path: '/settings', component: () => import('./pages/Settings.vue') },
+      { path: '/team', component: () => import('./pages/Team.vue'), meta: { wide: true } },
       { path: '/trash', component: () => import('./pages/Trash.vue') },
       { path: '/me', component: () => import('./pages/Profile.vue'), meta: { wide: true } },
       { path: '/purchase', component: () => import('./pages/Purchase.vue'), meta: { wide: true } },
@@ -64,6 +66,12 @@ export function createAppRouter(history: RouterHistory = createWebHashHistory(),
       return { name: 'auth', query: { redirect: to.fullPath }, replace: true };
     if (currentUser.value && to.name === 'auth')
       return { path: unlockDestination(to.query.redirect), replace: true };
+    if (to.path === '/purchase' && isTeamMember.value) return { path: '/', replace: true };
+    if (to.path === '/projects/new' && !isTeamAdmin.value) return { path: '/', replace: true };
+    if (to.path.startsWith('/projects/') && to.params.id && !canEditProject(String(to.params.id)))
+      return { path: '/', replace: true };
+    if (to.path.startsWith('/accounts/') && to.params.id && !canUseAccount(String(to.params.id)))
+      return { path: '/accounts', replace: true };
     return true;
   });
   return router;

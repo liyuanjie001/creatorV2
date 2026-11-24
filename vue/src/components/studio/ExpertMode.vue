@@ -49,6 +49,7 @@ import type { Asset, Product } from '@/data/mock';
 import { uid, now } from '@/services/storage';
 import { toast } from 'vue-sonner';
 import { currentUser } from '@/services/identity';
+import { workspaceOwnerId } from '@/services/team';
 import { saveMedia } from '@/services/media';
 const props = defineProps<{ projectId: string }>();
 const route = useRoute();
@@ -338,7 +339,7 @@ function shiftCard(message: AgentTask['messages'][number], delta: number) {
 async function uploadProductImage(c: AgentCard, file: File) {
   const t = agent.value;
   const s = current.value;
-  const owner = currentUser.value?.id;
+  const owner = currentUser.value ? workspaceOwnerId() : undefined;
   if (!t || !s || !owner || project.value?.archived) return;
   if (!file.type.startsWith('image/')) { toast.error('请上传图片文件'); return; }
   try {

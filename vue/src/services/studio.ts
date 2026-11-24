@@ -1,5 +1,6 @@
 import { migratePublishing, addPlatformExamples, addAccountStatisticsExamples, completeDemoAccountMetrics, upgradeDemoAccountTrends, accountPlatform, accountAvailableInProject, publishCaption } from './accounts';
-import { recoverPurchasedAccounts } from './credits';
+import { addYouTubeExample, synchronizedDemoAccount } from './accountManagement';
+import { recoverPurchasedAccounts, spendCredits } from './credits';
 import { localTimeZone, scheduleCandidates, localDateTime } from './timeZones';
 import type { SocialPlatform } from '@/types/studio';
 import { ref, watch } from 'vue';
@@ -8,6 +9,7 @@ import type { ContentAttributes, Film, GenerationJob, PlatformContent, PublishTa
 import { currentUser } from './identity';
 import { now, readJSON, uid, writeJSON } from './storage';
 import { getMedia, saveMedia } from './media';
+import { canAuthorizeAccounts, canCreateContent, canEditProject, canPublish, canUseAccount, isTeamAdmin, requireTeamPermission, workspaceOwnerId } from './team';
 export const blankAttributes = (): ContentAttributes => ({ theme: '商品种草', product: '未分类', hook: '问题开场', scene: '日常生活', format: '产品展示', confirmed: false });
 function seed(owner: string): StudioState {
   const demo = owner === 'demo';
@@ -54,6 +56,7 @@ function load(owner: string) {
   migratePublishing(state);
   if (recoverPurchasedAccounts(state, owner)) writeJSON(`chuhai-studio-v1:${owner}`, state);
   addPlatformExamples(state, owner);
+  addYouTubeExample(state, owner);
   addAccountStatisticsExamples(state, owner);
   completeDemoAccountMetrics(state, owner);
   upgradeDemoAccountTrends(state, owner);
@@ -79,11 +82,12 @@ function load(owner: string) {
   }
   return state;
 }
-export const studio = ref<StudioState>(load(currentUser.value?.id ?? 'guest'));
+export const studio = ref<StudioState>(load(workspaceOwnerId()));
 export const storageError = ref('');
-watch(currentUser, user => { studio.value = load(user?.id ?? 'guest'); }, { flush: 'sync' });
-watch(studio, value => { if (!writeJSON(`chuhai-studio-v1:${currentUser.value?.id ?? 'guest'}`, value)) storageError.value = '本地存储不可用，当前修改只能保留在本次会话'; else storageError.value = ''; }, { deep: true, flush: 'sync' });
+watch(currentUser, () => { studio.value = load(workspaceOwnerId()); }, { flush: 'sync' });
+watch(studio, value => { if (!writeJSON(`chuhai-studio-v1:${workspaceOwnerId()}`, value)) storageError.value = '本地存储不可用，当前修改只能保留在本次会话'; else storageError.value = ''; }, { deep: true, flush: 'sync' });
 export function createProject(name: string, desc = '', color = '#11a3fd'): StudioProject {
+  requireTeamPermission(isTeamAdmin.value, '当前成员不能创建项目');
   if (!name.trim()) throw new Error('请填写项目名称');
   const project = { id: `P-${uid()}`, name: name.trim(), desc, color, accountIds: [], archived: false };
   studio.value.projects.unshift(project); return project;
@@ -136,18 +140,21 @@ export async function ensureDemoProjectContent(projectId: string) {
   } catch { /* Browsers without IndexedDB retain the explicit missing-media state. */ }
 }
 export function authorize(handle: string, groupId: string, scenario: string, platform: SocialPlatform = 'tiktok') {
+  requireTeamPermission(canAuthorizeAccounts(), '仅管理员可以绑定或授权账号');
   if (scenario === '拒绝') throw new Error('用户拒绝授权，可重新发起');
   if (scenario === '取消') throw new Error('授权已取消，帐号未发生变更');
   const normalized = '@' + handle.trim().replace(/^@/, '').toLowerCase();
   if (!/^@[a-z0-9_.]{2,24}$/.test(normalized)) throw new Error('用户名需为 2–24 位字母、数字、下划线或点');
   const existing = studio.value.accounts.find(a => a.handle === normalized && accountPlatform(a) === platform);
-  const account = { platform, id: existing?.id ?? uid(), name: normalized.slice(1), handle: normalized, region: existing?.region ?? '未提供', groupId, note: existing?.note ?? '', status: (scenario === '权限不足' ? '权限不足' : scenario === '过期' ? '授权过期' : '已授权') as '已授权' | '授权过期' | '权限不足', authorizedAt: now(), deleted: false };
+  const expires = new Date(); expires.setFullYear(expires.getFullYear() + 1);
+  const account = { authorizationExpiresAt: scenario === '成功' ? expires.toISOString() : existing?.authorizationExpiresAt, platform, id: existing?.id ?? uid(), name: normalized.slice(1), handle: normalized, region: existing?.region ?? '未提供', groupId, note: existing?.note ?? '', status: (scenario === '权限不足' ? '权限不足' : scenario === '过期' ? '授权过期' : '已授权') as '已授权' | '授权过期' | '权限不足', authorizedAt: now(), deleted: false };
   const nextAccounts = existing ? studio.value.accounts.map(a=>a.id===existing.id ? {...a,...account,name:existing.name} : a) : [account,...studio.value.accounts];
-  if (!writeJSON('chuhai-studio-v1:'+(currentUser.value?.id ?? 'guest'), {...studio.value,accounts:nextAccounts})) throw new Error('帐号保存失败，请重试');
+  if (!writeJSON('chuhai-studio-v1:'+workspaceOwnerId(), {...studio.value,accounts:nextAccounts})) throw new Error('帐号保存失败，请重试');
   if (existing) Object.assign(existing, {...account,name:existing.name}); else studio.value.accounts.unshift(account);
   return account;
 }
 export function disconnectAccount(id: string) {
+  requireTeamPermission(canAuthorizeAccounts(), '仅管理员可以解绑账号');
   const account = studio.value.accounts.find(a => a.id === id); if (!account) return;
   account.status = '已解绑';
   studio.value.tasks.filter(t => t.accountId === id && ['待发布', '已排期'].includes(t.status)).forEach(t => { t.status = '发布失败'; t.error = '帐号已解绑，任务已暂停；重新授权后可重试'; });
@@ -167,12 +174,16 @@ export function parseReference(raw: string, scenario = '成功'): Reference {
   studio.value.references.unshift(reference); return reference;
 }
 export function startGeneration(film: GenerationJob['film'], fail = false) {
+  requireTeamPermission(canCreateContent() && canEditProject(film.projectId), '当前成员没有该项目的创作权限');
+  spendCredits(20);
+  film.createdByMemberId = currentUser.value?.teamMemberId;
   const job: GenerationJob = { id: uid(), projectId: film.projectId, sessionId: film.sessionId, createdAt: now(), status: studio.value.jobs.some(j => !j.demoPreview && j.projectId === film.projectId && j.status === '生成中') ? '等待中' : '生成中', dueAt: Date.now() + 5000, fail, film };
   studio.value.jobs.unshift(job); return job;
 }
-export function cancelGeneration(id: string) { const job = studio.value.jobs.find(j => j.id === id); if (job && ['生成中', '等待中'].includes(job.status)) job.status = '已取消'; }
-export function retryGeneration(id: string) { const job = studio.value.jobs.find(j => j.id === id); if (job && !studio.value.projects.find(p => p.id === job.projectId)?.archived && !['生成中', '等待中', '已完成'].includes(job.status)) { job.demoPreview = false; job.status = studio.value.jobs.some(j => !j.demoPreview && j.projectId === job.projectId && j.status === '生成中') ? '等待中' : '生成中'; job.dueAt = Date.now() + 5000; job.fail = false; } }
+export function cancelGeneration(id: string) { const job = studio.value.jobs.find(j => j.id === id); if (job && ['生成中', '等待中'].includes(job.status)) { requireTeamPermission(canCreateContent() && canEditProject(job.projectId), '当前成员没有该项目的创作权限'); job.status = '已取消'; } }
+export function retryGeneration(id: string) { const job = studio.value.jobs.find(j => j.id === id); if (job && !studio.value.projects.find(p => p.id === job.projectId)?.archived && !['生成中', '等待中', '已完成'].includes(job.status)) { requireTeamPermission(canCreateContent() && canEditProject(job.projectId), '当前成员没有该项目的创作权限'); spendCredits(20); job.demoPreview = false; job.status = studio.value.jobs.some(j => !j.demoPreview && j.projectId === job.projectId && j.status === '生成中') ? '等待中' : '生成中'; job.dueAt = Date.now() + 5000; job.fail = false; } }
 export function ensurePublishTask(film: Film, retryTaskId?: string, forceNew = false): PublishTask {
+  requireTeamPermission(canPublish() && canEditProject(film.projectId), '当前成员没有该项目的发布权限');
   if (film.resultKind === 'script-breakdown') throw new Error('脚本拆解不能发布');
   if (studio.value.projects.find(p=>p.id===film.projectId)?.archived) throw new Error('项目已归档');
   const tasks = studio.value.tasks.filter(t => t.filmId === film.id);
@@ -184,14 +195,16 @@ export function ensurePublishTask(film: Film, retryTaskId?: string, forceNew = f
   const failed = retryTaskId ? tasks.find(t=>t.id===retryTaskId&&t.status==='发布失败') : retryTaskId === undefined && latest?.status === '发布失败' ? latest : undefined;
   const existing = failed || tasks.find(t=>t.status==='待配置');
   if (existing && !forceNew) return existing;
-  const task: PublishTask = { caption: film.title, timeZone: localTimeZone(), id: uid(), batchId: '', filmId: film.id, projectId: film.projectId, accountId: '', title: film.title, tags: '', privacy: 'PUBLIC_TO_EVERYONE', comments: true, duet: true, stitch: true, ai: false, commercial: false, audienceControl: false, cover: '首帧', photoMusic: false, imageMediaIds: film.type === '图文' ? [...film.mediaIds] : undefined, scheduledAt: '', status: '待配置', createdAt: now(), dueAt: 0, simulateFailure: false, attempt: 0 };
+  const task: PublishTask = { createdByMemberId: currentUser.value?.teamMemberId, caption: film.title, timeZone: localTimeZone(), id: uid(), batchId: '', filmId: film.id, projectId: film.projectId, accountId: '', title: film.title, tags: '', privacy: 'PUBLIC_TO_EVERYONE', comments: true, duet: true, stitch: true, ai: false, commercial: false, audienceControl: false, cover: '首帧', photoMusic: false, imageMediaIds: film.type === '图文' ? [...film.mediaIds] : undefined, scheduledAt: '', status: '待配置', createdAt: now(), dueAt: 0, simulateFailure: false, attempt: 0 };
   film.inPublishing = true; studio.value.tasks.unshift(task); return task;
 }
 export function validatePublish(task: PublishTask) {
+  requireTeamPermission(canPublish() && canEditProject(task.projectId) && canUseAccount(task.accountId), '当前成员不能发布该项目或账号');
   const account = studio.value.accounts.find(a => a.id === task.accountId);
   const project = studio.value.projects.find(p => p.id === task.projectId);
   const film = studio.value.films.find(f => f.id === task.filmId);
   if (!project || project.archived) throw new Error('项目不存在或已归档');
+  if (account && accountPlatform(account) === 'youtube') throw new Error('YouTube 暂不支持发布');
   if (!account || account.status !== '已授权' || !accountAvailableInProject(account, project)) throw new Error('请选择项目关联且授权有效的帐号');
   if (!film || film.projectId !== task.projectId) throw new Error('成片已不存在或不属于当前项目');
   if (film.resultKind === 'script-breakdown') throw new Error('脚本拆解不能发布');
@@ -203,7 +216,7 @@ export function validatePublish(task: PublishTask) {
 }
 function persistTaskUpdates(updates: PublishTask[]) {
   const next = {...studio.value,tasks:studio.value.tasks.map(task=>updates.find(t=>t.id===task.id) || task)};
-  if (!writeJSON('chuhai-studio-v1:'+(currentUser.value?.id ?? 'guest'),next)) throw new Error('本地保存失败，请重试；当前编辑已保留');
+  if (!writeJSON(`chuhai-studio-v1:${workspaceOwnerId()}`,next)) throw new Error('本地保存失败，请重试；当前编辑已保留');
   for (const task of updates) { const stored=studio.value.tasks.find(t=>t.id===task.id); if (stored) Object.assign(stored,task); }
 }
 export async function submitPublish(tasks: PublishTask[]) {
@@ -213,11 +226,11 @@ export async function submitPublish(tasks: PublishTask[]) {
     if (tasks.filter(t => t.filmId === task.filmId && t.accountId === task.accountId).length > 1 || studio.value.tasks.some(t => t.id !== task.id && t.filmId === task.filmId && t.accountId === task.accountId && ['待发布', '已排期', '发布中'].includes(t.status))) throw new Error('该视频已有执行中的发布任务');
     validatePublish(task);
     const film = studio.value.films.find(f => f.id === task.filmId)!;
-    if (film.source === '本地上传' && film.type === '视频') for (const id of film.mediaIds) if (!await getMedia(currentUser.value!.id, id)) throw new Error(`「${film.title}」的本地媒体已丢失，请重新上传`);
+    if (film.source === '本地上传' && film.type === '视频') for (const id of film.mediaIds) if (!await getMedia(workspaceOwnerId(), id)) throw new Error(`「${film.title}」的本地媒体已丢失，请重新上传`);
     if (film.type === '图文') {
       const imageIds = task.imageMediaIds ?? film.mediaIds;
-      if (!(await Promise.all(imageIds.map(id => getMedia(currentUser.value!.id, id)))).every(Boolean)) throw new Error(`「${film.title}」的图文图片已丢失，请移除缺失图片或重新上传`);
-      if (task.bgm?.source === 'local' && (!task.bgm.mediaId || !await getMedia(currentUser.value!.id, task.bgm.mediaId))) throw new Error(`「${film.title}」的本地 BGM 已丢失，请重新上传`);
+      if (!(await Promise.all(imageIds.map(id => getMedia(workspaceOwnerId(), id)))).every(Boolean)) throw new Error(`「${film.title}」的图文图片已丢失，请移除缺失图片或重新上传`);
+      if (task.bgm?.source === 'local' && (!task.bgm.mediaId || !await getMedia(workspaceOwnerId(), task.bgm.mediaId))) throw new Error(`「${film.title}」的本地 BGM 已丢失，请重新上传`);
     }
   }
   const batchId = uid();
@@ -236,7 +249,7 @@ export async function tickStudio(clock = Date.now()) {
   for (const job of studio.value.jobs) {
     if (job.demoPreview || job.status !== '生成中' || job.dueAt > clock) continue;
     if (job.fail) { job.status = '生成失败'; continue; }
-    if (job.film.resultKind === 'script-breakdown' && !writeJSON(`chuhai-studio-v1:${currentUser.value?.id ?? 'guest'}`, { ...studio.value, jobs: studio.value.jobs.map(j => j.id === job.id ? { ...j, status: '已完成' } : j), films: [{ ...structuredClonePlain(job.film), id: job.id, createdAt: now() }, ...studio.value.films] })) { storageError.value = '拆解结果保存失败，请重试'; continue; }
+    if (job.film.resultKind === 'script-breakdown' && !writeJSON(`chuhai-studio-v1:${workspaceOwnerId()}`, { ...studio.value, jobs: studio.value.jobs.map(j => j.id === job.id ? { ...j, status: '已完成' } : j), films: [{ ...structuredClonePlain(job.film), id: job.id, createdAt: now() }, ...studio.value.films] })) { storageError.value = '拆解结果保存失败，请重试'; continue; }
     job.status = '已完成'; studio.value.films.unshift({ ...structuredClonePlain(job.film), id: job.id, createdAt: now() });
   }
   for (const job of [...studio.value.jobs].reverse()) {
@@ -248,11 +261,11 @@ export async function tickStudio(clock = Date.now()) {
       // Scheduled time has passed: validate the remaining conditions without the future-time check.
       validatePublish({ ...task, scheduledAt: '' });
       const film = studio.value.films.find(f => f.id === task.filmId)!;
-      if (film.source === '本地上传' && film.type === '视频') for (const id of film.mediaIds) if (!await getMedia(currentUser.value!.id, id)) throw new Error('本地媒体已丢失');
+      if (film.source === '本地上传' && film.type === '视频') for (const id of film.mediaIds) if (!await getMedia(workspaceOwnerId(), id)) throw new Error('本地媒体已丢失');
       if (film.type === '图文') {
         const imageIds = task.imageMediaIds ?? film.mediaIds;
-        if (!(await Promise.all(imageIds.map(id => getMedia(currentUser.value!.id, id)))).every(Boolean)) throw new Error('图文图片已丢失');
-        if (task.bgm?.source === 'local' && (!task.bgm.mediaId || !await getMedia(currentUser.value!.id, task.bgm.mediaId))) throw new Error('本地 BGM 已丢失');
+        if (!(await Promise.all(imageIds.map(id => getMedia(workspaceOwnerId(), id)))).every(Boolean)) throw new Error('图文图片已丢失');
+        if (task.bgm?.source === 'local' && (!task.bgm.mediaId || !await getMedia(workspaceOwnerId(), task.bgm.mediaId))) throw new Error('本地 BGM 已丢失');
       }
       if (task.status !== '发布中') { task.status = '发布中'; task.updatedAt = now(); task.dueAt = clock + 4000; continue; }
       if (task.simulateFailure && task.attempt === 1) throw new Error('平台暂时繁忙，请重试此任务');
@@ -276,12 +289,14 @@ export function saveProduct(id: string, fields: Partial<import('@/types/domain')
 export function cancelPublishTask(id: string) {
   const task = studio.value.tasks.find(t => t.id === id);
   if (!task || !['已排期', '待发布'].includes(task.status)) throw new Error('只能取消尚未执行的发布任务');
+  requireTeamPermission(canPublish() && canEditProject(task.projectId) && canUseAccount(task.accountId), '当前成员不能取消此发布任务');
   if (studio.value.projects.find(p => p.id === task.projectId)?.archived) throw new Error('项目已归档');
   persistTaskUpdates([{...task,demoPreview:false,status:'已取消',updatedAt:now()}]);
 }
 export function reschedulePublishTask(id: string, scheduledAt: string, timeZone?: string) {
   const task = studio.value.tasks.find(t => t.id === id);
   if (!task || task.status !== '已排期') throw new Error('仅已排期任务可以改期');
+  requireTeamPermission(canPublish() && canEditProject(task.projectId) && canUseAccount(task.accountId), '当前成员不能修改此发布任务');
   validatePublish({ ...task, scheduledAt, timeZone: timeZone ?? task.timeZone });
   persistTaskUpdates([{...task,timeZone:timeZone ?? task.timeZone ?? 'Asia/Shanghai',demoPreview:false,scheduledAt,dueAt:new Date(scheduledAt).getTime(),updatedAt:now()}]);
 }
@@ -292,6 +307,7 @@ export function accountDeleteReason(id: string) {
     : '';
 }
 export function deleteAccount(id: string) {
+  requireTeamPermission(canAuthorizeAccounts(), '创作者不能删除账号');
   const reason = accountDeleteReason(id);
   if (reason) throw new Error(reason);
   const account = studio.value.accounts.find((a) => a.id === id);
@@ -305,21 +321,98 @@ export function deleteAccount(id: string) {
     project.accountIds = project.accountIds.filter((accountId) => accountId !== id);
 }
 export function reorderGroup(id: string, targetId: string) {
+  requireTeamPermission(canAuthorizeAccounts(), '仅管理员可以管理账号分组');
   const groups = [...studio.value.groups];
   const from = groups.findIndex((g) => g.id === id),
     to = groups.findIndex((g) => g.id === targetId);
   if (from < 0 || to < 0 || from === to) return;
   groups.splice(to, 0, groups.splice(from, 1)[0]!);
-  studio.value.groups = groups;
+  saveAccountChanges({ groups });
+}
+
+// Persist first, then update the reactive workspace so a failed write never reports success.
+function saveAccountChanges(changes: Partial<Pick<StudioState, 'accounts' | 'groups'>>) {
+  const next = { ...studio.value, ...changes };
+  if (!writeJSON(`chuhai-studio-v1:${workspaceOwnerId()}`, next))
+    throw new Error('本地保存失败，请重试');
+  Object.assign(studio.value, changes);
+}
+
+export function saveAccountGroup(name: string, id = '') {
+  requireTeamPermission(canAuthorizeAccounts(), '仅管理员可以管理账号分组');
+  const normalized = name.trim();
+  if (!normalized || [...normalized].length > 30) throw new Error('分组名称须为 1—30 个字符');
+  if (id === 'ungrouped') throw new Error('未分组不可重命名');
+  if (id && !studio.value.groups.some(group => group.id === id)) throw new Error('分组不存在');
+  if (studio.value.groups.some(group => group.name === normalized && group.id !== id))
+    throw new Error('分组名称已存在');
+  const group = { id: id || uid(), name: normalized };
+  saveAccountChanges({ groups: id ? studio.value.groups.map(item => item.id === id ? group : item) : [...studio.value.groups, group] });
+  return group;
+}
+
+export function removeAccountGroup(id: string) {
+  requireTeamPermission(canAuthorizeAccounts(), '仅管理员可以管理账号分组');
+  if (id === 'ungrouped') throw new Error('未分组不可删除');
+  if (!studio.value.groups.some(group => group.id === id)) throw new Error('分组不存在');
+  saveAccountChanges({
+    groups: studio.value.groups.filter(group => group.id !== id),
+    accounts: studio.value.accounts.map(account => account.groupId === id ? { ...account, groupId: 'ungrouped' } : account),
+  });
+}
+
+export function moveAccountsToGroup(ids: string[], groupId: string) {
+  requireTeamPermission(canAuthorizeAccounts(), '仅管理员可以管理账号分组');
+  if (!studio.value.groups.some(group => group.id === groupId)) throw new Error('分组不存在');
+  saveAccountChanges({ accounts: studio.value.accounts.map(account =>
+    ids.includes(account.id) && !account.deleted ? { ...account, groupId } : account) });
+}
+
+export function saveAccountNote(id: string, note: string) {
+  requireTeamPermission(canAuthorizeAccounts(), '仅管理员可以编辑账号备注');
+  if (!studio.value.accounts.some(account => account.id === id && !account.deleted)) throw new Error('帐号不存在');
+  saveAccountChanges({ accounts: studio.value.accounts.map(account => account.id === id ? { ...account, note: note.trim() } : account) });
+}
+
+export function refreshAccounts() {
+  try {
+    const raw = localStorage.getItem(`chuhai-studio-v1:${workspaceOwnerId()}`);
+    if (!raw) throw new Error('没有已保存的数据');
+    const value = JSON.parse(raw) as StudioState;
+    if (value.version !== 1 || !Array.isArray(value.accounts) || !Array.isArray(value.groups)) throw new Error('数据格式无效');
+    studio.value = value;
+  } catch {
+    throw new Error('读取本地数据失败，请稍后重试');
+  }
+}
+
+const syncingAccounts = new Set<string>();
+export async function syncAccountData(id: string) {
+  requireTeamPermission(canUseAccount(id), '当前成员没有此账号的访问权限');
+  if (syncingAccounts.has(id)) return;
+  const owner = workspaceOwnerId();
+  const initial = studio.value.accounts.find(account => account.id === id && !account.deleted);
+  if (!initial || initial.status !== '已授权') throw new Error('请先授权账号再同步数据');
+  syncingAccounts.add(id);
+  try {
+    await new Promise(resolve => setTimeout(resolve, 400));
+    if (workspaceOwnerId() !== owner) throw new Error('登录账号已切换，请重新同步');
+    const account = studio.value.accounts.find(item => item.id === id && !item.deleted);
+    if (!account || account.status !== '已授权') throw new Error('请先授权账号再同步数据');
+    saveAccountChanges({ accounts: studio.value.accounts.map(item => item.id === id ? synchronizedDemoAccount(account, now()) : item) });
+  } finally {
+    syncingAccounts.delete(id);
+  }
 }
 
 export function startBreakdown(film: GenerationJob['film']) {
+ requireTeamPermission(canCreateContent() && canEditProject(film.projectId), '当前成员没有该项目的创作权限');
  const project = studio.value.projects.find(p => p.id === film.projectId);
  if (!project || project.archived) throw new Error('项目不存在或已归档');
  if (!film.reference && !film.referenceAssets?.some(a => a.type === '视频' && a.mediaId)) throw new Error('请先上传视频或添加视频链接');
  if (film.resultKind !== 'script-breakdown') throw new Error('无效的拆解任务');
  const job: GenerationJob = { id: uid(), projectId: film.projectId, createdAt: now(), status: '生成中', dueAt: Date.now() + 5000, fail: false, film };
- if (!writeJSON(`chuhai-studio-v1:${currentUser.value?.id ?? 'guest'}`, { ...studio.value, jobs: [job, ...studio.value.jobs] })) throw new Error('保存失败，请重试');
+ if (!writeJSON(`chuhai-studio-v1:${workspaceOwnerId()}`, { ...studio.value, jobs: [job, ...studio.value.jobs] })) throw new Error('保存失败，请重试');
  studio.value.jobs.unshift(job);
  return job;
 }

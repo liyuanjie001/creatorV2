@@ -2,6 +2,7 @@
 import { computed, ref, watch, onBeforeUnmount } from 'vue';
 import { getMedia } from '@/services/media';
 import { currentUser } from '@/services/identity';
+import { workspaceOwnerId } from '@/services/team';
 import type { AgentCard } from '@/types/agent';
 const props = defineProps<{ card: AgentCard; readonly?: boolean; structured?: boolean }>();
 const card = computed(() => props.card);
@@ -14,7 +15,7 @@ watch(() => props.card.imageMediaId, async (id) => {
   imageUrl.value = '';
   if (!id || !currentUser.value) return;
   try {
-    const blob = await getMedia(currentUser.value.id, id);
+    const blob = await getMedia(workspaceOwnerId(), id);
     if (blob && version === imageVersion) imageUrl.value = URL.createObjectURL(blob);
   } catch { /* Missing images retain the upload recovery entry. */ }
 }, { immediate: true });

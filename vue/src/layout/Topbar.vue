@@ -21,6 +21,7 @@ import {
 import { Avatar, AvatarFallback } from '@/components/ui';
 import { notifications, unreadCount } from '@/services/notifications';
 import { currentUser, identityService } from '@/services/identity';
+import { isTeamMember, currentMember } from '@/services/team';
 import InspireGenPanel from '@/components/InspireGenPanel.vue';
 import { useRouter } from 'vue-router';
 import { useInspirationDialog } from '@/composables/useInspirationDialog';
@@ -116,7 +117,7 @@ const { inspireOpen } = useInspirationDialog();
             </Avatar>
             <div class="text-left">
               <div class="text-[13px] leading-tight text-slate-800">{{ currentUser?.name ?? '用户' }}</div>
-              <div class="text-[11px] leading-tight text-slate-400">运营负责人</div>
+              <div class="text-[11px] leading-tight text-slate-400">{{ isTeamMember ? currentMember?.role === 'admin' ? '团队管理员' : '团队创作者' : '运营负责人' }}</div>
             </div>
           </button>
         </DropdownMenuTrigger>
@@ -126,7 +127,7 @@ const { inspireOpen } = useInspirationDialog();
           </DropdownMenuItem>
           <DropdownMenuItem
             class="cursor-pointer focus:bg-slate-50"
-            @click="router.push('/settings?tab=team')"
+            @click="router.push('/team')"
           >
             团队设置
           </DropdownMenuItem>

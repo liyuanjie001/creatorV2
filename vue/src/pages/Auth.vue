@@ -35,6 +35,13 @@ async function submit() {
   } catch (e) { error.value = (e as Error).message; } finally { busy.value = false; }
 }
 async function demo() { identityService.demo(); await finish(); }
+async function enterNewUser() {
+  if (busy.value) return;
+  busy.value = true; error.value = ''; notice.value = '';
+  try { await identityService.newUser(); await finish(); }
+  catch (e) { error.value = (e as Error).message; }
+  finally { busy.value = false; }
+}
 async function googleLogin() {
   if (busy.value) return;
   busy.value = true;
@@ -86,7 +93,10 @@ async function googleLogin() {
         {{ page === 'register' ? '已有帐号？' : '还没有帐号？' }}
         <button type="button" class="ml-1 rounded px-1 py-0.5 font-semibold text-slate-700 hover:bg-slate-50 hover:text-sky-700" @click="change(page === 'register' ? 'login' : 'register')">{{ page === 'register' ? '立即登录' : '立即注册' }}</button>
       </div>
-    <button type="button" class="mt-5 block w-full text-center text-xs text-slate-500 hover:text-sky-600" @click="demo">先体验一下？进入演示帐号 →</button>
+    <div class="mt-5 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-xs">
+      <button type="button" class="rounded-lg py-2 text-slate-500 hover:text-sky-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 disabled:opacity-50" :disabled="busy" @click="demo">先体验一下？进入演示帐号 →</button>
+      <button type="button" class="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 font-medium text-sky-600 transition hover:border-sky-300 hover:bg-sky-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 disabled:opacity-50" :disabled="busy" @click="enterNewUser">新用户进入 →</button>
+    </div>
     <p class="mt-3 text-center text-[11px] leading-5 text-slate-400">当前为交互原型 · 验证码与 Google 授权均为模拟</p>
     </div>
     </section>

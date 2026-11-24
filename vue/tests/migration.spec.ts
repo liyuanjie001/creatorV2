@@ -41,7 +41,7 @@ test.afterEach(async ({ page }) => {
 });
 
 const routes = [
-  ['/', '爆款视频'],
+  ['/', '项目'],
   ['/inspiration', '爆款视频'],
   ['/notes', '妙记'],
   ['/create', '让你的品牌故事鲜活起来'],
@@ -176,7 +176,18 @@ test('登录注册流程提供验证码并返回原访问页面', async ({ page 
   await page.getByLabel('设置新密码').fill('strong-pass-2026');
   await page.getByRole('button', { name: '注册并进入' }).click();
   await expect(page).toHaveURL(/#\/$/);
+  await page.getByRole('button', { name: '关闭新手引导' }).click();
   await expect(page.getByText('还没有项目')).toBeVisible();
+});
+
+test('登录注册新用户入口创建独立空白工作空间并进入系统', async ({ page }) => {
+  await page.goto('/#/auth?redirect=/');
+  await page.getByRole('button', { name: '新用户进入' }).click();
+  await expect(page).toHaveURL(/#\/$/);
+  await expect(page.getByRole('dialog', { name: '项目', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '关闭新手引导' }).click();
+  await expect(page.getByText('还没有项目')).toBeVisible();
+  await expect(page.getByText('开始使用：① 创建项目 → ② 授权 TK 帐号 → ③ 创作并发布')).toHaveCount(0);
 });
 
 test('登录注册统一表单支持手机、密码切换和 Google 直达登录', async ({ page }) => {
@@ -206,6 +217,7 @@ test('登录注册手机验证、密码重置和验证码登录保持一致', as
   await page.getByLabel('设置新密码').fill('original-pass-2026');
   await page.getByRole('button', { name: '注册并进入' }).click();
   await expect(page).toHaveURL(/#\/$/);
+  await page.getByRole('button', { name: '关闭新手引导' }).click();
   await page.evaluate(() => localStorage.removeItem('chuhai-studio-session'));
   await page.reload();
   await page.goto('/#/auth?redirect=/');

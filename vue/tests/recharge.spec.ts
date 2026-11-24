@@ -22,12 +22,12 @@ test.beforeEach(async ({ page }) => {
 test('充值扫码演示、余额同步与刷新恢复', async ({ page }, info) => {
   await page.goto('/#/purchase');
   await page
-    .getByLabel('¥2,000 套餐', { exact: true })
-    .getByRole('button', { name: '购买套餐', exact: true })
+    .getByLabel('商业版套餐', { exact: true })
+    .getByRole('button', { name: /订阅套餐|续购套餐/, exact: true })
     .click();
   const dialog = page.getByRole('dialog');
-  await expect(dialog).toContainText('¥2000');
-  await expect(dialog).toContainText('到账 3,945 积分');
+  await expect(dialog).toContainText('¥2,360');
+  await expect(dialog).toContainText('到账 5,000 积分');
   await expect(dialog).toContainText('演示支付，不会实际扣款');
   await expect(dialog.getByRole('button', { name: '支付宝', exact: true })).toHaveAttribute(
     'aria-pressed',
@@ -50,22 +50,22 @@ test('充值扫码演示、余额同步与刷新恢复', async ({ page }, info) 
   await page.screenshot({ path: info.outputPath('recharge.png') });
   await dialog.getByRole('button', { name: '模拟支付成功' }).click();
   await expect(dialog.getByRole('heading')).toHaveText('支付成功');
-  await expect(dialog).toContainText('最新余额：4,045 积分');
-  await expect(page.getByLabel('积分余额', { exact: true })).toHaveText('4,045');
+  await expect(dialog).toContainText('最新余额：5,100 积分');
+  await expect(page.getByLabel('积分余额', { exact: true })).toHaveText('5,100');
   await dialog.getByRole('button', { name: '关闭', exact: true }).first().click();
   await page.reload();
-  await expect(page.getByLabel('积分余额', { exact: true })).toHaveText('4,045');
-  await expect(page.getByLabel('¥2,000 套餐', { exact: true })).toContainText('当前版本');
+  await expect(page.getByLabel('积分余额', { exact: true })).toHaveText('5,100');
+  await expect(page.getByLabel('商业版套餐', { exact: true })).toContainText('当前版本');
   await page
-    .getByLabel('¥2,000 套餐', { exact: true })
-    .getByRole('button', { name: '购买套餐', exact: true })
+    .getByLabel('商业版套餐', { exact: true })
+    .getByRole('button', { name: /订阅套餐|续购套餐/, exact: true })
     .click();
   await expect(dialog.getByRole('button', { name: '支付宝', exact: true })).toHaveAttribute(
     'aria-pressed',
     'true',
   );
   await page.keyboard.press('Escape');
-  await expect(page.getByLabel('积分余额', { exact: true })).toHaveText('4,045');
+  await expect(page.getByLabel('积分余额', { exact: true })).toHaveText('5,100');
   await page.getByRole('button', { name: '联系销售', exact: true }).click();
   await expect(dialog.getByRole('heading')).toHaveText('添加企业微信联系销售');
 });

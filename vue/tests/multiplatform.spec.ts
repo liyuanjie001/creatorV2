@@ -52,7 +52,7 @@ test('帐号详情、平台筛选、返回恢复及多平台模拟授权', async
   await page.getByRole('button', { name: '返回帐号管理' }).click();
   await expect(page.getByRole('navigation', { name: '帐号平台分类' }).getByRole('button', { name: 'Instagram', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByLabel('搜索帐号', { exact: true })).toHaveValue('GlowUp');
-  await page.getByRole('button', { name: '添加帐号', exact: true }).click();
+  await page.getByRole('button', { name: '绑定账号', exact: true }).click();
   await page.getByLabel('帐号平台', { exact: true }).selectOption('facebook');
   await page.getByRole('button', { name: '前往 Facebook 授权（演示）', exact: true }).click();
   await page.getByLabel('Facebook 用户名', { exact: true }).fill('@new.brand');
