@@ -5,6 +5,8 @@ export type AuthUser = {
   identity: string;
   method: 'email' | 'phone' | 'google';
   bindings: string[];
+  checkInCampaign?: 1;
+  referrerId?: string;
   teamOwnerId?: string;
   teamMemberId?: string;
   teamRole?: 'admin' | 'creator';

@@ -142,7 +142,8 @@ test('新用户四步跳转实际页面，我的作品后直接展示账号管�
   expect(studio.value.films).toHaveLength(0);
   expect(studio.value.tasks).toHaveLength(0);
   expect(studio.value.accounts).toHaveLength(0);
-  await wrapper!.find('[aria-label="新手引导"]').trigger('click');
+  await wrapper!.find('[aria-label="演示"]').trigger('click');
+  await wrapper!.findAll('#demo-panel button').find(item => item.text().includes('新手引导'))!.trigger('click');
   await settle();
   expect(router.currentRoute.value.path).toBe('/');
   expect(document.querySelector('#guide-tour-title')?.textContent).toBe('项目');

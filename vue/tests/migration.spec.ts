@@ -180,14 +180,13 @@ test('登录注册流程提供验证码并返回原访问页面', async ({ page 
   await expect(page.getByText('还没有项目')).toBeVisible();
 });
 
-test('登录注册新用户入口创建独立空白工作空间并进入系统', async ({ page }) => {
+test('登录注册移除新用户入口，保留正常注册和演示账号', async ({ page }) => {
   await page.goto('/#/auth?redirect=/');
-  await page.getByRole('button', { name: '新用户进入' }).click();
-  await expect(page).toHaveURL(/#\/$/);
-  await expect(page.getByRole('dialog', { name: '项目', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: '关闭新手引导' }).click();
-  await expect(page.getByText('还没有项目')).toBeVisible();
-  await expect(page.getByText('开始使用：① 创建项目 → ② 授权 TK 帐号 → ③ 创作并发布')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /新用户进入/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /进入演示帐号/ })).toBeVisible();
+  await page.getByRole('button', { name: '注册', exact: true }).click();
+  await expect(page.getByRole('button', { name: /新用户进入/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '注册并进入', exact: true })).toBeVisible();
 });
 
 test('登录注册统一表单支持手机、密码切换和 Google 直达登录', async ({ page }) => {

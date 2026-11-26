@@ -20,7 +20,7 @@ test.beforeEach(async ({ page }) => {
       );
   }, token);
 });
-test('profile avatar opens shortcuts above on hover and keyboard focus', async ({ page }, info) => {
+test('profile avatar opens shortcuts below on hover and keyboard focus', async ({ page }, info) => {
   await page.goto('/#/purchase');
   const avatar = page.getByRole('button', { name: '个人中心', exact: true });
   const menu = page.getByRole('navigation', { name: '个人中心快捷入口', exact: true });
@@ -31,8 +31,8 @@ test('profile avatar opens shortcuts above on hover and keyboard focus', async (
   await expect(page).toHaveURL(/#\/purchase$/);
   const avatarBox = (await avatar.boundingBox())!;
   const menuBox = (await menu.boundingBox())!;
-  expect(menuBox.x).toBe(avatarBox.x);
-  expect(menuBox.y + menuBox.height).toBeLessThan(avatarBox.y);
+  expect(menuBox.x + menuBox.width).toBe(avatarBox.x + avatarBox.width);
+  expect(menuBox.y).toBeGreaterThan(avatarBox.y + avatarBox.height);
   await menu.getByRole('link', { name: '账号中心', exact: true }).hover();
   await expect(menu).toBeVisible();
   await page.screenshot({ path: info.outputPath('profile-hover-desktop.png') });
@@ -77,7 +77,7 @@ test('profile avatar opens shortcuts above on hover and keyboard focus', async (
   await expect(menu.getByRole('link', { name: '消息中心', exact: true })).toBeInViewport();
   const mobileAvatarBox = (await avatar.boundingBox())!;
   const mobileMenuBox = (await menu.boundingBox())!;
-  expect(mobileMenuBox.y + mobileMenuBox.height).toBeLessThan(mobileAvatarBox.y);
+  expect(mobileMenuBox.y).toBeGreaterThan(mobileAvatarBox.y + mobileAvatarBox.height);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: info.outputPath('profile-hover-mobile.png') });
   await menu.getByRole('link', { name: '帮助与反馈', exact: true }).click();
@@ -311,7 +311,7 @@ test('purchase messages are real, read state persists and details navigate', asy
   await page.goto('/#/purchase');
   await page
     .getByLabel('基础版套餐', { exact: true })
-    .getByRole('button', { name: /订阅套餐|续购套餐/, exact: true })
+    .getByRole('button', { name: /购买套餐|续购套餐/, exact: true })
     .click();
   const dialog = page.getByRole('dialog');
   await dialog.getByRole('button', { name: '模拟支付成功', exact: true }).click();
@@ -395,7 +395,7 @@ test('sync failure messages recover without duplicate payment or delivery', asyn
   await page.goto('/#/purchase');
   await page
     .getByLabel('基础版套餐', { exact: true })
-    .getByRole('button', { name: /订阅套餐|续购套餐/, exact: true })
+    .getByRole('button', { name: /购买套餐|续购套餐/, exact: true })
     .click();
   await page.evaluate(() => {
     const original = Storage.prototype.setItem;

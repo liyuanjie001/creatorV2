@@ -5,6 +5,7 @@ import { Crown, ChevronRight, ArrowUpRight } from 'lucide-vue-next';
 import {
   currentPackage, currentSubscription, latestSubscription, creditsBalance, creditsTotal, getRechargeBenefits,
   subscriptionEditions, subscriptionPeriods, subscriptionStatus, formatSubscriptionDate,
+  subscriptionSeatLabel,
 } from '@/services/credits';
 import PackageBenefits from '@/components/PackageBenefits.vue';
 import PurchaseHistory from './PurchaseHistory.vue';
@@ -68,7 +69,7 @@ const creditsPct = computed(() =>
             <dt>订阅日期</dt>
             <dd>{{ formatSubscriptionDate(displayedSubscription.subscription.startsAt) }} 至 {{ formatSubscriptionDate(displayedSubscription.subscription.endsAt) }}</dd>
           </div>
-          <div><dt class="sr-only">团队席位</dt><dd>{{ displayedSubscription.subscription.edition === 'team' ? `团队席位 ${displayedSubscription.subscription.seats} 席（另计本人）` : '限本人使用' }}</dd></div>
+          <div><dt class="sr-only">团队席位</dt><dd>{{ displayedSubscription.subscription.edition === 'team' ? `团队席位 ${subscriptionSeatLabel(displayedSubscription.subscription)}` : '限本人使用' }}</dd></div>
           <div v-if="!currentSubscription"><dt class="sr-only">当前权益</dt><dd>{{ currentPackage ? '当前沿用历史套餐权益' : '当前无生效中的订阅' }}</dd></div>
         </dl>
         <Button v-if="displayedSubscription" variant="outline" class="mt-4 border-sky-200 text-sky-700" @click="renew">手动续购</Button>
@@ -77,7 +78,7 @@ const creditsPct = computed(() =>
           @click="router.push('/purchase')"
         >
           {{
-            !currentPackage ? '购买套餐' : currentPackage.priceLabel === '企业版' ? '查看套餐' : '升级套餐'
+            !currentPackage ? '购买套餐' : currentPackage.priceLabel === '旗舰版' ? '查看套餐' : '升级套餐'
           }}
           <ArrowUpRight class="h-3.5 w-3.5" aria-hidden="true" />
         </Button>

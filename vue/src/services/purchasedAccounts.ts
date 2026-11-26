@@ -2,6 +2,7 @@ import {
   completeRecharge,
   reserveSocialAccounts,
   recoverPurchasedAccounts,
+  reserveCouponDelivery,
   type AccountClaimInput,
   type PaymentChannel,
   type RechargeOrder,
@@ -43,4 +44,10 @@ export function claimSocialAccounts(requestId: string, input: AccountClaimInput)
   const claim = reserveSocialAccounts(requestId, input);
   syncPurchasedAccounts('领取记录已保存，帐号交付暂未完成，请重试或刷新恢复');
   return claim;
+}
+
+export function simulateCouponDelivery(couponId: string) {
+  const coupon = reserveCouponDelivery(couponId);
+  syncPurchasedAccounts('兑换记录已保存，账号同步失败，请重试或刷新恢复');
+  return coupon;
 }

@@ -1,6 +1,21 @@
 import { computed, ref, watch } from 'vue';
 import { currentUser, identityService } from './identity';
 import { now, readJSON, uid, writeJSON } from './storage';
+import type { StudioState } from '@/types/studio';
+
+export type RecoveryAllocation = {
+  projectRecipients: Record<string, string | null>;
+  accountRecipients: Record<string, string | null>;
+  creditTransfers: { memberId: string; credits: number }[];
+};
+export type MemberRecovery = {
+  recoveredAt: string;
+  consumed: number;
+  credits: number;
+  projectIds: string[];
+  accountIds: string[];
+  allocation: RecoveryAllocation;
+};
 
 export type TeamRole = 'admin' | 'creator';
 export type TeamMember = {
@@ -14,6 +29,7 @@ export type TeamMember = {
   creditLimit: number;
   createdAt: string;
   active: boolean;
+  recovery?: MemberRecovery;
 };
 export type TeamState = { ownerId: string; members: TeamMember[]; updatedAt: string };
 export type MemberInput = {
@@ -57,10 +73,19 @@ export const isTeamMember = computed(() => Boolean(currentUser.value?.teamOwnerI
 export const currentMember = computed(() => team.value.members.find(member => member.id === currentUser.value?.teamMemberId && member.active));
 export const isTeamAdmin = computed(() => !isTeamMember.value || currentMember.value?.role === 'admin');
 export const teamMembers = computed(() => team.value.members.filter(member => member.active));
+export function memberCreditsConsumed(member: Pick<TeamMember, 'credits' | 'creditLimit'>) {
+  return Math.max(0, member.creditLimit - member.credits);
+}
+export const archivedMembers = computed(() => team.value.members.filter(member => !member.active));
+export const membersCreditsConsumed = computed(() => {
+  if (archivedMembers.value.some(member => !member.recovery)) return null;
+  return team.value.members.reduce((sum, member) => sum +
+    (member.active ? memberCreditsConsumed(member) : member.recovery!.consumed), 0);
+});
 export const visibleProjectIds = computed(() => currentMember.value?.projectIds ?? null);
 export const visibleAccountIds = computed(() => currentMember.value?.accountIds ?? null);
-let transferWorkspaceAssets: ((memberId: string) => void) | undefined;
-export function registerTeamAssetTransfer(handler: (memberId: string) => void) { transferWorkspaceAssets = handler; }
+let transferWorkspaceAssets: ((workspace: StudioState) => void) | undefined;
+export function registerTeamAssetTransfer(handler: (workspace: StudioState) => void) { transferWorkspaceAssets = handler; }
 
 export function canManageTeam() { return isTeamAdmin.value; }
 export function canCreateContent() { return isTeamAdmin.value || currentMember.value?.role === 'creator'; }
@@ -127,18 +152,21 @@ export async function createMembers(inputs: MemberInput[], walletBalance: number
   return created;
 }
 
-export function updateMember(id: string, changes: Partial<Omit<MemberInput, 'password'>> & { password?: string }, walletBalance: number) {
+export async function updateMember(id: string, changes: Partial<Omit<MemberInput, 'password'>> & { password?: string }, walletBalance: number) {
   requireTeamPermission(canManageTeam(), '仅管理员可以编辑成员');
+  if (id === workspaceOwnerId()) throw new Error('所有者不可操作');
   const member = team.value.members.find(value => value.id === id && value.active);
   if (!member) throw new Error('成员不存在');
   const nextCredits = changes.credits === undefined ? member.credits : changes.credits;
   if (!Number.isSafeInteger(nextCredits) || nextCredits < 0) throw new Error('积分额度需为非负整数');
   const available = availableTeamCredits(walletBalance) + member.credits;
   if (nextCredits > available) throw new Error('可分配积分不足');
-  const name = changes.name?.trim() || member.name;
-  if (name.length > 30) throw new Error('昵称最多 30 个字符');
-  const identity = changes.identity ? normalizedIdentity(changes.identity) : member.identity;
+  const name = changes.name === undefined ? member.name : changes.name.trim();
+  if (!name || name.length > 30) throw new Error('昵称需为 1—30 个字符');
+  const identity = changes.identity === undefined ? member.identity : normalizedIdentity(changes.identity);
+  if (!identity) throw new Error('请输入账号名');
   const role = changes.role ?? member.role;
+  if (!['admin', 'creator'].includes(role)) throw new Error('请选择有效成员角色');
   const projectIds = changes.projectIds ? [...changes.projectIds] : member.projectIds;
   const accountIds = changes.accountIds ? [...changes.accountIds] : member.accountIds;
   validateAssignments(projectIds, accountIds);
@@ -147,17 +175,11 @@ export function updateMember(id: string, changes: Partial<Omit<MemberInput, 'pas
     creditLimit: Math.max(0, value.creditLimit + nextCredits - value.credits),
     projectIds, accountIds,
   } : value);
-  const previous = team.value;
-  commit({ ...previous, members: nextMembers });
-  try {
-    identityService.updateTeamMember(workspaceOwnerId(), id, {
-      ...(changes.name ? { name } : {}), ...(changes.identity ? { identity } : {}),
-      ...(changes.password ? { password: changes.password } : {}), ...(changes.role ? { role } : {}),
-    });
-  } catch (error) {
-    commit(previous);
-    throw error;
-  }
+  const next = { ...team.value, members: nextMembers, updatedAt: now() };
+  await identityService.updateTeamMember(workspaceOwnerId(), id, {
+    name, identity, role, ...(changes.password ? { password: changes.password } : {}),
+  }, [{ key: key(next.ownerId), value: next }]);
+  team.value = next;
 }
 
 export function assertCreditSpend(amount: number, walletBalance: number) {
@@ -180,20 +202,86 @@ export function commitCreditSpend(amount: number) {
   });
 }
 
-export function removeMember(id: string) {
+export function commitDemoMemberCreditSpend(id: string, amount: number) {
+  if (currentUser.value?.id !== 'demo' || !Number.isSafeInteger(amount) || amount <= 0) throw new Error('无效的演示成员消耗');
+  const member = team.value.members.find(value => value.id === id && value.active);
+  if (!member || member.credits < amount) throw new Error('演示成员积分不足');
+  commit({
+    ...team.value,
+    members: team.value.members.map(value => value.id === id ? { ...value, credits: value.credits - amount } : value),
+  });
+}
+
+export function recoverMember(id: string, allocation: RecoveryAllocation) {
   requireTeamPermission(canManageTeam(), '仅管理员可以回收成员账号');
+  if (id === workspaceOwnerId()) throw new Error('所有者不可操作');
+  if (id === currentUser.value?.teamMemberId) throw new Error('不能回收当前登录的成员账号，请由所有者或其他管理员操作');
   const member = team.value.members.find(value => value.id === id && value.active);
   if (!member) throw new Error('成员不存在');
+  const recipients = new Set(teamMembers.value.filter(value => value.id !== id).map(value => value.id));
+  const validateRecipient = (recipient: string | null) => {
+    if (recipient !== null && !recipients.has(recipient)) throw new Error('接收方必须是其他有效成员或所有者');
+  };
+  for (const [resourceIds, mapping] of [
+    [member.projectIds, allocation.projectRecipients],
+    [member.accountIds, allocation.accountRecipients],
+  ] as const) {
+    for (const [resourceId, recipient] of Object.entries(mapping)) {
+      if (!resourceIds.includes(resourceId)) throw new Error('分配列表包含不属于该成员的资源');
+      validateRecipient(recipient);
+    }
+  }
+  const creditsByMember = new Map<string, number>();
+  let transferred = 0;
+  for (const transfer of allocation.creditTransfers) {
+    if (!recipients.has(transfer.memberId)) throw new Error('积分接收方必须是其他有效成员');
+    if (!Number.isSafeInteger(transfer.credits) || transfer.credits < 0) throw new Error('转移积分需为非负整数');
+    if (creditsByMember.has(transfer.memberId)) throw new Error('积分接收成员不能重复');
+    creditsByMember.set(transfer.memberId, transfer.credits);
+    transferred += transfer.credits;
+    if (!Number.isSafeInteger(transferred) || transferred > member.credits) throw new Error('转移积分不能超过成员剩余积分');
+  }
+  const recovery: MemberRecovery = {
+    recoveredAt: now(), consumed: memberCreditsConsumed(member), credits: member.credits,
+    projectIds: [...member.projectIds], accountIds: [...member.accountIds],
+    allocation: {
+      projectRecipients: Object.fromEntries(member.projectIds.map(resourceId => [resourceId, allocation.projectRecipients[resourceId] ?? null])),
+      accountRecipients: Object.fromEntries(member.accountIds.map(resourceId => [resourceId, allocation.accountRecipients[resourceId] ?? null])),
+      creditTransfers: allocation.creditTransfers.map(transfer => ({ ...transfer })),
+    },
+  };
+  const next = { ...team.value, updatedAt: now(), members: team.value.members.map(value => {
+    if (value.id === id) return { ...value, active: false, credits: 0, creditLimit: recovery.consumed, projectIds: [], accountIds: [], recovery };
+    if (!value.active) return value;
+    const addedCredits = creditsByMember.get(value.id) ?? 0;
+    if (!Number.isSafeInteger(value.credits + addedCredits) || !Number.isSafeInteger(value.creditLimit + addedCredits)) throw new Error('转移积分超出有效范围');
+    return {
+      ...value, credits: value.credits + addedCredits, creditLimit: value.creditLimit + addedCredits,
+      projectIds: [...new Set([...value.projectIds, ...member.projectIds.filter(resourceId => allocation.projectRecipients[resourceId] === value.id)])],
+      accountIds: [...new Set([...value.accountIds, ...member.accountIds.filter(resourceId => allocation.accountRecipients[resourceId] === value.id)])],
+    };
+  }) };
   const owner = workspaceOwnerId();
   const workspaceKey = `chuhai-studio-v1:${owner}`;
-  const workspace = readJSON<{ films?: { createdByMemberId?: string }[]; tasks?: { createdByMemberId?: string }[] } | null>(workspaceKey, () => null);
-  if (workspace) {
-    for (const film of workspace.films ?? []) if (film.createdByMemberId === id) delete film.createdByMemberId;
-    for (const task of workspace.tasks ?? []) if (task.createdByMemberId === id) delete task.createdByMemberId;
-    if (!writeJSON(workspaceKey, workspace)) throw new Error('资产归属转移失败，请稍后重试');
+  const rawWorkspace = localStorage.getItem(workspaceKey);
+  const workspace: StudioState | null = rawWorkspace === null ? null : JSON.parse(rawWorkspace);
+  if (workspace && (!Array.isArray(workspace.films) || !Array.isArray(workspace.tasks) || !Array.isArray(workspace.jobs))) {
+    throw new Error('工作区数据读取失败，请刷新后重试');
   }
-  transferWorkspaceAssets?.(id);
-  commit({ ...team.value, members: team.value.members.map(value => value.id === id ? { ...value, active: false, credits: 0, projectIds: [], accountIds: [] } : value) });
-  identityService.disableTeamMember(owner, id);
+  if (workspace) {
+    for (const asset of [...workspace.films, ...workspace.tasks, ...workspace.jobs.map(job => job.film)]) {
+      if (asset.createdByMemberId === id) delete asset.createdByMemberId;
+    }
+  }
+  identityService.disableTeamMember(owner, id, [
+    { key: key(owner), value: next },
+    ...(workspace ? [{ key: workspaceKey, value: workspace }] : []),
+  ]);
+  team.value = next;
+  if (workspace) transferWorkspaceAssets?.(workspace);
   return member;
+}
+
+export function removeMember(id: string) {
+  return recoverMember(id, { projectRecipients: {}, accountRecipients: {}, creditTransfers: [] });
 }

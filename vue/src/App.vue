@@ -4,7 +4,17 @@ import { tickStudio, storageError } from '@/services/studio';
 import { currentUser } from '@/services/identity';
 let ticker: ReturnType<typeof setInterval>;
 let ticking = false;
-onMounted(() => { ticker = setInterval(async () => { if (ticking || !currentUser.value) return; ticking = true; try { await tickStudio(); } finally { ticking = false; } }, 1000); });
+onMounted(() => {
+  ticker = setInterval(async () => {
+    if (ticking || !currentUser.value) return;
+    ticking = true;
+    try {
+      await tickStudio();
+    } finally {
+      ticking = false;
+    }
+  }, 1000);
+});
 onBeforeUnmount(() => clearInterval(ticker));
 import { RouterView, useRoute } from 'vue-router';
 import { Toaster } from 'vue-sonner';
@@ -17,21 +27,38 @@ const route = useRoute();
 
 <template>
   <div data-tour-background class="min-h-screen bg-[#eef0f3] text-slate-900">
-    <RouterView v-if="route.name === 'unlock' || route.name === 'auth'" />
+    <RouterView
+      v-if="
+        route.name === 'unlock' ||
+        route.name === 'auth' ||
+        route.name === 'roxy-browser-demo' ||
+        route.name === 'roxy-website-demo'
+      "
+    />
     <template v-else-if="route.matched.length">
       <Sidebar />
-      <div v-if="storageError" role="alert" class="fixed bottom-4 right-4 z-50 rounded-xl bg-amber-50 p-3 text-xs text-amber-800">{{ storageError }}</div>
+      <div
+        v-if="storageError"
+        role="alert"
+        class="fixed bottom-4 right-4 z-50 rounded-xl bg-amber-50 p-3 text-xs text-amber-800"
+      >
+        {{ storageError }}
+      </div>
       <div class="min-h-screen py-3 pl-[104px] pr-3">
         <div
           :class="
             route.meta.immersive
-              ? 'flex h-[calc(100vh-24px)] flex-col overflow-hidden rounded-[20px] bg-white shadow-[0_8px_30px_rgba(15,23,42,0.04)]'
-              : 'min-h-[calc(100vh-24px)] overflow-hidden rounded-[20px] bg-white shadow-[0_8px_30px_rgba(15,23,42,0.04)]'
+              ? 'flex h-[calc(100vh-24px)] flex-col overflow-hidden rounded-[20px] bg-white pt-16 shadow-[0_8px_30px_rgba(15,23,42,0.04)]'
+              : 'min-h-[calc(100vh-24px)] overflow-hidden rounded-[20px] bg-white pt-16 shadow-[0_8px_30px_rgba(15,23,42,0.04)]'
           "
         >
           <main
             v-if="!route.meta.immersive"
-            :class="route.meta.wide ? 'min-w-0 flex-1 px-4 py-6 sm:px-8' : 'mx-auto w-full max-w-[1400px] flex-1 px-6 py-6'"
+            :class="
+              route.meta.wide
+                ? 'min-w-0 flex-1 px-4 py-6 sm:px-8'
+                : 'mx-auto w-full max-w-[1400px] flex-1 px-6 py-6'
+            "
           >
             <RouterView :key="route.path" />
           </main>

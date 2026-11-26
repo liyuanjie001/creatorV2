@@ -2,10 +2,13 @@ import { computed, ref, watch } from 'vue';
 import { DateTime } from 'luxon';
 import { currentUser } from './identity';
 import { guideTour } from './guideTour';
-import { now, readJSON, uid, writeJSON } from './storage';
-import { assertCreditSpend, commitCreditSpend, currentMember, isTeamMember, workspaceOwnerId } from './team';
+import { now, readJSON, uid, writeJSON, writeJSONBatch } from './storage';
+import { canPromote, getRegisteredInviter } from './invitations';
+import { assertCreditSpend, commitCreditSpend, currentMember, isTeamMember, membersCreditsConsumed, workspaceOwnerId } from './team';
 import type { SocialPlatform, StudioState, TKAccount } from '@/types/studio';
 import { countryName, isCountryCode } from './countries';
+import { accountDeliveryDeadline } from './businessDays';
+import { demoPaymentsEnabled } from '@/lib/demoPayments';
 
 export type PaymentChannel = 'alipay' | 'wechat';
 const starterBenefits = {
@@ -60,7 +63,7 @@ export const rechargePacks = {
     maintenanceCount: 120,
     teamMembers: 10,
     benefits: standardBenefits,
-    priceLabel: '专业版',
+    priceLabel: '标准版',
     description: '个人运营',
     tag: '',
   },
@@ -75,7 +78,7 @@ export const rechargePacks = {
     maintenanceCount: 260,
     teamMembers: 20,
     benefits: advancedBenefits,
-    priceLabel: '商业版',
+    priceLabel: '高级版',
     description: '多账号运营',
     tag: '热门推荐',
   },
@@ -90,8 +93,8 @@ export const rechargePacks = {
     maintenanceCount: 700,
     teamMembers: 50,
     benefits: advancedBenefits,
-    priceLabel: '企业版',
-    description: '团队矩阵运营',
+    priceLabel: '旗舰版',
+    description: '矩阵运营',
     tag: '高性价比',
   },
 } as const;
@@ -162,7 +165,7 @@ export type PurchasePackKey = keyof typeof purchasePacks;
 export type PurchaseOptions = { includeAccounts?: boolean };
 export type PurchaseMode = 'withAccounts' | 'creditsOnly';
 export const subscriptionEditions = { personal: '个人版', team: '团队版' } as const;
-export const subscriptionPeriods = { quarter: '按季订阅', year: '按年订阅' } as const;
+export const subscriptionPeriods = { quarter: '按季购买', year: '按年购买' } as const;
 export const subscriptionLimits = { accounts: { min: 0, max: 100 }, seats: { min: 2, max: 100 } } as const;
 export const subscriptionUnitPrices = {
   account: { p500: 42, p1000: 40, p2000: 36, p5000: 30 },
@@ -170,6 +173,12 @@ export const subscriptionUnitPrices = {
 } as const;
 export type SubscriptionEdition = keyof typeof subscriptionEditions;
 export type SubscriptionPeriod = keyof typeof subscriptionPeriods;
+export const teamSubscriptionPacks = {
+  p1000: { quarterlyAmount: 700, quarterlyCredits: 1590 },
+  p2000: { quarterlyAmount: 1000, quarterlyCredits: 2500 },
+  p5000: { quarterlyAmount: 2500, quarterlyCredits: 6410 },
+} as const;
+export type TeamSubscriptionPackKey = keyof typeof teamSubscriptionPacks;
 // Subscription allocations are separate from standalone credit top-ups.
 export const subscriptionQuarterlyCredits: Record<RechargePackKey, number> = {
   p500: 961,
@@ -189,11 +198,21 @@ type SubscriptionQuote = SubscriptionOptions & {
   seatAmount: number;
   amount: number;
   credits: number;
+  seatPricing?: {
+    unitAmount: number;
+    unitCredits: number;
+    includesOwner: true;
+  };
 };
 export type SubscriptionSnapshot = Omit<SubscriptionQuote, 'amount' | 'credits' | 'accountCount'> & {
   startsAt?: string;
   endsAt?: string;
 };
+
+export function subscriptionSeatLabel(subscription: Pick<SubscriptionSnapshot, 'edition' | 'seats' | 'seatPricing'>) {
+  if (subscription.edition === 'personal') return '限本人使用';
+  return `${subscription.seats} 席（${subscription.seatPricing?.includesOwner ? '含本人' : '另计本人'}）`;
+}
 
 export function getSubscriptionQuote(tier: RechargePackKey, options: SubscriptionOptions): SubscriptionQuote {
   const { edition, period, accountCount, seats } = options;
@@ -216,6 +235,27 @@ export function getSubscriptionQuote(tier: RechargePackKey, options: Subscriptio
   };
 }
 
+// New subscriptions include a fixed gift; the original calculator remains for historical quotes.
+export function getCouponSubscriptionQuote(tier: RechargePackKey, options: SubscriptionOptions): SubscriptionQuote {
+  const quote = getSubscriptionQuote(tier, options);
+  const accountCount = rechargePacks[tier].accountCount;
+  if (options.edition === 'team') {
+    if (!Object.hasOwn(teamSubscriptionPacks, tier)) throw new Error('团队版不再提供基础版，请选择标准版、高级版或旗舰版');
+    const config = teamSubscriptionPacks[tier as TeamSubscriptionPackKey];
+    const multiplier = options.period === 'year' ? 4 : 1;
+    const unitAmount = config.quarterlyAmount * multiplier;
+    const unitCredits = config.quarterlyCredits * multiplier;
+    const amount = unitAmount * options.seats;
+    return {
+      ...quote, accountCount, baseAmount: amount, accountAmount: 0, seatAmount: 0,
+      amount, credits: unitCredits * options.seats,
+      seatPricing: { unitAmount, unitCredits, includesOwner: true },
+    };
+  }
+  const baseAmount = quote.baseAmount + accountCount * subscriptionUnitPrices.account[tier];
+  return { ...quote, accountCount, baseAmount, accountAmount: 0, amount: baseAmount + quote.seatAmount };
+}
+
 /**
  * The discount uses the Basic plan's credit price as the reference price.
  * Account and seat add-ons are compared at their Basic plan unit prices.
@@ -226,7 +266,7 @@ export function getSubscriptionDiscount(quote: SubscriptionQuote) {
   const referenceAmount =
     quote.credits * (basic.amount / subscriptionQuarterlyCredits.p500) +
     quote.accountCount * subscriptionUnitPrices.account.p500 +
-    quote.seats * subscriptionUnitPrices.quarterlySeat.p500 * periodMultiplier;
+    (quote.seatPricing ? 0 : quote.seats * subscriptionUnitPrices.quarterlySeat.p500 * periodMultiplier);
   return {
     referenceAmount,
     ratio: quote.amount / referenceAmount,
@@ -261,7 +301,7 @@ export type RechargeOrder = {
   purchaseMode?: PurchaseMode;
   videoCount?: number;
   subscription?: SubscriptionSnapshot;
-  deliveryMode?: 'automatic';
+  deliveryMode?: 'automatic' | 'coupon';
   channel: PaymentChannel;
   status: 'pending' | 'completed';
   createdAt: string;
@@ -279,28 +319,63 @@ export type AccountClaim = {
   items?: AccountClaimItem[];
   accounts: TKAccount[];
 };
-type CreditAccount = { balance: number; total: number; orders: RechargeOrder[]; claims: AccountClaim[]; welcomeGift?: 50 };
+export type CreditUsageEvent = {
+  id: string;
+  occurredAt: string;
+  credits: number;
+  memberId: string | null;
+  memberName: string;
+  model: string;
+  taskType: string;
+  title: string;
+};
+export type AccountCoupon = {
+  id: string;
+  orderId: string;
+  userId: string;
+  accountCount: number;
+  issuedAt: string;
+  redeemedAt: string;
+  status: 'redeemed';
+  redemption: {
+    status: 'pending' | 'delivered';
+    expectedAt?: string;
+    deliveredAt?: string;
+    accountIds: string[];
+  };
+};
+export type ReferralReward = { orderId: string; buyerId: string; buyerName: string; packageCredits: number; credits: number; createdAt: string };
+type CheckInRecord = { date: string; credits: 10; createdAt: string };
+type CreditAccount = { balance: number; total: number; orders: RechargeOrder[]; claims: AccountClaim[]; coupons?: AccountCoupon[]; usageEvents?: CreditUsageEvent[]; welcomeGift?: 50; checkIns?: CheckInRecord[]; referralRewards?: ReferralReward[] };
 const initial = (balance = 100): CreditAccount => ({ balance, total: balance, orders: [], claims: [] });
 const key = (userId: string) => `chuhai-credits-v1:${userId}`;
 const account = ref<CreditAccount>(initial());
-function read(userId: string): CreditAccount {
+function read(userId: string, persistInitial = true): CreditAccount {
   const tour = guideTour.owner.value === userId ? guideTour.progress.value : guideTour.read(userId);
-  if (tour?.welcomeGift) {
-    // Only newly enrolled accounts get 50. Never replace an existing or unreadable ledger.
+  try {
     const raw = localStorage.getItem(key(userId));
     if (raw === null) {
-      const value: CreditAccount = { ...initial(50), welcomeGift: 50 };
-      save(userId, value);
+      const value: CreditAccount = tour?.welcomeGift ? { ...initial(50), welcomeGift: 50 } : initial();
+      if (tour?.welcomeGift && persistInitial) save(userId, value);
       return value;
     }
     const value: CreditAccount = JSON.parse(raw);
     if (!value || !Number.isFinite(value.balance) || !Number.isFinite(value.total) ||
-      !Array.isArray(value.orders) || (value.claims !== undefined && !Array.isArray(value.claims)))
+      !Array.isArray(value.orders) || (value.claims !== undefined && !Array.isArray(value.claims)) ||
+      (value.checkIns !== undefined && (!Array.isArray(value.checkIns) || value.checkIns.length > 10 ||
+        new Set(value.checkIns.map(item => item?.date)).size !== value.checkIns.length ||
+        !value.checkIns.every(item => item && /^\d{4}-\d{2}-\d{2}$/.test(item.date) && item.credits === 10 && typeof item.createdAt === 'string'))) ||
+      (value.referralRewards !== undefined && (!Array.isArray(value.referralRewards) ||
+        new Set(value.referralRewards.map(item => item?.buyerId)).size !== value.referralRewards.length ||
+        !value.referralRewards.every(item => item && typeof item.orderId === 'string' && typeof item.buyerId === 'string' &&
+          typeof item.buyerName === 'string' && typeof item.createdAt === 'string' && Number.isSafeInteger(item.credits) &&
+          item.credits >= 0 && Number.isSafeInteger(item.packageCredits) && item.packageCredits > 0))))
       throw new Error('积分读取失败，请检查浏览器存储后重试');
-    return { ...value, claims: value.claims ?? [] };
+    return { ...value, claims: value.claims ?? [], usageEvents: value.usageEvents ?? [] };
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('本地保存失败')) throw error;
+    throw new Error('积分读取失败，请检查浏览器存储后重试');
   }
-  const value = readJSON<CreditAccount>(key(userId), initial);
-  return { ...value, claims: value.claims ?? [] };
 }
 function save(userId: string, value: CreditAccount) {
   if (!writeJSON(key(userId), value)) throw new Error('本地保存失败，请检查浏览器存储后重试');
@@ -320,8 +395,57 @@ watch(
 );
 export const creditsBalance = computed(() => isTeamMember.value ? currentMember.value?.credits ?? 0 : account.value.balance);
 export const creditsTotal = computed(() => isTeamMember.value ? currentMember.value?.creditLimit ?? 0 : account.value.total);
+export const teamWalletBalance = computed(() => account.value.balance);
+export const teamCreditsConsumed = computed(() => Math.max(0, account.value.total - account.value.balance));
+export const ownerCreditsConsumed = computed(() => {
+  const membersConsumed = membersCreditsConsumed.value;
+  return membersConsumed === null || membersConsumed > teamCreditsConsumed.value ? null : teamCreditsConsumed.value - membersConsumed;
+});
 export const rechargeOrders = computed(() => account.value.orders);
 export const rechargeAccountClaims = computed(() => account.value.claims);
+export const accountCoupons = computed(() => (account.value.coupons ?? []).filter(coupon => coupon.userId === currentUser.value?.id));
+export const creditUsageEvents = computed(() => account.value.usageEvents ?? []);
+export const referralRewards = computed(() => isTeamMember.value ? [] : account.value.referralRewards ?? []);
+export function getCheckInStatus(at = Date.now()) {
+  const user = currentUser.value;
+  const eligible = !!user && !user.teamOwnerId && !user.id.startsWith('team:');
+  const records = eligible ? read(user.id).checkIns ?? [] : [];
+  const today = DateTime.fromMillis(at, { zone: 'Asia/Shanghai' }).toISODate()!;
+  const checkedInToday = records.some(item => item.date === today);
+  return { eligible, days: records.length, earned: records.length * 10, checkedInToday,
+    completed: records.length >= 10, canClaim: eligible && !checkedInToday && records.length < 10 };
+}
+export function claimDailyCredits() {
+  const status = getCheckInStatus();
+  if (!status.eligible) throw new Error('请使用个人账号登录后签到');
+  if (status.completed) throw new Error('已领满100积分');
+  if (status.checkedInToday) throw new Error('今日已签到，请明天再来');
+  const id = currentUser.value!.id;
+  const value = read(id);
+  const createdAt = now();
+  const record: CheckInRecord = { date: DateTime.fromISO(createdAt, { zone: 'Asia/Shanghai' }).toISODate()!, credits: 10, createdAt };
+  save(id, { ...value, balance: value.balance + 10, total: value.total + 10, checkIns: [...(value.checkIns ?? []), record] });
+  return getCheckInStatus();
+}
+export function resetCheckIn() {
+  if (!getCheckInStatus().eligible) throw new Error('请使用个人账号登录后签到');
+  const id = currentUser.value!.id;
+  const value = read(id);
+  // Replay only the check-in feature; earned credits and all other wallet data stay intact.
+  save(id, { ...value, checkIns: [] });
+  return getCheckInStatus();
+}
+export function seedDemoTeamUsage(events: Omit<CreditUsageEvent, 'id' | 'occurredAt'>[]) {
+  if (currentUser.value?.id !== 'demo' || account.value.usageEvents?.some(event => event.id.startsWith('demo-team-usage-'))) return;
+  const credits = events.reduce((sum, event) => sum + event.credits, 0);
+  if (!Number.isSafeInteger(credits) || credits <= 0 || credits > account.value.balance) throw new Error('演示消耗不能超过团队积分余额');
+  const occurredAt = Date.now();
+  const usageEvents = events.map((event, index): CreditUsageEvent => ({
+    ...event, id: `demo-team-usage-${index + 1}`,
+    occurredAt: new Date(occurredAt - index * 86400000).toISOString(),
+  }));
+  save('demo', { ...account.value, balance: account.value.balance - credits, usageEvents: [...(account.value.usageEvents ?? []), ...usageEvents] });
+}
 export function confirmWelcomeCredits() {
   const user = currentUser.value;
   if (!user || user.id === 'demo' || user.teamOwnerId) return false;
@@ -442,7 +566,7 @@ function remainingLegacyAccounts(value: CreditAccount) {
   return value.orders.reduce(
     (sum, order) =>
       sum +
-      (order.status === 'completed' && order.deliveryMode !== 'automatic'
+      (order.status === 'completed' && !order.deliveryMode
         ? Math.max(
             0,
             (order.accountCount ?? 0) - delivered.filter((item) => item.orderId === order.id).length,
@@ -458,12 +582,21 @@ function userId() {
   if (isTeamMember.value) throw new Error('仅管理员可以充值和管理购买记录');
   return workspaceOwnerId();
 }
-export function spendCredits(amount: number) {
+export function spendCredits(amount: number, details: Partial<Pick<CreditUsageEvent, 'model' | 'taskType' | 'title'>> = {}) {
   if (!Number.isSafeInteger(amount) || amount <= 0) return;
   const owner = workspaceOwnerId();
   const value = read(owner);
   assertCreditSpend(amount, value.balance);
-  const next = { ...value, balance: value.balance - amount };
+  const member = isTeamMember.value ? currentMember.value : undefined;
+  const usageEvent: CreditUsageEvent = {
+    id: uid(), occurredAt: now(), credits: amount,
+    memberId: member?.id ?? null,
+    memberName: member?.name ?? currentUser.value?.name ?? '所有者',
+    model: details.model?.trim() || '未标注',
+    taskType: details.taskType?.trim() || '积分任务',
+    title: details.title?.trim() || details.taskType?.trim() || '积分消耗',
+  };
+  const next = { ...value, balance: value.balance - amount, usageEvents: [...(value.usageEvents ?? []), usageEvent] };
   save(owner, next);
   try { commitCreditSpend(amount); }
   catch (error) { save(owner, value); throw error; }
@@ -472,12 +605,13 @@ export function createRechargeOrder(pack: PurchasePackKey, options: PurchaseOpti
   return savePendingOrder(pack, getPurchaseQuote(pack, options));
 }
 export function createSubscriptionOrder(pack: RechargePackKey, options: SubscriptionOptions): RechargeOrder {
-  const { amount, credits, accountCount, ...subscription } = getSubscriptionQuote(pack, options);
-  return savePendingOrder(pack, { amount, credits, accountCount, subscription });
+  const { amount, credits, accountCount, ...subscription } = getCouponSubscriptionQuote(pack, options);
+  return savePendingOrder(pack, { amount, credits, accountCount, subscription }, 'coupon');
 }
 function savePendingOrder(
   pack: PurchasePackKey,
   quote: Pick<RechargeOrder, 'amount' | 'credits' | 'accountCount' | 'purchaseMode' | 'videoCount' | 'subscription'>,
+  deliveryMode: RechargeOrder['deliveryMode'] = (quote.accountCount ?? 0) > 0 ? 'automatic' : undefined,
 ): RechargeOrder {
   const id = userId();
   const order: RechargeOrder = {
@@ -485,7 +619,7 @@ function savePendingOrder(
     userId: id,
     pack,
     ...quote,
-    ...((quote.accountCount ?? 0) > 0 ? { deliveryMode: 'automatic' as const } : {}),
+    ...(deliveryMode ? { deliveryMode } : {}),
     channel: 'alipay',
     status: 'pending',
     createdAt: now(),
@@ -519,6 +653,14 @@ export function completeRecharge(orderId: string, channel: PaymentChannel): Rech
     };
   }
   const claims = [...value.claims];
+  const coupons = [...(value.coupons ?? [])];
+  if (order.deliveryMode === 'coupon') {
+    coupons.push({
+      id: `coupon:${order.id}`, orderId: order.id, userId: id,
+      accountCount: order.accountCount!, issuedAt: completed.completedAt!, redeemedAt: completed.completedAt!,
+      status: 'redeemed', redemption: { status: 'pending', expectedAt: accountDeliveryDeadline(completed.completedAt!), accountIds: [] },
+    });
+  }
   if (order.deliveryMode === 'automatic' && (order.accountCount ?? 0) > 0) {
     const requestId = `automatic:${order.id}`;
     const used = claims.reduce((sum, claim) => sum + claim.accounts.length, 0);
@@ -534,14 +676,58 @@ export function completeRecharge(orderId: string, channel: PaymentChannel): Rech
       ),
     });
   }
-  save(id, {
+  const next: CreditAccount = {
     ...value,
     balance: value.balance + order.credits,
     total: value.total + order.credits,
     orders: value.orders.map((item) => (item.id === orderId ? completed : item)),
     claims,
-  });
+    coupons,
+  };
+  const buyer = currentUser.value!;
+  const eligiblePlan = (item: RechargeOrder) => Object.hasOwn(rechargePacks, item.pack) && item.amount > 0 && item.credits > 0;
+  const firstPlan = eligiblePlan(order) && !value.orders.some(item => item.status === 'completed' && eligiblePlan(item));
+  const inviterId = firstPlan ? getRegisteredInviter(buyer) : undefined;
+  if (inviterId) {
+    // Read both snapshots before writing. Never replace a damaged inviter wallet.
+    const inviter = read(inviterId, false);
+    const duplicate = inviter.referralRewards?.some(item => item.buyerId === id || item.orderId === order.id);
+    if (!duplicate) {
+      const reward: ReferralReward = { orderId: order.id, buyerId: id, buyerName: buyer.name,
+        packageCredits: order.credits, credits: Math.floor(order.credits / 10), createdAt: completed.completedAt! };
+      writeJSONBatch([
+        { key: key(id), value: next },
+        { key: key(inviterId), value: { ...inviter, balance: inviter.balance + reward.credits, total: inviter.total + reward.credits,
+          referralRewards: [...(inviter.referralRewards ?? []), reward] } },
+      ]);
+      account.value = next;
+    } else save(id, next);
+  } else save(id, next);
   return completed;
+}
+
+export function reserveCouponDelivery(couponId: string): AccountCoupon {
+  if (!demoPaymentsEnabled) throw new Error('正式环境不支持模拟到账');
+  const owner = userId();
+  const value = read(owner);
+  const coupon = value.coupons?.find(item => item.id === couponId && item.userId === owner);
+  if (!coupon) throw new Error('账号抵扣券不存在');
+  const order = value.orders.find(item => item.id === coupon.orderId);
+  if (!order || order.status !== 'completed' || order.deliveryMode !== 'coupon') throw new Error('订单尚未支付');
+  if (coupon.redemption.status === 'delivered') return coupon;
+  const requestId = `coupon-delivery:${coupon.orderId}`;
+  const used = value.claims.reduce((sum, claim) => sum + claim.accounts.length, 0);
+  const accounts = Array.from({ length: coupon.accountCount }, (_, index) =>
+    createPurchasedAccount(requestId, coupon.orderId, 'tiktok', 'US', used + index, `${requestId}:${index}`));
+  const delivered: AccountCoupon = { ...coupon, redemption: {
+    ...coupon.redemption, status: 'delivered', deliveredAt: now(), accountIds: accounts.map(item => item.id),
+  } };
+  save(owner, { ...value, coupons: value.coupons!.map(item => item.id === coupon.id ? delivered : item), claims: [...value.claims, {
+    id: requestId, userId: owner, createdAt: delivered.redemption.deliveredAt!,
+    allocation: { tiktok: coupon.accountCount, instagram: 0, facebook: 0 },
+    items: [{ platform: 'tiktok', countryCode: 'US', quantity: coupon.accountCount }], accounts,
+  }] });
+  return delivered;
 }
 
 function createPurchasedAccount(
@@ -617,7 +803,7 @@ export function reserveSocialAccounts(requestId: string, input: AccountClaimInpu
   const count = items.reduce((sum, item) => sum + item.quantity, 0);
   const used = value.claims.flatMap((claim) => claim.accounts);
   const slots = value.orders
-    .filter((order) => order.status === 'completed' && order.deliveryMode !== 'automatic')
+    .filter((order) => order.status === 'completed' && !order.deliveryMode)
     .flatMap((order) =>
       Array.from(
         {

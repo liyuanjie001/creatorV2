@@ -210,7 +210,7 @@ function recharge() {
           </button>
         </template>
         <template v-else>
-          <p class="text-sm text-slate-500">暂无历史待领取账号，新购买的美国 TikTok 账号付款后自动到账。</p>
+          <p class="text-sm text-slate-500">暂无历史待领取账号。新套餐赠送账号抵扣券，购买后自动兑换，账号将在 3 个工作日内到账。</p>
           <button class="studio-primary w-full justify-center" @click="recharge">前往充值</button>
         </template>
       </template>

@@ -10,6 +10,7 @@ import { ACCESS_STORAGE_KEY } from '@/lib/access';
 import { useInspirationDialog } from '@/composables/useInspirationDialog';
 import { loadIdeaNotes, NOTES_KEY } from '@/composables/useIdeaNotes';
 import { resetHomeProjects } from '@/composables/useHomeProjects';
+import { createMembers } from '@/services/team';
 
 let wrapper: VueWrapper | undefined;
 let warnings: string[] = [];
@@ -82,6 +83,7 @@ describe('全部路由挂载真实 Vue 组件', () => {
     ['/projects/P1', '项目不存在'],
     ['/assets', '素材'],
     ['/settings', '设置中心'],
+    ['/promotion', '推广计划'],
     ['/trash', '回收站'],
     ['/me', '个人中心'],
     ['/purchase', '套餐购买'],
@@ -106,12 +108,36 @@ test('查询参数切换与旧地址重定向', async () => {
 });
 
 test('团队成员创建面板仅在点击邀请成员后打开', async () => {
+  await createMembers([{ name: '表格成员', identity: 'table-member', password: 'table-pass-123', role: 'creator' }], 100);
   const { app } = await open('/team');
-  expect(app.text()).not.toContain('创建成员账号');
+  expect(app.find('[data-testid="create-member-title"]').exists()).toBe(false);
   await button('邀请成员').trigger('click');
   await flushPromises();
-  expect(app.text()).toContain('创建成员账号');
+  expect(app.find('[data-testid="create-member-title"]').exists()).toBe(true);
   expect(app.find('[aria-label="关闭创建成员面板"]').exists()).toBe(true);
+  expect(app.find('table').exists()).toBe(true);
+  expect(app.text()).toContain('团队累计消耗');
+  expect(app.text()).toContain('累计消耗');
+});
+
+test('创建成员成功后在弹窗展示邀请信息，并可关闭', async () => {
+  const { app } = await open('/team');
+  await button('邀请成员').trigger('click');
+  const initialPassword = app.find('[aria-label="系统生成的初始密码"]');
+  expect(initialPassword.exists()).toBe(true);
+  expect((initialPassword.element as HTMLInputElement).value).toMatch(/^Init-/);
+  expect(app.text()).toContain('当前可分配：');
+  await app.find('input[placeholder="请输入成员名称"]').setValue('弹窗测试成员');
+  await button('保存').trigger('click');
+  await flushPromises();
+
+  const dialog = app.find('[data-testid="invite-dialog"]');
+  expect(dialog.exists()).toBe(true);
+  expect(dialog.attributes('role')).toBe('dialog');
+  expect(dialog.find('[aria-label="成员邀请信息"]').text()).toContain('账号名：');
+  expect(dialog.find('[aria-label="成员邀请信息"]').text()).toContain('初始密码：');
+  await app.find('[aria-label="关闭邀请信息"]').trigger('click');
+  expect(app.find('[data-testid="invite-dialog"]').exists()).toBe(false);
 });
 
 test('创作控制台生成结果出现在我的创作', async () => {

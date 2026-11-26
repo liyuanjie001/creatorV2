@@ -22,8 +22,8 @@ test.beforeEach(async ({ page }) => {
 test('充值扫码演示、余额同步与刷新恢复', async ({ page }, info) => {
   await page.goto('/#/purchase');
   await page
-    .getByLabel('商业版套餐', { exact: true })
-    .getByRole('button', { name: /订阅套餐|续购套餐/, exact: true })
+    .getByLabel('高级版套餐', { exact: true })
+    .getByRole('button', { name: /购买套餐|续购套餐/, exact: true })
     .click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toContainText('¥2,360');
@@ -55,10 +55,10 @@ test('充值扫码演示、余额同步与刷新恢复', async ({ page }, info) 
   await dialog.getByRole('button', { name: '关闭', exact: true }).first().click();
   await page.reload();
   await expect(page.getByLabel('积分余额', { exact: true })).toHaveText('5,100');
-  await expect(page.getByLabel('商业版套餐', { exact: true })).toContainText('当前版本');
+  await expect(page.getByLabel('高级版套餐', { exact: true })).toContainText('当前版本');
   await page
-    .getByLabel('商业版套餐', { exact: true })
-    .getByRole('button', { name: /订阅套餐|续购套餐/, exact: true })
+    .getByLabel('高级版套餐', { exact: true })
+    .getByRole('button', { name: /购买套餐|续购套餐/, exact: true })
     .click();
   await expect(dialog.getByRole('button', { name: '支付宝', exact: true })).toHaveAttribute(
     'aria-pressed',

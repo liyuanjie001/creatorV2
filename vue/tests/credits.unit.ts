@@ -113,16 +113,16 @@ test('我的套餐按最高已支付套餐显示，账号选择不影响版本�
   expect(currentPackage.value).toBeNull();
   const converted = createRechargeOrder('p2000', { includeAccounts: false });
   completeRecharge(converted.id, 'alipay');
-  expect(currentPackage.value?.priceLabel).toBe('商业版');
+  expect(currentPackage.value?.priceLabel).toBe('高级版');
   const included = createRechargeOrder('p1000');
   completeRecharge(included.id, 'alipay');
-  expect(currentPackage.value?.priceLabel).toBe('商业版');
+  expect(currentPackage.value?.priceLabel).toBe('高级版');
   const upgrade = createRechargeOrder('p5000');
   completeRecharge(upgrade.id, 'alipay');
-  expect(currentPackage.value?.priceLabel).toBe('企业版');
+  expect(currentPackage.value?.priceLabel).toBe('旗舰版');
   const lowerTier = createRechargeOrder('p500');
   completeRecharge(lowerTier.id, 'alipay');
-  expect(currentPackage.value?.priceLabel).toBe('企业版');
+  expect(currentPackage.value?.priceLabel).toBe('旗舰版');
 });
 test('未完成订单不入账，重新充值创建独立订单', () => {
   const first = createRechargeOrder('p500'),
@@ -139,7 +139,7 @@ test('用户余额隔离，重新载入恢复余额及订单幂等', async () =>
   expect(() => completeRecharge(order.id, 'wechat')).toThrow('不存在');
   await login('one');
   expect(creditsBalance.value).toBe(1995);
-  expect(currentPackage.value?.priceLabel).toBe('专业版');
+  expect(currentPackage.value?.priceLabel).toBe('标准版');
   completeRecharge(order.id, 'wechat');
   expect(creditsBalance.value).toBe(1995);
 });

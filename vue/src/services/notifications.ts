@@ -1,6 +1,6 @@
 import { computed, ref, watch } from 'vue';
 import { currentUser } from './identity';
-import { rechargeOrders, type RechargeOrder } from './credits';
+import { accountCoupons, rechargeOrders, type RechargeOrder } from './credits';
 import { studio } from './studio';
 import { now, writeJSON } from './storage';
 
@@ -60,7 +60,13 @@ function reconcile(historical = false) {
       action: '/me',
       actionLabel: '查看权益',
     });
-    if (order.deliveryMode !== 'automatic' || !order.accountCount) continue;
+    const coupon = accountCoupons.value.find(item => item.orderId === order.id);
+    if (coupon) append({
+      id: `${order.id}:coupon`, category: 'purchase', title: '账号抵扣券已自动兑换',
+      body: `订单 ${order.id} 赠送的 1 张账号抵扣券已兑换 ${coupon.accountCount} 个美国 TikTok 账号，账号将在 3 个工作日内到账。`,
+      createdAt: coupon.redeemedAt, read: historical, action: '/accounts', actionLabel: '查看到账进度',
+    });
+    if (!['automatic', 'coupon'].includes(order.deliveryMode ?? '') || !order.accountCount) continue;
     const delivered =
       studio.value.accounts.filter((account) => account.orderId === order.id).length >= order.accountCount;
     if (!delivered) continue;
@@ -69,7 +75,7 @@ function reconcile(historical = false) {
       category: 'purchase',
       title: '账号已到账',
       body: `订单 ${order.id} 的 ${order.accountCount} 个美国 TikTok 账号使用权已添加至账号管理。`,
-      createdAt,
+      createdAt: coupon?.redemption.deliveredAt ?? createdAt,
       read: historical,
       action: '/accounts',
       actionLabel: '查看账号',
@@ -131,7 +137,7 @@ watch(
   },
   { immediate: true, flush: 'post' },
 );
-watch([rechargeOrders, () => studio.value.accounts], () => reconcile(), { deep: true, flush: 'post' });
+watch([rechargeOrders, accountCoupons, () => studio.value.accounts], () => reconcile(), { deep: true, flush: 'post' });
 
 export function markNotificationsRead(id?: string) {
   if (!currentUser.value || owner !== currentUser.value.id) throw new Error('请先登录');

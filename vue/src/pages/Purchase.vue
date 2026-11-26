@@ -8,6 +8,7 @@ import {
   rechargePacks,
   subscriptionEditions,
   subscriptionPeriods,
+  subscriptionSeatLabel,
   type RechargeOrder,
   type PaymentChannel,
   type RechargePackKey,
@@ -49,7 +50,7 @@ const activePurchaseTab = computed({
 });
 function viewAccounts() {
   paymentOpen.value = false;
-  void router.push('/accounts');
+  void router.push(order.value?.deliveryMode === 'coupon' ? '/accounts?tab=deliveries' : '/accounts');
 }
 
 const contactOpen = ref(false);
@@ -110,7 +111,7 @@ function openSubscription(tier: RechargePackKey, options: SubscriptionOptions) {
       :desc="
         activePurchaseTab === 'credits'
           ? '选择充值档位，付款后积分自动到账'
-          : '选择适合你的版本；所选账号使用权付款后自动到账'
+          : '选择适合你的版本，赠送账号抵扣券，购买后自动兑换'
       "
     />
     <div class="mx-auto max-w-[1360px] space-y-6">
@@ -228,7 +229,13 @@ function openSubscription(tier: RechargePackKey, options: SubscriptionOptions) {
           <p v-if="order.subscription?.startsAt && order.subscription.endsAt" class="text-sm leading-6 text-slate-600">
             订阅周期 {{ formatSubscriptionDate(order.subscription.startsAt) }} 至 {{ formatSubscriptionDate(order.subscription.endsAt) }}
           </p>
-          <template v-if="(order.accountCount ?? 0) > 0">
+          <template v-if="order.deliveryMode === 'coupon'">
+            <p class="text-sm font-medium text-sky-700">赠送账号抵扣券 1 张，已自动兑换 {{ order.accountCount }} 个账号</p>
+            <p class="text-sm text-slate-500">账号将在 3 个工作日内到账</p>
+            <Button class="brand-gradient w-full text-white" @click="viewAccounts">查看到账进度</Button>
+            <Button variant="outline" class="w-full" @click="paymentOpen = false">关闭</Button>
+          </template>
+          <template v-else-if="(order.accountCount ?? 0) > 0">
             <template v-if="deliveryError">
               <p role="alert" class="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">
                 {{ deliveryError }}
@@ -262,17 +269,28 @@ function openSubscription(tier: RechargePackKey, options: SubscriptionOptions) {
                 {{ subscriptionPeriods[order.subscription.period] }}
               </p>
               <dl class="mt-3 space-y-2 border-t border-slate-200 pt-3 text-left text-xs text-slate-700">
-                <div class="flex justify-between gap-2"><dt>套餐基础价</dt><dd>{{ money(order.subscription.baseAmount) }}</dd></div>
-                <div class="flex justify-between gap-2">
+                <template v-if="order.subscription.seatPricing">
+                  <div class="flex justify-between gap-2"><dt>单席位价格 / {{ order.subscription.period === 'year' ? '年' : '季' }}</dt><dd>{{ money(order.subscription.seatPricing.unitAmount) }}</dd></div>
+                  <div class="flex justify-between gap-2"><dt>团队席位</dt><dd>{{ subscriptionSeatLabel(order.subscription) }}</dd></div>
+                  <div class="flex justify-between gap-2"><dt>合计金额</dt><dd>{{ money(order.subscription.seatPricing.unitAmount) }} × {{ order.subscription.seats }} = {{ money(order.amount) }}</dd></div>
+                  <div class="flex justify-between gap-2"><dt>单席位积分 / {{ order.subscription.period === 'year' ? '年' : '季' }}</dt><dd>{{ order.subscription.seatPricing.unitCredits.toLocaleString('zh-CN') }}</dd></div>
+                  <div class="flex justify-between gap-2"><dt>总积分</dt><dd>{{ order.credits.toLocaleString('zh-CN') }}</dd></div>
+                </template>
+                <div v-else class="flex justify-between gap-2"><dt>套餐基础价</dt><dd>{{ money(order.subscription.baseAmount) }}</dd></div>
+                <div v-if="order.deliveryMode !== 'coupon'" class="flex justify-between gap-2">
                   <dt class="flex items-center gap-1">账号使用权 {{ order.accountCount }} 个 <AccountPurchaseInfo v-if="order.accountCount" /></dt>
                   <dd>{{ money(order.subscription.accountAmount) }}</dd>
                 </div>
-                <div v-if="order.subscription.edition === 'team'" class="flex justify-between gap-2">
-                  <dt>团队席位 {{ order.subscription.seats }} 席（另计本人）</dt><dd>{{ money(order.subscription.seatAmount) }}</dd>
+                <div v-if="order.subscription.edition === 'team' && !order.subscription.seatPricing" class="flex justify-between gap-2">
+                  <dt>团队席位 {{ subscriptionSeatLabel(order.subscription) }}</dt><dd>{{ money(order.subscription.seatAmount) }}</dd>
                 </div>
-                <div v-else><dt>限本人使用</dt><dd class="sr-only">个人版</dd></div>
+                <div v-else-if="order.subscription.edition === 'personal'"><dt>限本人使用</dt><dd class="sr-only">个人版</dd></div>
               </dl>
-              <p v-if="order.accountCount" class="mt-2 text-xs text-slate-600">美国 TikTok 账号，付款后自动到账</p>
+              <div v-if="order.deliveryMode === 'coupon'" class="mt-3 text-left text-xs leading-6 text-slate-600">
+                <p class="flex items-center gap-1">赠送账号抵扣券 1 张（可兑换 {{ order.accountCount }} 个账号）<AccountPurchaseInfo coupon /></p>
+                <p>购买后自动兑换，账号将在 3 个工作日内到账</p>
+              </div>
+              <p v-else-if="order.accountCount" class="mt-2 text-xs text-slate-600">美国 TikTok 账号，付款后自动到账</p>
             </template>
           </div>
           <div class="flex gap-2" role="group" aria-label="支付方式">

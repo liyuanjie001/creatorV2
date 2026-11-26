@@ -2,7 +2,7 @@
 import { Info } from 'lucide-vue-next';
 import { ref } from 'vue';
 import { TooltipProvider, TooltipRoot, TooltipTrigger, TooltipPortal, TooltipContent } from 'reka-ui';
-defineProps<{ text: string }>();
+defineProps<{ text: string; triggerClass?: string }>();
 const open = ref(false);
 </script>
 
@@ -12,12 +12,13 @@ const open = ref(false);
       <TooltipTrigger as-child>
         <button
           type="button"
-          class="ml-1 inline-flex shrink-0 items-center align-middle text-slate-400 transition hover:text-sky-600 focus-visible:rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+          class="inline-flex shrink-0 items-center align-middle transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+          :class="triggerClass ?? 'ml-1 text-slate-400 hover:text-sky-600 focus-visible:rounded-full'"
           :aria-label="text"
           :aria-expanded="open"
           @click.prevent.stop="open = !open"
         >
-          <Info class="h-3.5 w-3.5" />
+          <slot name="trigger"><Info class="h-3.5 w-3.5" /></slot>
         </button>
       </TooltipTrigger>
       <TooltipPortal>

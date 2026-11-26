@@ -14,6 +14,16 @@ export function createAppRouter(history: RouterHistory = createWebHashHistory(),
         component: () => import('./pages/LegacyProjectDetail.vue'),
         meta: { immersive: true },
       },
+      {
+        path: '/roxy-browser-demo',
+        name: 'roxy-browser-demo',
+        component: () => import('./pages/RoxyBrowserDemo.vue'),
+      },
+      {
+        path: '/roxy-website-demo',
+        name: 'roxy-website-demo',
+        component: () => import('./pages/RoxyWebsiteDemo.vue'),
+      },
       { path: '/roxy', component: () => import('./pages/Accounts.vue'), meta: { wide: true } },
       { path: '/unlock', name: 'unlock', component: () => import('./pages/Unlock.vue') },
       { path: '/', component: () => import('./pages/Dashboard.vue'), meta: { wide: true } },
@@ -50,6 +60,7 @@ export function createAppRouter(history: RouterHistory = createWebHashHistory(),
       { path: '/trash', component: () => import('./pages/Trash.vue') },
       { path: '/me', component: () => import('./pages/Profile.vue'), meta: { wide: true } },
       { path: '/purchase', component: () => import('./pages/Purchase.vue'), meta: { wide: true } },
+      { path: '/promotion', component: () => import('./pages/Promotion.vue'), meta: { wide: true } },
       {
         path: '/:pathMatch(.*)*',
         component: () => import('./pages/Dashboard.vue'),
@@ -68,7 +79,7 @@ export function createAppRouter(history: RouterHistory = createWebHashHistory(),
     }
     if (!currentUser.value && to.name !== 'auth')
       return { name: 'auth', query: { redirect: to.fullPath }, replace: true };
-    if (currentUser.value && to.name === 'auth')
+    if (currentUser.value && to.name === 'auth' && to.query.mode !== 'register')
       return { path: unlockDestination(to.query.redirect), replace: true };
     if (to.path === '/purchase' && isTeamMember.value) return { path: '/', replace: true };
     if (to.path === '/projects/new' && !isTeamAdmin.value) return { path: '/', replace: true };

@@ -1,13 +1,20 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ChevronLeft, ChevronDown } from 'lucide-vue-next';
 import { identityService, sendCode } from '@/services/identity';
 import { unlockDestination } from '@/lib/access';
 const route = useRoute(); const router = useRouter();
-const page = ref<'login' | 'register' | 'reset' | 'google'>('login');
+const page = ref<'login' | 'register' | 'reset' | 'google'>(
+  route.query.mode === 'register' || typeof route.query.invite === 'string' ? 'register' : 'login',
+);
 const loginMode = ref<'code' | 'password'>(route.query.mode === 'password' ? 'password' : 'code');
 const identity = ref(''); const prefix = ref('+86'); const password = ref(''); const code = ref(''); const invite = ref(''); const showInvite = ref(false);
+watch(() => route.query.invite, value => {
+  invite.value = typeof value === 'string' ? value.trim().toUpperCase() : '';
+  showInvite.value = !!invite.value;
+  if (invite.value) page.value = 'register';
+}, { immediate: true });
 const error = ref(''); const notice = ref(''); const busy = ref(false);
 const sentTo = ref(''); const resendAt = ref(0); const now = ref(Date.now());
 const method = computed(() => page.value !== 'google' && /^\+?\d[\d\s()-]*$/.test(identity.value.trim()) ? 'phone' : 'email');
@@ -29,24 +36,17 @@ async function submit() {
   try {
     if (page.value === 'register') await identityService.register(normalized.value, method.value, password.value, code.value, invite.value.trim());
     else if (page.value === 'reset') { await identityService.reset(normalized.value, code.value, password.value); change('login'); loginMode.value = 'password'; notice.value = '密码已重置，请使用新密码登录'; return; }
-    else if (page.value === 'google') await identityService.google(normalized.value, password.value);
+    else if (page.value === 'google') await identityService.google(normalized.value, password.value, invite.value);
     else await identityService.login(normalized.value, password.value, loginMode.value === 'code' ? code.value : undefined);
     await finish();
   } catch (e) { error.value = (e as Error).message; } finally { busy.value = false; }
 }
 async function demo() { identityService.demo(); await finish(); }
-async function enterNewUser() {
-  if (busy.value) return;
-  busy.value = true; error.value = ''; notice.value = '';
-  try { await identityService.newUser(); await finish(); }
-  catch (e) { error.value = (e as Error).message; }
-  finally { busy.value = false; }
-}
 async function googleLogin() {
   if (busy.value) return;
   busy.value = true;
   error.value = '';
-  try { await identityService.googleQuick(); await finish(); }
+  try { await identityService.googleQuick(invite.value); await finish(); }
   catch (e) { error.value = (e as Error).message; }
   finally { busy.value = false; }
 }
@@ -95,7 +95,6 @@ async function googleLogin() {
       </div>
     <div class="mt-5 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-xs">
       <button type="button" class="rounded-lg py-2 text-slate-500 hover:text-sky-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 disabled:opacity-50" :disabled="busy" @click="demo">先体验一下？进入演示帐号 →</button>
-      <button type="button" class="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 font-medium text-sky-600 transition hover:border-sky-300 hover:bg-sky-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 disabled:opacity-50" :disabled="busy" @click="enterNewUser">新用户进入 →</button>
     </div>
     <p class="mt-3 text-center text-[11px] leading-5 text-slate-400">当前为交互原型 · 验证码与 Google 授权均为模拟</p>
     </div>

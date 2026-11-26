@@ -84,10 +84,7 @@ function load(owner: string) {
 }
 export const studio = ref<StudioState>(load(workspaceOwnerId()));
 export const storageError = ref('');
-registerTeamAssetTransfer((memberId) => {
-  studio.value.films.forEach(film => { if (film.createdByMemberId === memberId) delete film.createdByMemberId; });
-  studio.value.tasks.forEach(task => { if (task.createdByMemberId === memberId) delete task.createdByMemberId; });
-});
+registerTeamAssetTransfer(workspace => { studio.value = workspace; });
 watch(currentUser, () => { studio.value = load(workspaceOwnerId()); }, { flush: 'sync' });
 watch(studio, value => { if (!writeJSON(`chuhai-studio-v1:${workspaceOwnerId()}`, value)) storageError.value = '本地存储不可用，当前修改只能保留在本次会话'; else storageError.value = ''; }, { deep: true, flush: 'sync' });
 export function createProject(name: string, desc = '', color = '#11a3fd'): StudioProject {
@@ -179,13 +176,13 @@ export function parseReference(raw: string, scenario = '成功'): Reference {
 }
 export function startGeneration(film: GenerationJob['film'], fail = false) {
   requireTeamPermission(canCreateContent() && canEditProject(film.projectId), '当前成员没有该项目的创作权限');
-  spendCredits(20);
+  spendCredits(20, { model: film.model ?? '未标注', taskType: film.resultKind === 'script-breakdown' ? '视频拆解' : film.type === '图文' ? '图文生成' : '视频生成', title: film.title });
   film.createdByMemberId = currentUser.value?.teamMemberId;
   const job: GenerationJob = { id: uid(), projectId: film.projectId, sessionId: film.sessionId, createdAt: now(), status: studio.value.jobs.some(j => !j.demoPreview && j.projectId === film.projectId && j.status === '生成中') ? '等待中' : '生成中', dueAt: Date.now() + 5000, fail, film };
   studio.value.jobs.unshift(job); return job;
 }
 export function cancelGeneration(id: string) { const job = studio.value.jobs.find(j => j.id === id); if (job && ['生成中', '等待中'].includes(job.status)) { requireTeamPermission(canCreateContent() && canEditProject(job.projectId), '当前成员没有该项目的创作权限'); job.status = '已取消'; } }
-export function retryGeneration(id: string) { const job = studio.value.jobs.find(j => j.id === id); if (job && !studio.value.projects.find(p => p.id === job.projectId)?.archived && !['生成中', '等待中', '已完成'].includes(job.status)) { requireTeamPermission(canCreateContent() && canEditProject(job.projectId), '当前成员没有该项目的创作权限'); spendCredits(20); job.demoPreview = false; job.status = studio.value.jobs.some(j => !j.demoPreview && j.projectId === job.projectId && j.status === '生成中') ? '等待中' : '生成中'; job.dueAt = Date.now() + 5000; job.fail = false; } }
+export function retryGeneration(id: string) { const job = studio.value.jobs.find(j => j.id === id); if (job && !studio.value.projects.find(p => p.id === job.projectId)?.archived && !['生成中', '等待中', '已完成'].includes(job.status)) { requireTeamPermission(canCreateContent() && canEditProject(job.projectId), '当前成员没有该项目的创作权限'); spendCredits(20, { model: job.film.model ?? '未标注', taskType: job.film.resultKind === 'script-breakdown' ? '视频拆解' : job.film.type === '图文' ? '图文生成' : '视频生成', title: job.film.title }); job.demoPreview = false; job.status = studio.value.jobs.some(j => !j.demoPreview && j.projectId === job.projectId && j.status === '生成中') ? '等待中' : '生成中'; job.dueAt = Date.now() + 5000; job.fail = false; } }
 export function ensurePublishTask(film: Film, retryTaskId?: string, forceNew = false): PublishTask {
   requireTeamPermission(canPublish() && canEditProject(film.projectId), '当前成员没有该项目的发布权限');
   if (film.resultKind === 'script-breakdown') throw new Error('脚本拆解不能发布');

@@ -40,6 +40,7 @@ import {
 import { dateTime } from '@/services/videoManagement';
 import { toast } from 'vue-sonner';
 import AccountAuthorization from '@/components/studio/AccountAuthorization.vue';
+import AccountDeliveries from '@/components/studio/AccountDeliveries.vue';
 import { platformName, accountPlatform, platforms } from '@/services/accounts';
 import {
   accountOverview,
@@ -243,6 +244,7 @@ async function refresh() {
 <template>
   <div class="min-w-0 space-y-5" aria-label="账号管理页面">
     <h1 class="text-xl font-semibold text-slate-900">帐号管理</h1>
+    <AccountDeliveries />
     <nav class="flex flex-wrap gap-2" aria-label="帐号平台分类">
       <button
         v-for="item in [{ value: '', label: '全部平台' }, ...platforms]"

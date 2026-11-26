@@ -48,7 +48,7 @@ test('credits-only bundle keeps version name and never describes account deliver
   const order = createRechargeOrder('p2000', { includeAccounts: false });
   completePurchase(order.id, 'alipay');
   expect(purchaseHistory.value[0]).toMatchObject({
-    name: '商业版套餐',
+    name: '高级版套餐',
     credits: 4545,
     accountCount: 0,
     accountStatus: '',

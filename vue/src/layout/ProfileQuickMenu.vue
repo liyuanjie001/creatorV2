@@ -65,7 +65,7 @@ onBeforeUnmount(() => {
 <template>
   <div
     ref="root"
-    class="relative mt-1"
+    class="relative shrink-0"
     @mouseenter="show"
     @mouseleave="leave"
     @focusin="show"
@@ -79,8 +79,8 @@ onBeforeUnmount(() => {
       aria-label="个人中心"
       aria-controls="profile-quick-navigation"
       :aria-expanded="open"
-      class="relative flex w-full items-center justify-center rounded-xl px-1 py-2.5 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-500"
-      :class="route.path === '/me' || open ? 'bg-white shadow-sm' : 'hover:bg-white/70'"
+      class="relative flex h-10 w-10 items-center justify-center rounded-xl transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-500"
+      :class="route.path === '/me' || open ? 'bg-sky-50' : 'hover:bg-sky-50'"
       @click="visitProfile"
       @keydown.arrow-down.prevent="focusLink()"
       @keydown.arrow-right.prevent="focusLink()"
@@ -88,7 +88,7 @@ onBeforeUnmount(() => {
     >
       <span
         v-if="unreadCount"
-        class="absolute right-3 top-1.5 h-2 w-2 rounded-full bg-rose-500"
+        class="absolute right-0.5 top-0.5 z-10 h-2 w-2 rounded-full bg-rose-500 ring-2 ring-white"
         aria-label="有未读消息"
       />
       <Avatar class="h-9 w-9 border border-slate-200">
@@ -97,7 +97,7 @@ onBeforeUnmount(() => {
         </AvatarFallback>
       </Avatar>
     </button>
-    <div v-if="open" class="absolute bottom-full left-0 w-[176px] pb-2">
+    <div v-if="open" class="absolute right-0 top-full w-[176px] pt-2">
       <nav
         id="profile-quick-navigation"
         ref="panel"

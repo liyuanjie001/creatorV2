@@ -7,9 +7,9 @@ const token = createHash('sha256')
   .digest('hex');
 
 const accountHelp = [
-  '美国 TikTok 账号，付款后自动到账',
-  '可直接通过本平台发布视频、图文等作品',
-  '购买套餐时，可按需增减账号使用权数量',
+  '赠送 1 张账号抵扣券，购买后自动发放并兑换，无需手动操作',
+  '兑换的美国 TikTok 账号将在 3 个中国法定工作日内到账',
+  '可在账号管理查看到账进度，到账后通过本平台发布作品',
 ];
 const bundleExpectations = [
   {
@@ -23,7 +23,7 @@ const bundleExpectations = [
   },
   {
     price: '¥1,000',
-    name: '专业版',
+    name: '标准版',
     description: '个人运营',
     amount: 1000,
     credits: 2272,
@@ -32,7 +32,7 @@ const bundleExpectations = [
   },
   {
     price: '¥2,000',
-    name: '商业版',
+    name: '高级版',
     description: '多账号运营',
     amount: 2000,
     credits: 5000,
@@ -41,7 +41,7 @@ const bundleExpectations = [
   },
   {
     price: '¥5,000',
-    name: '企业版',
+    name: '旗舰版',
     description: '团队矩阵运营',
     amount: 5000,
     credits: 12820,
@@ -179,20 +179,20 @@ test('套餐数据、自动到账、帐号凭据、跨项目发布与历史余�
     const card = cards.getByLabel(`${pack.name}套餐`, { exact: true });
     await expect(card.getByRole('heading', { name: pack.name, exact: true })).toBeVisible();
     await expect(card).toContainText(pack.description);
-    await expect(card.getByText(`¥${pack.accountPrice}/个`, { exact: true })).toBeVisible();
+    await expect(card.getByLabel('赠送账号抵扣券')).toContainText(`可兑换 ${pack.accounts} 个账号`);
     await expect(card.getByText(pack.credits.toLocaleString(), { exact: true })).toBeVisible();
     await expect(card.getByText('积分 / 季', { exact: true })).toBeVisible();
-    await expect(card.getByLabel('账号使用权数量', { exact: true })).toHaveText(`${pack.accounts} 个`);
+    await expect(card.getByLabel('账号使用权数量', { exact: true })).toHaveCount(0);
     const list = card.getByLabel('平台功能权益');
     for (const label of commonBenefits) await expect(list.getByText(label, { exact: true })).toBeVisible();
     for (const label of standardBenefits)
-      await expect(list.getByText(label, { exact: true }).locator('..')).toHaveAttribute('data-supported', String(pack.amount >= 1000));
+      await expect(list.getByText(label, { exact: true })).toHaveCount(pack.amount >= 1000 ? 1 : 0);
     for (const label of advancedBenefits)
-      await expect(list.getByText(label, { exact: true }).locator('..')).toHaveAttribute('data-supported', String(pack.amount >= 2000));
+      await expect(list.getByText(label, { exact: true })).toHaveCount(pack.amount >= 2000 ? 1 : 0);
     await expect(list.getByRole('listitem').filter({ hasText: '可绑定发布账号的个数' })).toHaveText(`可绑定发布账号的个数（${pack.accounts}个）`);
     await expect(list.getByRole('listitem').filter({ hasText: '可发布平台' })).toHaveText('可发布平台（全部平台）');
     await expect(list).not.toContainText('团队协作成员');
-    await expect(list.getByRole('heading')).toHaveText(['AI 创作', '账号与发布', '数据分析']);
+    await expect(list.getByRole('heading', { level: 4 })).toHaveText(['AI 创作', '账号与发布', '数据分析']);
   }
   await expect(cards).not.toContainText(/成本|利润率|限时优惠|Seedance|480P|¥490/);
   await expect(cards.getByLabel('套餐原价', { exact: true })).toHaveCount(3);
@@ -201,19 +201,19 @@ test('套餐数据、自动到账、帐号凭据、跨项目发布与历史余�
   await page.getByRole('heading', { name: '套餐购买', exact: true }).hover();
   await page.screenshot({ path: info.outputPath('recharge-packages.png'), fullPage: true });
   await page
-    .getByLabel('商业版套餐', { exact: true })
-    .getByRole('button', { name: '订阅套餐', exact: true })
+    .getByLabel('高级版套餐', { exact: true })
+    .getByRole('button', { name: '购买套餐', exact: true })
     .click();
   const dialog = page.getByRole('dialog');
-  await expect(dialog).toContainText('账号使用权 10 个');
-  await expect(dialog).toContainText('美国 TikTok 账号，付款后自动到账');
+  await expect(dialog).toContainText('赠送账号抵扣券 1 张（可兑换 10 个账号）');
+  await expect(dialog).toContainText('购买后自动兑换，账号将在 3 个工作日内到账');
   await dialog.getByRole('button', { name: '账号购买说明', exact: true }).hover();
   for (const text of accountHelp) await expect(page.getByRole('tooltip')).toContainText(text);
   await dialog.getByRole('button', { name: '模拟支付成功' }).click();
-  await expect(dialog).toContainText('已到账 10 个账号');
-  await expect(dialog).toContainText('已添加至账号管理');
-  await dialog.getByRole('button', { name: '查看账号', exact: true }).click();
-  await expect(page).toHaveURL(/#\/accounts$/);
+  await expect(dialog).toContainText('已自动兑换 10 个账号');
+  await dialog.getByRole('button', { name: '查看到账进度', exact: true }).click();
+  await expect(page).toHaveURL(/#\/accounts\?tab=deliveries$/);
+  await page.getByRole('button', { name: '模拟账号到账', exact: true }).click();
   await expect(page.getByLabel('待领取帐号提示')).toHaveCount(0);
   const delivered = await purchasedAccounts(page);
   expect(delivered).toHaveLength(10);
@@ -304,7 +304,7 @@ for (const pack of bundleExpectations) {
     await page.goto('/#/purchase');
     await page
       .getByLabel(`${pack.name}套餐`, { exact: true })
-      .getByRole('button', { name: '订阅套餐', exact: true })
+      .getByRole('button', { name: '购买套餐', exact: true })
       .click();
     const dialog = page.getByRole('dialog');
     await expect(dialog).toContainText(`¥${(pack.amount + pack.accountPrice * pack.accounts).toLocaleString()}`);
@@ -395,8 +395,8 @@ test('窄屏套餐与自动到账没有横向溢出，历史余额不显示领�
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.getByLabel('购买与充值').screenshot({ path: info.outputPath('package-benefits-mobile.png') });
   await page
-    .getByLabel('商业版套餐', { exact: true })
-    .getByRole('button', { name: '订阅套餐', exact: true })
+    .getByLabel('高级版套餐', { exact: true })
+    .getByRole('button', { name: '购买套餐', exact: true })
     .click();
   await page.getByRole('button', { name: '模拟支付成功' }).click();
   await expect(page.getByRole('dialog')).toContainText('已到账 10 个账号');
@@ -414,8 +414,8 @@ for (const recovery of ['retry', 'reload'] as const) {
   test(`自动到账保存失败后通过 ${recovery} 恢复，支付只完成一次`, async ({ page }) => {
     await page.goto('/#/purchase');
     await page
-      .getByLabel('商业版套餐', { exact: true })
-      .getByRole('button', { name: '订阅套餐', exact: true })
+      .getByLabel('高级版套餐', { exact: true })
+      .getByRole('button', { name: '购买套餐', exact: true })
       .click();
     await page.evaluate(() => {
       const original = Storage.prototype.setItem;

@@ -1,14 +1,39 @@
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import { sha256 } from '@noble/hashes/sha2.js';
 import type { AuthUser } from '@/types/studio';
-import { readJSON, writeJSON, uid } from './storage';
+import { readJSON, writeJSON, writeJSONBatch, uid, type StorageUpdate } from './storage';
 import { saveMedia, getMedia } from './media';
 import { guideTour } from './guideTour';
+import { invitationRegistrationUpdates, newAccountRewards } from './invitations';
 const SESSION = 'chuhai-studio-session';
 const TEAM_CREDENTIALS = (ownerId: string) => `chuhai-team-credentials-v1:${ownerId}`;
 const TEAM_INDEX = 'chuhai-team-credential-index-v1';
 const initial = readJSON<AuthUser | null>(SESSION, () => null);
 export const currentUser = ref<AuthUser | null>(initial && typeof initial.id === 'string' ? initial : null);
+type OwnerProfile = Pick<AuthUser, 'id' | 'name' | 'identity'>;
+const ownerProfileKey = (id: string) => `chuhai-owner-profile-v1:${id}`;
+export const workspaceOwnerProfile = ref<OwnerProfile | null>(null);
+watch(currentUser, async user => {
+  const ownerId = user?.teamOwnerId ?? user?.id;
+  if (!user || !ownerId) { workspaceOwnerProfile.value = null; return; }
+  if (!user.teamOwnerId) {
+    const profile = { id: user.id, name: user.name, identity: user.identity };
+    workspaceOwnerProfile.value = profile;
+    writeJSON(ownerProfileKey(ownerId), profile);
+    return;
+  }
+  const cached = readJSON<OwnerProfile | null>(ownerProfileKey(ownerId), () => null);
+  workspaceOwnerProfile.value = cached?.id === ownerId ? cached : null;
+  if (workspaceOwnerProfile.value) return;
+  try {
+    const owner = (await records()).find(item => item.user.id === ownerId)?.user;
+    const profile = owner ? { id: owner.id, name: owner.name, identity: owner.identity } :
+      ownerId === 'demo' ? { id: 'demo', name: readJSON<string>('chuhai-demo-name', () => '林悦'), identity: 'demo@chuhai.studio' } : null;
+    if ((currentUser.value?.teamOwnerId ?? currentUser.value?.id) !== ownerId) return;
+    workspaceOwnerProfile.value = profile;
+    if (profile) writeJSON(ownerProfileKey(ownerId), profile);
+  } catch { /* The table shows unavailable fields when historical owner data cannot be read. */ }
+}, { immediate: true, flush: 'sync' });
 type Credential = { user: AuthUser; salt: string; digest: string };
 type TeamCredential = Credential & { memberId: string; ownerId: string; active: boolean };
 // Prototype credentials use IndexedDB rather than localStorage. No plaintext password is retained.
@@ -23,7 +48,9 @@ async function persist(list: Credential[]) {
 }
 function digest(password: string, salt: string) { return Array.from(sha256(new TextEncoder().encode(salt + password)), b => b.toString(16).padStart(2, '0')).join(''); }
 function session(user: AuthUser) {
-  if (!writeJSON(SESSION, user)) throw new Error('本地保存失败，请恢复浏览器存储后重试');
+  const updates = invitationRegistrationUpdates(user);
+  if (updates.length) writeJSONBatch([...updates, { key: SESSION, value: user }]);
+  else if (!writeJSON(SESSION, user)) throw new Error('本地保存失败，请恢复浏览器存储后重试');
   currentUser.value = user;
   return user;
 }
@@ -68,9 +95,8 @@ export const identityService = {
   async register(identity: string, method: 'email' | 'phone', password: string, code: string, invite: string) {
     validateIdentity(identity, method); verifyCode(identity, code);
     if (password.length < 8) throw new Error('密码至少 8 位');
-    if (invite && invite !== 'CHUHAI2026') throw new Error('邀请码无效；演示邀请码为 CHUHAI2026，也可留空');
     const list = await records(); if (list.some(x => x.user.identity === identity)) throw new Error('该帐号已注册，请登录');
-    const salt = uid(); const user: AuthUser = { id: uid(), name: identity.split('@')[0]!, identity, method, bindings: [method] };
+    const salt = uid(); const user: AuthUser = { id: uid(), name: identity.split('@')[0]!, identity, method, bindings: [method], ...newAccountRewards(invite) };
     await persist([...list, { user, salt, digest: digest(password, salt) }]); challenges.delete(identity); guideTour.enroll(user.id); return session(user);
   },
   async login(identity: string, password: string, code?: string) {
@@ -93,22 +119,22 @@ export const identityService = {
     const list = await records(); const entry = list.find(x => x.user.identity === identity); if (!entry) throw new Error('帐号不存在');
     entry.salt = uid(); entry.digest = digest(password, entry.salt); await persist(list); challenges.delete(identity);
   },
-  async google(email: string, password = '') {
+  async google(email: string, password = '', invite = '') {
     validateIdentity(email, 'email'); const list = await records(); const entry = list.find(x => x.user.identity === email);
     if (entry && !entry.user.bindings.includes('google')) {
       if (!password || entry.digest !== digest(password, entry.salt)) throw new Error('该邮箱已有帐号，请验证原帐号密码后绑定 Google');
       entry.user.bindings.push('google'); await persist(list);
     }
     if (entry) return session(entry.user);
-    const user: AuthUser = { id: uid(), name: email.split('@')[0]!, identity: email, method: 'google', bindings: ['google'] };
+    const user: AuthUser = { id: uid(), name: email.split('@')[0]!, identity: email, method: 'google', bindings: ['google'], ...newAccountRewards(invite) };
     await persist([...list, { user, salt: uid(), digest: '' }]); guideTour.enroll(user.id); return session(user);
   },
-  async googleQuick() {
+  async googleQuick(invite = '') {
     const email = 'roxy.google@chuhai.studio';
     const list = await records();
     const entry = list.find(x => x.user.identity === email);
     if (entry) return session(entry.user);
-    const user: AuthUser = { id: uid(), name: 'Google 用户', identity: email, method: 'google', bindings: ['google'] };
+    const user: AuthUser = { id: uid(), name: 'Google 用户', identity: email, method: 'google', bindings: ['google'], ...newAccountRewards(invite) };
     await persist([...list, { user, salt: uid(), digest: '' }]);
     guideTour.enroll(user.id);
     return session(user);
@@ -117,10 +143,10 @@ export const identityService = {
     const saved = readJSON<string>('chuhai-demo-name', () => '林悦');
     return session({ id: 'demo', name: typeof saved === 'string' && saved.trim() ? saved : '林悦', identity: 'demo@chuhai.studio', method: 'email', bindings: ['email'] });
   },
-  async newUser() {
+  async newUser(invite = '') {
     const list = await records();
     const id = uid();
-    const user: AuthUser = { id, name: '新用户', identity: `new-${id}@chuhai.studio`, method: 'email', bindings: ['email'] };
+    const user: AuthUser = { id, name: '新用户', identity: `new-${id}@chuhai.studio`, method: 'email', bindings: ['email'], ...newAccountRewards(invite) };
     const salt = uid();
     await persist([...list, { user, salt, digest: digest(uid(), salt) }]);
     guideTour.enroll(user.id);
@@ -156,26 +182,39 @@ export const identityService = {
     catch (error) { saveTeamCredentials(ownerId, credentials); throw error; }
     return users;
   },
-  updateTeamMember(ownerId: string, memberId: string, changes: { name?: string; identity?: string; password?: string; role?: 'admin' | 'creator' }) {
+  async updateTeamMember(ownerId: string, memberId: string, changes: { name?: string; identity?: string; password?: string; role?: 'admin' | 'creator' }, updates: StorageUpdate[] = []) {
+    const primaryCredentials = await records();
     const credentials = teamCredentials(ownerId);
     const item = credentials.find(value => value.memberId === memberId);
     if (!item) throw new Error('成员账号不存在');
     const nextIdentity = (changes.identity?.trim() || item.user.identity).toLowerCase();
     validateTeamIdentity(nextIdentity);
+    if (workspaceOwnerProfile.value?.identity.toLowerCase() === nextIdentity) throw new Error('该账号名已被所有者使用');
+    if (primaryCredentials.some(value => value.user.identity.toLowerCase() === nextIdentity)) throw new Error('该账号名已被使用');
     const index = teamIndex();
-    if (credentials.some(value => value.memberId !== memberId && value.user.identity.toLowerCase() === nextIdentity) || (index[nextIdentity] && index[nextIdentity].memberId !== memberId)) throw new Error('该成员账号已存在');
-    const prior = structuredClone(credentials);
+    if (credentials.some(value => value.memberId !== memberId && value.user.identity.toLowerCase() === nextIdentity) || (index[nextIdentity] && (index[nextIdentity].memberId !== memberId || index[nextIdentity].ownerId !== ownerId))) throw new Error('该成员账号已存在');
     delete index[item.user.identity]; index[nextIdentity] = { ownerId, memberId };
     item.user = { ...item.user, name: changes.name?.trim() || item.user.name, identity: nextIdentity, method: nextIdentity.startsWith('+') ? 'phone' : 'email', teamRole: changes.role ?? item.user.teamRole };
     if (changes.password) { if (changes.password.length < 8) throw new Error('密码至少 8 位'); item.salt = uid(); item.digest = digest(changes.password, item.salt); }
-    saveTeamCredentials(ownerId, credentials);
-    try { saveTeamIndex(index); } catch (error) { saveTeamCredentials(ownerId, prior); throw error; }
+    writeJSONBatch([
+      { key: TEAM_CREDENTIALS(ownerId), value: credentials },
+      { key: TEAM_INDEX, value: index },
+      ...updates,
+      ...(currentUser.value?.teamOwnerId === ownerId && currentUser.value.teamMemberId === memberId ? [{ key: SESSION, value: item.user }] : []),
+    ]);
+    if (currentUser.value?.teamOwnerId === ownerId && currentUser.value.teamMemberId === memberId) currentUser.value = item.user;
     return item.user;
   },
-  disableTeamMember(ownerId: string, memberId: string) {
-    const credentials = teamCredentials(ownerId); const item = credentials.find(value => value.memberId === memberId); if (!item) return;
-    item.active = false; saveTeamCredentials(ownerId, credentials);
-    const index = teamIndex(); delete index[item.user.identity]; saveTeamIndex(index);
+  disableTeamMember(ownerId: string, memberId: string, updates: StorageUpdate[] = []) {
+    const credentials = teamCredentials(ownerId);
+    const item = credentials.find(value => value.memberId === memberId);
+    const index = teamIndex();
+    if (item) { item.active = false; delete index[item.user.identity]; }
+    writeJSONBatch([
+      { key: TEAM_CREDENTIALS(ownerId), value: credentials },
+      { key: TEAM_INDEX, value: index },
+      ...updates,
+    ]);
   },
   async updateName(name: string) {
     const user = currentUser.value; if (!user || !name.trim() || name.trim().length > 30) throw new Error('昵称需为 1—30 个字符');

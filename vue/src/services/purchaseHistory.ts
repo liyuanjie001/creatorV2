@@ -3,6 +3,7 @@ import { currentUser } from './identity';
 import {
   rechargeOrders,
   rechargeAccountClaims,
+  accountCoupons,
   purchasePacks,
   rechargePacks,
   subscriptionEditions,
@@ -27,6 +28,8 @@ export const purchaseHistory = computed(() =>
     .filter((order) => order.userId === currentUser.value?.id)
     .map((order) => {
       const quantity = order.accountCount ?? 0;
+      const coupon = accountCoupons.value.find(item => item.orderId === order.id);
+      const couponDelivered = coupon?.redemption.status === 'delivered' && coupon.redemption.accountIds.every(id => studio.value.accounts.some(item => item.id === id));
       const automatic = order.deliveryMode === 'automatic';
       const delivered = automatic
         ? studio.value.accounts.filter((account) => account.orderId === order.id).length
@@ -34,8 +37,10 @@ export const purchaseHistory = computed(() =>
             .filter((claim) => claim.userId === order.userId)
             .flatMap((claim) => claim.accounts)
             .filter((account) => account.orderId === order.id).length;
-      const pendingSync = order.status === 'completed' && automatic && quantity > delivered;
-      const accountStatus = !quantity
+      const pendingSync = order.status === 'completed' && ((automatic && quantity > delivered) || (coupon?.redemption.status === 'delivered' && !couponDelivered));
+      const accountStatus = order.deliveryMode === 'coupon'
+        ? order.status === 'pending' ? '付款后自动兑换' : couponDelivered ? '已添加至账号管理' : pendingSync ? '待同步至账号管理' : '已自动兑换，3 个工作日内到账'
+        : !quantity
         ? ''
         : order.status === 'pending'
           ? '付款后到账'
@@ -51,7 +56,8 @@ export const purchaseHistory = computed(() =>
         name: purchaseName(order),
         accountStatus,
         pendingSync,
-        statusLabel: order.status === 'pending' ? '待支付' : pendingSync ? '已支付' : '已到账',
+        accountSummary: order.deliveryMode === 'coupon' ? `赠送账号抵扣券 1 张（可兑换 ${quantity} 个账号）` : `账号使用权 ${quantity} 个`,
+        statusLabel: order.status === 'pending' ? '待支付' : order.deliveryMode === 'coupon' && !couponDelivered ? '待到账' : pendingSync ? '已支付' : '已到账',
         paymentLabel:
           order.status === 'pending' ? '尚未支付' : order.channel === 'wechat' ? '微信支付' : '支付宝',
       };
