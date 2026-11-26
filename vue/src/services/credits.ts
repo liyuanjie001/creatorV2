@@ -3,7 +3,7 @@ import { DateTime } from 'luxon';
 import { currentUser } from './identity';
 import { guideTour } from './guideTour';
 import { now, readJSON, uid, writeJSON, writeJSONBatch } from './storage';
-import { canPromote, getRegisteredInviter } from './invitations';
+import { getRegisteredInviter } from './invitations';
 import { assertCreditSpend, commitCreditSpend, currentMember, isTeamMember, membersCreditsConsumed, workspaceOwnerId } from './team';
 import type { SocialPlatform, StudioState, TKAccount } from '@/types/studio';
 import { countryName, isCountryCode } from './countries';
