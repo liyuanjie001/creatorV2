@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { UserRound } from 'lucide-vue-next';
+import { LogOut, UserRound } from 'lucide-vue-next';
 import { Avatar, AvatarFallback } from '@/components/ui';
 import { profileSections } from '@/lib/profileNavigation';
 import { unreadCount } from '@/services/notifications';
+import { currentUser, identityService } from '@/services/identity';
 
 const route = useRoute();
 const router = useRouter();
@@ -37,7 +38,7 @@ function blur(event: FocusEvent) {
 async function focusLink(last = false) {
   show();
   await nextTick();
-  const links = panel.value?.querySelectorAll('a');
+  const links = panel.value?.querySelectorAll<HTMLElement>('a, button');
   links?.[last ? links.length - 1 : 0]?.focus();
 }
 function escape(event: KeyboardEvent) {
@@ -50,9 +51,10 @@ function escape(event: KeyboardEvent) {
 function outside(event: PointerEvent) {
   if (!root.value?.contains(event.target as Node)) close();
 }
-function visitProfile() {
+function logout() {
   close();
-  void router.push('/me');
+  identityService.logout();
+  void router.replace('/auth');
 }
 watch(() => route.fullPath, close);
 onMounted(() => document.addEventListener('pointerdown', outside));
@@ -81,7 +83,7 @@ onBeforeUnmount(() => {
       :aria-expanded="open"
       class="relative flex h-10 w-10 items-center justify-center rounded-xl transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-500"
       :class="route.path === '/me' || open ? 'bg-sky-50' : 'hover:bg-sky-50'"
-      @click="visitProfile"
+      @click="show"
       @keydown.arrow-down.prevent="focusLink()"
       @keydown.arrow-right.prevent="focusLink()"
       @keydown.arrow-up.prevent="focusLink(true)"
@@ -97,13 +99,24 @@ onBeforeUnmount(() => {
         </AvatarFallback>
       </Avatar>
     </button>
-    <div v-if="open" class="absolute right-0 top-full w-[176px] pt-2">
+    <div v-if="open" class="absolute right-0 top-full w-64 max-w-[calc(100vw-2rem)] pt-2">
       <nav
         id="profile-quick-navigation"
         ref="panel"
         aria-label="个人中心快捷入口"
         class="space-y-1 rounded-2xl border border-slate-200 bg-white p-2 shadow-[0_8px_30px_rgba(15,23,42,0.12)]"
       >
+        <div class="mb-1 flex items-center gap-3 border-b border-slate-100 px-3 py-3">
+          <Avatar class="h-10 w-10 border border-slate-200">
+            <AvatarFallback class="brand-gradient text-white">
+              <UserRound class="h-5 w-5" aria-hidden="true" />
+            </AvatarFallback>
+          </Avatar>
+          <div class="min-w-0">
+            <p class="truncate text-sm font-medium text-slate-900" :title="currentUser?.name">{{ currentUser?.name ?? '用户' }}</p>
+            <p class="mt-1 truncate text-xs text-slate-500" :title="currentUser?.identity">{{ currentUser?.identity }}</p>
+          </div>
+        </div>
         <RouterLink
           v-for="item in profileSections"
           :key="item.key"
@@ -122,6 +135,16 @@ onBeforeUnmount(() => {
           <component :is="item.icon" class="h-4 w-4 shrink-0" aria-hidden="true" />
           <span>{{ item.label }}</span>
         </RouterLink>
+        <div class="border-t border-slate-100 pt-1">
+          <button
+            type="button"
+            class="flex w-full items-center gap-2 rounded-xl px-3 py-3 text-sm text-rose-500 transition hover:bg-rose-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-rose-500"
+            @click="logout"
+          >
+            <LogOut class="h-4 w-4 shrink-0" aria-hidden="true" />
+            <span>退出登录</span>
+          </button>
+        </div>
       </nav>
     </div>
   </div>

@@ -20,14 +20,19 @@ test.beforeEach(async ({ page }) => {
       );
   }, token);
 });
-test('profile avatar opens shortcuts below on hover and keyboard focus', async ({ page }, info) => {
+test('profile avatar opens account menu on click, hover and keyboard focus', async ({ page }, info) => {
   await page.goto('/#/purchase');
   const avatar = page.getByRole('button', { name: '个人中心', exact: true });
   const menu = page.getByRole('navigation', { name: '个人中心快捷入口', exact: true });
   await expect(menu).toBeHidden();
-  await avatar.hover();
+  await avatar.click();
   await expect(avatar).toHaveAttribute('aria-expanded', 'true');
+  await expect(menu).toContainText('林悦');
+  await expect(menu).toContainText('demo@chuhai.studio');
   await expect(menu.getByRole('link')).toHaveText(['我的权益', '账号中心', '帮助与反馈', '消息中心']);
+  const logout = menu.getByRole('button', { name: '退出登录', exact: true });
+  const lastLinkBox = (await menu.getByRole('link', { name: '消息中心', exact: true }).boundingBox())!;
+  expect((await logout.boundingBox())!.y).toBeGreaterThan(lastLinkBox.y + lastLinkBox.height);
   await expect(page).toHaveURL(/#\/purchase$/);
   const avatarBox = (await avatar.boundingBox())!;
   const menuBox = (await menu.boundingBox())!;
@@ -36,7 +41,7 @@ test('profile avatar opens shortcuts below on hover and keyboard focus', async (
   await menu.getByRole('link', { name: '账号中心', exact: true }).hover();
   await expect(menu).toBeVisible();
   await page.screenshot({ path: info.outputPath('profile-hover-desktop.png') });
-  await page.getByRole('heading', { name: '套餐购买', exact: true }).hover();
+  await page.getByRole('heading', { name: '套餐购买', exact: true }).click();
   await expect(menu).toBeHidden();
 
   for (const [section, label] of [
@@ -84,7 +89,14 @@ test('profile avatar opens shortcuts below on hover and keyboard focus', async (
   await expect(page).toHaveURL(/section=help$/);
   await expect(menu).toBeHidden();
   await avatar.click();
-  await expect(page).toHaveURL(/#\/me$/);
+  await expect(page).toHaveURL(/section=help$/);
+  await expect(menu).toBeVisible();
+  await avatar.focus();
+  await page.keyboard.press('ArrowUp');
+  await expect(logout).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(/#\/auth$/);
+  expect(await page.evaluate(() => localStorage.getItem('chuhai-studio-session'))).toBeNull();
 });
 
 test('settings navigation, history, keyboard and all four mobile pages', async ({ page }, info) => {
